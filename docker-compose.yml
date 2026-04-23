@@ -1,0 +1,105 @@
+services:
+  laravel:
+    build:
+      context: ./laravel
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    environment:
+      - APP_ENV=local
+      - APP_DEBUG=true
+      - APP_URL=http://localhost
+      - DB_CONNECTION=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_DATABASE=laravel
+      - DB_USERNAME=laravel
+      - DB_PASSWORD=secret
+      - RAG_API_URL=http://rag-api:8000
+      - QUEUE_CONNECTION=database
+    depends_on:
+      mysql:
+        condition: service_healthy
+      rag-api:
+        condition: service_started
+    volumes:
+      - ./laravel:/var/www/html
+    networks:
+      - app-network
+
+  rag-api:
+    build:
+      context: ./rag-python
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      # Claude API を使う場合は以下を設定（Ollamaの代わり）
+      - LLM_PROVIDER=ollama   # "ollama" or "claude"
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_MODEL=claude-sonnet-4-6
+    depends_on:
+      - ollama
+      - chromadb
+    volumes:
+      - ./rag-python:/app
+      - scraped_data:/app/data
+    networks:
+      - app-network
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - app-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  chromadb:
+    image: chromadb/chroma:0.5.18
+    ports:
+      - "8001:8000"
+    environment:
+      - CHROMA_SERVER_HTTP_PORT=8000
+    volumes:
+      - chroma_data:/chroma/chroma
+    networks:
+      - app-network
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: rootsecret
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+volumes:
+  ollama_data:
+  chroma_data:
+  mysql_data:
+  scraped_data:
+
+networks:
+  app-network:
+    driver: bridge

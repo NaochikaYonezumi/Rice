@@ -183,8 +183,8 @@
     {{-- 4カラム目: スレッド詳細 --}}
     <div x-show="selectedThread || composeMode" class="flex-1 bg-white flex flex-col relative shadow-2xl z-40 overflow-hidden min-w-0 transition-all duration-300">
         <div class="h-full flex relative">
-            {{-- Left Sub-Pane: Thread Content (58%) --}}
-            <div style="width:58%;min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200">
+            {{-- Left Sub-Pane: Thread Content (Flexible) --}}
+            <div id="thread-content-pane" class="flex-1 flex flex-col overflow-hidden border-r border-gray-200 transition-all duration-300">
             {{-- アクションバー --}}
             <div class="shrink-0 border-b border-gray-100 bg-gray-50/50 px-6 py-4 flex items-center justify-between">
                 <div class="flex items-center gap-4">
@@ -297,8 +297,8 @@
                 </div>
             </div>
 
-            {{-- メインエリア: スレッド / Wiki / Files --}}
-            <div class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar">
+            {{-- メインエリア: スレッド --}}
+            <div class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar" id="thread-main-area">
                 <div class="p-8 space-y-6 max-w-4xl mx-auto">
 
                     {{-- マージ履歴 --}}
@@ -352,80 +352,92 @@
                             </button>
                         </div>
                     </div>
-
-                    {{-- Wiki --}}
-                    <div x-show="detailTab === 'wiki'" class="bg-white rounded-2xl p-8 shadow-sm"><div class="flex items-center justify-between mb-8"><h3 class="text-xl font-bold">ナレッジ Wiki</h3><button @click="addWiki()" class="bg-green-600 text-white px-5 py-2 rounded-xl font-bold text-xs shadow hover:bg-green-700">+ 追加</button></div><div class="space-y-6"><template x-for="(item, index) in wikis"><div class="border border-gray-100 rounded-xl overflow-hidden bg-white shadow-sm"><div class="bg-gray-50 px-5 py-3 border-b flex justify-between items-center text-sm font-bold text-gray-800"><input type="text" x-model="item.title" class="bg-transparent border-none w-full focus:ring-0 outline-none"><button @click="removeWiki(index)" class="text-red-400 hover:text-red-600 px-3 font-bold">✕</button></div><div class="p-6"><textarea x-model="item.body" class="w-full text-sm border-none resize-none h-48 font-mono bg-transparent outline-none leading-relaxed text-gray-600"></textarea></div></div></template></div><button x-show="wikis.length > 0" @click="saveWikis()" :disabled="noteSaving" class="mt-8 bg-blue-600 text-white text-sm px-10 py-3 rounded-2xl font-bold shadow-lg">Wikiを保存</button></div>
-
-                    {{-- Files --}}
-                    <div x-show="detailTab === 'files'" class="space-y-3"><h3 class="text-xl font-bold mb-5 text-gray-900">共有ファイル</h3><template x-for="file in allAttachments" :key="file.id"><div class="bg-white p-5 rounded-2xl border border-gray-100 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow"><div class="flex items-center gap-4">📎 <div class="min-w-0"><p class="text-sm font-bold text-gray-900 truncate" x-text="file.filename"></p><p class="text-[10px] text-gray-400 mt-0.5" x-text="file.received_at"></p></div></div><a :href="file.url" target="_blank" class="px-5 py-2 text-blue-600 bg-blue-50 rounded-xl font-bold text-xs hover:bg-blue-600 hover:text-white transition-all">ダウンロード</a></div></template></div>
-                </div>
                 </div>
             </div>
 
-            {{-- Right Sub-Pane: Memos and Comments (42%) --}}
-            <div style="width:42%;min-width:0;" class="flex flex-col overflow-hidden bg-gray-50">
-                <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
-                    <span class="text-xs font-bold text-gray-700">メモ & コメント</span>
-                </div>
-                <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-6">
-                    {{-- Memos Section --}}
-                    <div>
-                        <div class="shrink-0 mb-4">
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メモを登録</label>
-                            <textarea x-model="newMemoContent" rows="4" class="w-full text-sm border border-gray-200 bg-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none mb-2" placeholder="スレッドに関するメモ..."></textarea>
-                            <div class="text-right">
-                                <button @click="saveMemo()" class="bg-blue-600 text-white font-bold py-1.5 px-6 rounded-xl hover:bg-blue-700 transition-all text-xs shadow-sm">保存</button>
-                            </div>
+            {{-- Right Sidebar --}}
+            <div id="right-sidebar" class="bg-white border-left shadow flex flex-col transition-all duration-300" style="width: 0; overflow: hidden;">
+                <div style="width: 380px; height: 100%; display: flex; flex-direction: column;">
+                    <!-- Header: Tabs + Close -->
+                    <div class="sidebar-header d-flex align-items-center justify-content-between p-2 bg-light border-bottom flex-shrink-0">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary active" data-sidebar-tab="thread">スレッド</button>
+                            <button type="button" class="btn btn-outline-primary" data-sidebar-tab="wiki">Wiki</button>
+                            <button type="button" class="btn btn-outline-primary" data-sidebar-tab="files">添付</button>
                         </div>
-                        <div class="space-y-3">
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">過去のメモ</label>
-                            <template x-for="memo in threadMemos" :key="memo.id">
-                                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-xs font-bold text-gray-700" x-text="memo.author"></span>
-                                        <span class="text-[10px] text-gray-500" x-text="memo.created_at"></span>
-                                    </div>
-                                    <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed" x-text="memo.content"></div>
-                                </div>
-                            </template>
-                            <template x-if="threadMemos.length === 0">
-                                <div class="text-center text-gray-400 text-xs py-2">メモはまだありません</div>
-                            </template>
-                        </div>
+                        <button type="button" class="btn btn-sm btn-light close-sidebar">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
 
-                    {{-- Comments Section --}}
-                    <div class="border-t border-gray-200 pt-6">
-                        <div class="shrink-0 mb-4">
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">コメントを投稿</label>
-                            <textarea x-model="newCommentContent" rows="3" class="w-full text-sm border border-gray-200 bg-white rounded-2xl p-3 focus:ring-2 focus:ring-green-200 outline-none leading-relaxed resize-none mb-2" placeholder="コメントを入力..."></textarea>
-                            <div class="text-right">
-                                <button @click="postComment()" class="bg-green-600 text-white font-bold py-1.5 px-6 rounded-xl hover:bg-green-700 transition-all text-xs shadow-sm">投稿</button>
+                    <!-- Tab Contents -->
+                    <div class="sidebar-body flex-grow-1" style="overflow-y: auto;">
+                        <!-- Thread Tab: Memo & Comments -->
+                        <div id="sidebar-tab-thread" class="sidebar-tab-content active">
+                            <!-- Memos Section -->
+                            <div class="sidebar-section-title px-3 py-2 bg-secondary text-white small font-weight-bold d-flex justify-content-between align-items-center">
+                                スレッドメモ
+                                <button class="btn btn-xs btn-light btn-sm text-secondary p-0 px-2 py-1" id="add-memo-toggle">＋追加</button>
+                            </div>
+                            <div id="memo-form-container" class="p-3 d-none border-bottom bg-light">
+                                <textarea id="new-memo-content" class="form-control form-control-sm mb-2" rows="3" placeholder="メモを入力..."></textarea>
+                                <button id="save-memo-btn" class="btn btn-sm btn-primary btn-block">保存</button>
+                            </div>
+                            <div id="sidebar-memo-list" class="px-0">
+                                <!-- Memos will be rendered here by jQuery -->
+                            </div>
+
+                            <!-- Comments Section -->
+                            <div class="sidebar-section-title px-3 py-2 bg-success text-white small font-weight-bold d-flex justify-content-between align-items-center mt-3">
+                                コメント
+                                <button class="btn btn-xs btn-light btn-sm text-success p-0 px-2 py-1" id="add-comment-toggle">＋追加</button>
+                            </div>
+                            <div id="comment-form-container" class="p-3 d-none border-bottom bg-light">
+                                <textarea id="new-comment-content" class="form-control form-control-sm mb-2" rows="3" placeholder="コメントを入力..."></textarea>
+                                <button id="post-comment-btn" class="btn btn-sm btn-success btn-block">投稿</button>
+                            </div>
+                            <div id="sidebar-comment-list" class="px-0">
+                                <!-- Comments will be rendered here by jQuery -->
                             </div>
                         </div>
-                        <div class="space-y-3">
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">コメント履歴</label>
-                            <template x-for="comment in threadComments" :key="comment.id">
-                                <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm relative group">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-xs font-bold text-gray-700" x-text="comment.author"></span>
-                                        <div class="flex items-center gap-3">
-                                            <span class="text-[10px] text-gray-500" x-text="comment.created_at"></span>
-                                            <template x-if="comment.is_author">
-                                                <button @click="deleteComment(comment.id)" class="text-[10px] text-red-400 hover:text-red-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">削除</button>
-                                            </template>
-                                        </div>
-                                    </div>
-                                    <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed" x-text="comment.content"></div>
+
+                        <!-- Wiki Tab: University/Customer notes -->
+                        <div id="sidebar-tab-wiki" class="sidebar-tab-content">
+                            <div class="sidebar-section-title px-3 py-2 bg-info text-white small font-weight-bold">
+                                Wiki (大学メモ)
+                            </div>
+                            <div class="p-3">
+                                <div id="wiki-customer-name" class="font-weight-bold mb-2 text-primary small"></div>
+                                <div id="wiki-content-container">
+                                    <!-- Wiki items will be rendered here -->
                                 </div>
-                            </template>
-                            <template x-if="threadComments.length === 0">
-                                <div class="text-center text-gray-400 text-xs py-2">コメントはまだありません</div>
-                            </template>
+                                <div class="mt-3">
+                                    <button class="btn btn-sm btn-outline-info btn-block" id="add-wiki-item-btn">+ 項目追加</button>
+                                    <button class="btn btn-sm btn-primary btn-block mt-2 d-none" id="save-wiki-btn">Wikiを保存</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Files Tab: Attachments -->
+                        <div id="sidebar-tab-files" class="sidebar-tab-content">
+                            <div class="sidebar-section-title px-3 py-2 bg-warning text-dark small font-weight-bold">
+                                添付ファイル
+                            </div>
+                            <div id="sidebar-file-list" class="list-group list-group-flush">
+                                <!-- Files will be rendered here -->
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Toggle button (visible when sidebar is closed) -->
+            <div id="sidebar-toggle-collapsed">
+                <i class="fas fa-chevron-left mr-1"></i>メモ・Wiki・添付
+            </div>
+        </div>
+    </div>
+</div>
         </div>
     </div>
 
@@ -1191,6 +1203,239 @@ function emailApp() {
     };
 }
 function newSearchParams(obj) { return new URLSearchParams(obj); }
+
+// jQuery Sidebar Logic
+$(function() {
+    let currentThreadId = null;
+    let currentCustomerName = null;
+    let wikis = [];
+
+    // Sidebar Toggle
+    function toggleSidebar(open) {
+        if (open) {
+            $('#right-sidebar').addClass('open').css('width', '380px');
+            $('#sidebar-toggle-collapsed').addClass('d-none');
+        } else {
+            $('#right-sidebar').removeClass('open').css('width', '0');
+            $('#sidebar-toggle-collapsed').removeClass('d-none');
+        }
+    }
+
+    $(document).on('click', '#sidebar-toggle-collapsed, .close-sidebar', function() {
+        toggleSidebar(!$('#right-sidebar').hasClass('open'));
+    });
+
+    // Sidebar Tabs
+    $(document).on('click', '[data-sidebar-tab]', function() {
+        const tab = $(this).data('sidebar-tab');
+        $('[data-sidebar-tab]').removeClass('active');
+        $(this).addClass('active');
+        $('.sidebar-tab-content').removeClass('active');
+        $('#sidebar-tab-' + tab).addClass('active');
+    });
+
+    // Hook into thread selection (we can observe selectedThreadId or just wait for calls)
+    // For this implementation, we'll use a polling check or just listen for clicks on thread list
+    $(document).on('click', '.thread-list-row', function() {
+        const threadId = $(this).data('thread-id');
+        if (threadId && threadId !== currentThreadId) {
+            currentThreadId = threadId;
+            loadSidebarData(threadId);
+            toggleSidebar(true); // Open sidebar on thread selection
+        }
+    });
+
+    function loadSidebarData(threadId) {
+        // Fetch Thread Data (to get customer name for Wiki)
+        $.get(`/threads/${threadId}`, function(data) {
+            currentCustomerName = data.thread.customer ? data.thread.customer.name : null;
+            renderWiki();
+            renderFiles(data.emails);
+        });
+
+        // Fetch Memos
+        loadMemos(threadId);
+
+        // Fetch Comments
+        loadComments(threadId);
+    }
+
+    function loadMemos(threadId) {
+        $.get(`/threads/${threadId}/memos`, function(data) {
+            let html = '';
+            data.memos.forEach(m => {
+                html += `
+                    <div class="memo-item bg-warning-light p-2 mb-2 rounded shadow-sm border" style="background-color: #fff9db;">
+                        <div class="d-flex justify-content-between x-small font-weight-bold text-muted mb-1">
+                            <span>${m.author}</span>
+                            <span>${m.created_at}</span>
+                        </div>
+                        <div class="small text-dark text-break">${m.content}</div>
+                    </div>
+                `;
+            });
+            $('#sidebar-memo-list').html(html || '<div class="text-center text-muted py-3 small">メモはありません</div>');
+        });
+    }
+
+    function loadComments(threadId) {
+        $.get(`/threads/${threadId}/comments`, function(data) {
+            let html = '';
+            data.comments.forEach(c => {
+                html += `
+                    <div class="comment-item bg-light p-2 mb-2 rounded shadow-sm border">
+                        <div class="d-flex justify-content-between x-small font-weight-bold text-muted mb-1">
+                            <span>${c.author}</span>
+                            <span>${c.created_at}</span>
+                        </div>
+                        <div class="small text-dark text-break">${c.content}</div>
+                    </div>
+                `;
+            });
+            $('#sidebar-comment-list').html(html || '<div class="text-center text-muted py-3 small">コメントはありません</div>');
+        });
+    }
+
+    // Memo Store
+    $('#add-memo-toggle').on('click', function() {
+        $('#memo-form-container').toggleClass('d-none');
+    });
+
+    $('#save-memo-btn').on('click', function() {
+        const content = $('#new-memo-content').val().trim();
+        if (!content || !currentThreadId) return;
+
+        $.post(`/threads/${currentThreadId}/memos`, {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            content: content
+        }, function(data) {
+            $('#new-memo-content').val('');
+            $('#memo-form-container').addClass('d-none');
+            loadMemos(currentThreadId);
+        });
+    });
+
+    // Comment Store
+    $('#add-comment-toggle').on('click', function() {
+        $('#comment-form-container').toggleClass('d-none');
+    });
+
+    $('#post-comment-btn').on('click', function() {
+        const content = $('#new-comment-content').val().trim();
+        if (!content || !currentThreadId) return;
+
+        $.post(`/threads/${currentThreadId}/comments`, {
+            _token: $('meta[name="csrf-token"]').attr('content'),
+            content: content
+        }, function(data) {
+            $('#new-comment-content').val('');
+            $('#comment-form-container').addClass('d-none');
+            loadComments(currentThreadId);
+        });
+    });
+
+    // Wiki Rendering & Store
+    function renderWiki() {
+        if (!currentCustomerName) {
+            $('#wiki-customer-name').text('顧客未設定');
+            $('#wiki-content-container').html('<div class="text-center text-muted py-4 small">顧客が設定されていません</div>');
+            $('#save-wiki-btn').addClass('d-none');
+            return;
+        }
+
+        $('#wiki-customer-name').text(currentCustomerName);
+        $.get(`/tag-notes/${encodeURIComponent(currentCustomerName)}`, function(data) {
+            wikis = data.content || [];
+            let html = '';
+            wikis.forEach((w, i) => {
+                html += `
+                    <div class="wiki-item border rounded p-2 mb-2 bg-white shadow-sm">
+                        <div class="form-group mb-1">
+                            <input type="text" class="form-control form-control-sm font-weight-bold wiki-title-input" data-index="${i}" value="${w.title}">
+                        </div>
+                        <textarea class="form-control form-control-sm wiki-body-input" data-index="${i}" rows="3">${w.body}</textarea>
+                        <div class="text-right mt-1">
+                            <button class="btn btn-xs btn-link text-danger remove-wiki-item" data-index="${i}">削除</button>
+                        </div>
+                    </div>
+                `;
+            });
+            $('#wiki-content-container').html(html || '<div class="text-center text-muted py-3 small">Wiki項目がありません</div>');
+            $('#save-wiki-btn').removeClass('d-none');
+        });
+    }
+
+    $('#add-wiki-item-btn').on('click', function() {
+        if (!currentCustomerName) return;
+        wikis.push({ title: '新規項目', body: '' });
+        refreshWikiUI();
+    });
+
+    function refreshWikiUI() {
+        let html = '';
+        wikis.forEach((w, i) => {
+            html += `
+                <div class="wiki-item border rounded p-2 mb-2 bg-white shadow-sm">
+                    <div class="form-group mb-1">
+                        <input type="text" class="form-control form-control-sm font-weight-bold wiki-title-input" data-index="${i}" value="${w.title}">
+                    </div>
+                    <textarea class="form-control form-control-sm wiki-body-input" data-index="${i}" rows="3">${w.body}</textarea>
+                    <div class="text-right mt-1">
+                        <button class="btn btn-xs btn-link text-danger remove-wiki-item" data-index="${i}">削除</button>
+                    </div>
+                </div>
+            `;
+        });
+        $('#wiki-content-container').html(html);
+        $('#save-wiki-btn').removeClass('d-none');
+    }
+
+    $(document).on('change', '.wiki-title-input', function() { wikis[$(this).data('index')].title = $(this).val(); });
+    $(document).on('change', '.wiki-body-input', function() { wikis[$(this).data('index')].body = $(this).val(); });
+    $(document).on('click', '.remove-wiki-item', function() {
+        wikis.splice($(this).data('index'), 1);
+        refreshWikiUI();
+    });
+
+    $('#save-wiki-btn').on('click', function() {
+        if (!currentCustomerName) return;
+        $.ajax({
+            url: `/tag-notes/${encodeURIComponent(currentCustomerName)}`,
+            method: 'PUT',
+            data: JSON.stringify({ content: wikis }),
+            contentType: 'application/json',
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            success: function() {
+                alert('Wikiを保存しました');
+            }
+        });
+    });
+
+    // Files Rendering
+    function renderFiles(emails) {
+        const allFiles = [];
+        emails.forEach(e => {
+            (e.attachments || []).forEach(a => {
+                allFiles.push({ ...a, received_at: e.received_at });
+            });
+        });
+
+        let html = '';
+        allFiles.sort((a,b) => b.id - a.id).forEach(f => {
+            html += `
+                <a href="${f.url}" target="_blank" class="list-group-item list-group-item-action p-2">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="text-truncate mr-2 small font-weight-bold">
+                            <i class="fas fa-file-alt mr-1 text-muted"></i> ${f.filename}
+                        </div>
+                        <span class="x-small text-muted">${f.received_at}</span>
+                    </div>
+                </a>
+            `;
+        });
+        $('#sidebar-file-list').html(html || '<div class="text-center text-muted py-4 small">添付ファイルはありません</div>');
+    }
+});
 </script>
 
 <style>

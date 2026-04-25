@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\EmailThread;
+use App\Models\ThreadMemo;
+use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+
+class ThreadMemoController extends Controller
+{
+    public function store(Request $request, EmailThread $thread): JsonResponse
+    {
+        $request->validate([
+            'content' => 'required|string',
+        ]);
+
+        $memo = ThreadMemo::create([
+            'thread_id' => $thread->id,
+            // 'user_id' => $request->user()->id, // In a real app. We'll leave it null for this demo if no auth
+            'content' => $request->content,
+        ]);
+
+        $memo->load('user');
+
+        return response()->json(['status' => 'ok', 'memo' => [
+            'id' => $memo->id,
+            'content' => $memo->content,
+            'created_at' => $memo->created_at?->format('Y/m/d H:i'),
+            'author' => $memo->user ? $memo->user->name : 'System'
+        ]]);
+    }
+
+    public function index(EmailThread $thread): JsonResponse
+    {
+        $memos = $thread->threadMemos()->with('user')->orderBy('created_at', 'desc')->get()->map(function ($m) {
+            return [
+                'id' => $m->id,
+                'content' => $m->content,
+                'created_at' => $m->created_at?->format('Y/m/d H:i'),
+                'author' => $m->user ? $m->user->name : 'System',
+            ];
+        });
+
+        return response()->json(['memos' => $memos]);
+    }
+}

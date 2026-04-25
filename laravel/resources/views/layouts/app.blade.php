@@ -12,6 +12,8 @@
         .sidebar-panel { min-width: 0; }
         .prose-email img { max-width: 100%; }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ asset('css/thread-list.css') }}">
 </head>
 <body class="h-full bg-gray-50 text-gray-800 font-sans">
 
@@ -99,5 +101,6 @@
     </div>
 </div>
 
+<script src="{{ asset('js/thread-list-bulk.js') }}"></script>
 </body>
 </html>

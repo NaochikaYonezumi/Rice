@@ -16,6 +16,8 @@ use App\Http\Controllers\StatusMasterController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\TagNoteController;
 use App\Http\Controllers\ThreadMergeController;
+use App\Http\Controllers\ThreadMemoController;
+use App\Http\Controllers\ThreadCommentController;
 use Illuminate\Support\Facades\Route;
 
 // メール
@@ -24,11 +26,20 @@ Route::get('/emails/search', [EmailController::class, 'search'])->name('emails.s
 Route::get('/emails/{email}', [EmailController::class, 'show'])->name('emails.show');
 Route::get('/threads/{thread}', [EmailController::class, 'thread'])->name('threads.show');
 Route::post('/threads/{thread}/assign-customer', [CustomerController::class, 'assign'])->name('threads.assign-customer');
+Route::post('/emails/bulk-assign-customer', [EmailController::class, 'bulkAssignCustomer'])->name('emails.bulk-assign-customer');
 Route::put('/threads/{thread}/tags', [EmailController::class, 'updateTags'])->name('threads.tags');
 Route::put('/threads/{thread}/status', [EmailController::class, 'updateStatus'])->name('threads.status');
 Route::delete('/threads/{thread}', [EmailController::class, 'deleteThread'])->name('threads.delete');
 Route::post('/threads/{thread}/merge', [ThreadMergeController::class, 'merge'])->name('threads.merge');
 Route::delete('/thread-merges/{threadMerge}', [ThreadMergeController::class, 'unmerge'])->name('thread-merges.unmerge');
+
+Route::get('/threads/{thread}/memos', [ThreadMemoController::class, 'index'])->name('threads.memos.index');
+Route::post('/threads/{thread}/memos', [ThreadMemoController::class, 'store'])->name('threads.memos.store');
+
+Route::get('/threads/{thread}/comments', [ThreadCommentController::class, 'index'])->name('threads.comments.index');
+Route::post('/threads/{thread}/comments', [ThreadCommentController::class, 'store'])->name('threads.comments.store');
+Route::delete('/thread-comments/{comment}', [ThreadCommentController::class, 'destroy'])->name('threads.comments.destroy');
+
 Route::post('/emails/{email}/ai', [EmailController::class, 'askAi'])->name('emails.ai');
 Route::post('/emails/{email}/reply', [EmailController::class, 'reply'])->name('emails.reply');
 Route::post('/emails/compose', [EmailController::class, 'compose'])->name('emails.compose');

@@ -35,4 +35,14 @@ class EmailThread extends Model
     {
         return $this->hasMany(ThreadMerge::class, 'target_thread_id')->orderByDesc('created_at');
     }
+
+    public function threadMemos(): HasMany
+    {
+        return $this->hasMany(ThreadMemo::class, 'thread_id')->orderByDesc('created_at');
+    }
+
+    public function threadComments(): HasMany
+    {
+        return $this->hasMany(ThreadComment::class, 'thread_id')->orderBy('created_at');
+    }
 }

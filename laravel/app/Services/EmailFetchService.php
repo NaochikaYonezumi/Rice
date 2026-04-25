@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Email;
+use App\Models\EmailAttachment;
 use App\Models\EmailThread;
 use App\Models\MailSetting;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class EmailFetchService
 {
@@ -21,7 +23,7 @@ class EmailFetchService
     }
 
     // ------------------------------------------------------------------
-    // DSN（接続文字列）ビルダー
+    // DSN ビルダー
     // ------------------------------------------------------------------
 
     private function buildImapDsn(MailSetting $settings): string
@@ -118,7 +120,6 @@ class EmailFetchService
         $messageId = trim($header->message_id ?? '');
         $inReplyTo = trim($header->in_reply_to ?? $header->references ?? '');
 
-        // 重複スキップ
         if ($messageId && Email::where('message_id', $messageId)->exists()) {
             return false;
         }
@@ -131,11 +132,20 @@ class EmailFetchService
             : '';
         $receivedAt  = date('Y-m-d H:i:s', $header->udate ?? time());
 
+        // CC を抽出
+        $cc = '';
+        if (isset($header->cc) && is_array($header->cc)) {
+            $ccParts = array_map(
+                fn($c) => ($c->mailbox ?? '') . '@' . ($c->host ?? ''),
+                $header->cc
+            );
+            $cc = implode(', ', array_filter($ccParts, fn($a) => $a !== '@'));
+        }
+
         [$bodyText, $bodyHtml] = $this->getBody($mailbox, $msgNum);
+        $thread = $this->resolveThread($subject, $inReplyTo, $fromAddress);
 
-        $thread = $this->resolveThread($subject, $inReplyTo);
-
-        Email::create([
+        $email = Email::create([
             'thread_id'    => $thread->id,
             'message_id'   => $messageId ?: null,
             'in_reply_to'  => $inReplyTo ?: null,
@@ -143,14 +153,23 @@ class EmailFetchService
             'from_address' => $fromAddress,
             'from_name'    => $fromName,
             'to_address'   => $toAddress,
+            'cc'           => $cc ?: null,
             'body_text'    => $bodyText,
             'body_html'    => $bodyHtml,
             'received_at'  => $receivedAt,
         ]);
 
         $thread->update(['last_email_at' => $receivedAt]);
+
+        // 添付ファイルを保存
+        $this->saveAttachments($mailbox, $msgNum, $email);
+
         return true;
     }
+
+    // ------------------------------------------------------------------
+    // 本文抽出
+    // ------------------------------------------------------------------
 
     private function getBody($mailbox, int $msgNum): array
     {
@@ -158,12 +177,12 @@ class EmailFetchService
         $bodyText  = '';
         $bodyHtml  = '';
 
-        $this->walkParts($mailbox, $msgNum, $structure, '', $bodyText, $bodyHtml);
+        $this->walkBodyParts($mailbox, $msgNum, $structure, '', $bodyText, $bodyHtml);
 
         return [$bodyText ?: null, $bodyHtml ?: null];
     }
 
-    private function walkParts($mailbox, int $msgNum, object $part, string $section, string &$bodyText, string &$bodyHtml): void
+    private function walkBodyParts($mailbox, int $msgNum, object $part, string $section, string &$bodyText, string &$bodyHtml): void
     {
         $type    = $part->type ?? 0;
         $subtype = strtoupper($part->subtype ?? '');
@@ -171,12 +190,17 @@ class EmailFetchService
         if ($type === 1) {
             foreach ($part->parts ?? [] as $idx => $child) {
                 $childSection = $section ? "{$section}." . ($idx + 1) : (string) ($idx + 1);
-                $this->walkParts($mailbox, $msgNum, $child, $childSection, $bodyText, $bodyHtml);
+                $this->walkBodyParts($mailbox, $msgNum, $child, $childSection, $bodyText, $bodyHtml);
             }
             return;
         }
 
         if ($type !== 0) {
+            return;
+        }
+
+        // 添付として扱われる TEXT パートはスキップ
+        if ($this->isAttachment($part)) {
             return;
         }
 
@@ -196,6 +220,96 @@ class EmailFetchService
             $bodyText = $raw;
         }
     }
+
+    // ------------------------------------------------------------------
+    // 添付ファイル抽出・保存
+    // ------------------------------------------------------------------
+
+    private function saveAttachments($mailbox, int $msgNum, Email $email): void
+    {
+        $structure = imap_fetchstructure($mailbox, $msgNum);
+        $this->walkAttachmentParts($mailbox, $msgNum, $structure, '', $email);
+    }
+
+    private function walkAttachmentParts($mailbox, int $msgNum, object $part, string $section, Email $email): void
+    {
+        if (($part->type ?? 0) === 1) {
+            foreach ($part->parts ?? [] as $idx => $child) {
+                $childSection = $section ? "{$section}." . ($idx + 1) : (string) ($idx + 1);
+                $this->walkAttachmentParts($mailbox, $msgNum, $child, $childSection, $email);
+            }
+            return;
+        }
+
+        if (!$this->isAttachment($part)) {
+            return;
+        }
+
+        $filename = $this->getAttachmentFilename($part) ?? 'attachment';
+        $sec      = $section ?: '1';
+        $raw      = imap_fetchbody($mailbox, $msgNum, $sec);
+        $raw      = $this->decodeBody($raw, $part->encoding ?? 0);
+
+        if (empty($raw)) {
+            return;
+        }
+
+        // ストレージに保存
+        $safeName = preg_replace('/[^A-Za-z0-9._\-]/u', '_', $filename);
+        $diskPath = "attachments/{$email->id}/{$safeName}";
+        Storage::disk('local')->put($diskPath, $raw);
+
+        // MIME タイプ判定
+        $typeMap  = [0 => 'text', 1 => 'multipart', 2 => 'message', 3 => 'application', 4 => 'audio', 5 => 'image', 6 => 'video'];
+        $mainType = $typeMap[$part->type ?? 3] ?? 'application';
+        $mimeType = $mainType . '/' . strtolower($part->subtype ?? 'octet-stream');
+
+        EmailAttachment::create([
+            'email_id'  => $email->id,
+            'filename'  => $filename,
+            'mime_type' => $mimeType,
+            'size'      => strlen($raw),
+            'disk_path' => $diskPath,
+        ]);
+    }
+
+    private function isAttachment(object $part): bool
+    {
+        if (isset($part->ifdisposition) && $part->ifdisposition &&
+            strtolower($part->disposition ?? '') === 'attachment') {
+            return true;
+        }
+        foreach ($part->dparameters ?? [] as $param) {
+            if (strtolower($param->attribute ?? '') === 'filename') {
+                return true;
+            }
+        }
+        foreach ($part->parameters ?? [] as $param) {
+            if (strtolower($param->attribute ?? '') === 'name') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function getAttachmentFilename(object $part): ?string
+    {
+        foreach ($part->dparameters ?? [] as $param) {
+            if (strtolower($param->attribute ?? '') === 'filename') {
+                return $this->decodeHeader($param->value);
+            }
+        }
+        foreach ($part->parameters ?? [] as $param) {
+            if (strtolower($param->attribute ?? '') === 'name') {
+                return $this->decodeHeader($param->value);
+            }
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------
+    // ユーティリティ
+    // ------------------------------------------------------------------
 
     private function decodeBody(string $body, int $encoding): string
     {
@@ -242,23 +356,41 @@ class EmailFetchService
         return $result;
     }
 
-    private function resolveThread(string $subject, string $inReplyTo): EmailThread
+    public function resolveThread(string $subject, ?string $inReplyTo, ?string $fromAddress = null): EmailThread
     {
+        $thread = null;
+
         if ($inReplyTo) {
             $parent = Email::where('message_id', $inReplyTo)->first();
             if ($parent?->thread_id) {
-                return EmailThread::findOrFail($parent->thread_id);
+                $thread = EmailThread::find($parent->thread_id);
             }
         }
 
-        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
-        $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
-            ->orderByDesc('last_email_at')
-            ->first();
+        if (!$thread) {
+            $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
+            $thread     = EmailThread::where('subject', 'like', "%{$normalized}%")
+                ->orderByDesc('last_email_at')
+                ->first();
 
-        return $thread ?? EmailThread::create([
-            'subject'       => $normalized,
-            'last_email_at' => now(),
-        ]);
+            if (!$thread) {
+                // スレッドを新規作成する場合、顧客がいれば自動で紐付け
+                $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
+                $thread = EmailThread::create([
+                    'subject'       => $normalized,
+                    'last_email_at' => now(),
+                    'customer_id'   => $customer?->id,
+                ]);
+            }
+        }
+
+        // 新しいメールを受信した場合は保留・完了タグを削除
+        $tags = $thread->tags ?? [];
+        $newTags = array_values(array_filter($tags, fn($t) => !in_array($t, ['保留', '完了'])));
+        if (count($tags) !== count($newTags)) {
+            $thread->update(['tags' => $newTags]);
+        }
+        
+        return $thread;
     }
 }

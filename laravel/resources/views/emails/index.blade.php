@@ -356,7 +356,7 @@
             </div>
 
             {{-- Right Sidebar --}}
-            <div id="right-sidebar" class="bg-white border-left shadow flex flex-col transition-all duration-300" style="width: 0; overflow: hidden;">
+            <div id="right-sidebar" class="bg-white border-left shadow transition-all duration-300">
                 <div style="width: 380px; height: 100%; display: flex; flex-direction: column;">
                     <!-- Header: Tabs + Close -->
                     <div class="sidebar-header d-flex align-items-center justify-content-between p-2 bg-light border-bottom flex-shrink-0">
@@ -435,9 +435,6 @@
             <div id="sidebar-toggle-collapsed">
                 <i class="fas fa-chevron-left mr-1"></i>メモ・Wiki・添付
             </div>
-        </div>
-    </div>
-</div>
         </div>
     </div>
 

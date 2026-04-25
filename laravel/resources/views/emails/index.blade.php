@@ -451,8 +451,8 @@
         style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1050;background:#fff;"
         class="flex flex-col relative overflow-hidden">
 
-        {{-- オーバーレイヘッダー --}}
-        <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm z-10">
+        {{-- オーバーレイヘッダー (Fixed Height) --}}
+        <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm z-50">
             <div class="flex items-center gap-3 min-w-0">
                 <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="text-xs text-gray-400 font-semibold">返信:</span>
@@ -473,50 +473,51 @@
             </div>
         </div>
 
-        {{-- オーバーレイ本体 --}}
-        <div class="flex-1 flex overflow-hidden relative">
+        {{-- オーバーレイ本体 (Resizable 3-Pane Layout) --}}
+        <div class="flex-1 flex min-h-0 overflow-hidden relative bg-gray-100" id="reply-workspace">
 
             {{-- 左ペイン (スレッド履歴) --}}
-            <div x-show="!composeMode" style="width:40%; min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200 bg-gray-50">
-                <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
-                    <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
-                    <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
-                </div>
-                <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                    <template x-for="email in threadEmails" :key="email.id">
-                        <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                            <div @click="toggleEmail(email.id)" class="px-5 py-3.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0" x-text="(email.from_label||'?').charAt(0).toUpperCase()"></div>
-                                    <div><p class="text-xs font-semibold text-gray-900" x-text="email.from_label"></p><p class="text-[10px] text-gray-400" x-text="email.received_at"></p></div>
+            <div :style="'width:' + overlayHistoryWidth + '%'" class="resizable-panel border-r border-gray-200 bg-gray-50">
+                <div x-show="!composeMode" class="flex flex-col h-full">
+                    <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
+                        <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
+                        <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
+                    </div>
+                    <div class="scrollable-area p-6 space-y-4 custom-scrollbar">
+                        <template x-for="email in threadEmails" :key="email.id">
+                            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div @click="toggleEmail(email.id)" class="px-5 py-3.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0" x-text="(email.from_label||'?').charAt(0).toUpperCase()"></div>
+                                        <div><p class="text-xs font-semibold text-gray-900" x-text="email.from_label"></p><p class="text-[10px] text-gray-400" x-text="email.received_at"></p></div>
+                                    </div>
+                                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                                 </div>
-                                <svg class="w-3.5 h-3.5 text-gray-400 transition-transform shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text" :class="email.is_agent ? 'bg-blue-50/30' : 'bg-white'">
+                                    <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[80px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 20) + 'px'"></iframe>
+                                    <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
+                                </div>
                             </div>
-                            <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text" :class="email.is_agent ? 'bg-blue-50/30' : 'bg-white'">
-                                <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[80px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 20) + 'px'"></iframe>
-                                <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
-                            </div>
-                        </div>
-                    </template>
+                        </template>
+                    </div>
                 </div>
-            </div>
-
-            {{-- 左ペイン (新規作成時はプレースホルダー) --}}
-            <div x-show="composeMode" style="width:40%;" class="border-r border-gray-200 bg-gray-50 flex items-center justify-center">
-                <div class="text-center text-gray-400">
-                    <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-width="1.5"/></svg>
+                <div x-show="composeMode" class="flex flex-col items-center justify-center h-full text-gray-400 p-12 text-center">
+                    <svg class="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-width="1.5"/></svg>
                     <p class="text-sm font-semibold">新規メッセージ作成</p>
                 </div>
             </div>
 
-            {{-- 右ペイン (返信フォーム) --}}
-            <div class="flex-1 flex flex-col overflow-hidden bg-white">
-                <div class="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
+            {{-- リサイズハンドル 1 --}}
+            <div class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('history', $event)"></div>
+
+            {{-- 中ペイン (返信フォーム) --}}
+            <div class="flex-1 resizable-panel bg-white">
+                <div class="scrollable-area custom-scrollbar">
                     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                         <span class="text-xs font-semibold text-gray-500" x-text="composeMode ? '新規メッセージ' : '返信フォーム'"></span>
                     </div>
 
-                    <div class="flex-1 p-5 space-y-4">
+                    <div class="p-5 space-y-4">
                         {{-- To, CC, BCC --}}
                         <div class="space-y-2.5">
                             <div class="relative">
@@ -531,7 +532,7 @@
                         {{-- Body --}}
                         <div>
                             <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メッセージ本文</label>
-                            <textarea x-model="replyBody" rows="12" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none email-body-text" placeholder="返信内容を入力してください..."></textarea>
+                            <textarea x-model="replyBody" rows="16" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none email-body-text" placeholder="返信内容を入力してください..."></textarea>
                         </div>
                         {{-- Attachments --}}
                         <div>
@@ -544,7 +545,7 @@
                             </div>
                         </div>
                         {{-- Send button --}}
-                        <div class="pt-2">
+                        <div class="pt-2 pb-8">
                             <button @click="submitReply()" :disabled="!replyBody || sendingReply"
                                 class="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-bold text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
                                 <span x-text="sendingReply ? '送信中...' : '返信を予約 (承認待ちへ保存)'"></span>
@@ -555,85 +556,90 @@
                 </div>
             </div>
 
-            {{-- AI Assistant Slide Drawer --}}
+            {{-- リサイズハンドル 2 (AI用) --}}
+            <div x-show="replyAiPanelOpen" class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('ai', $event)"></div>
+
+            {{-- 右ペイン (AI Assistant Drawer) --}}
             <aside x-show="replyAiPanelOpen"
-                x-transition:enter="transform transition ease-in-out duration-300"
+                x-transition:enter="transition ease-in-out duration-300 transform"
                 x-transition:enter-start="translate-x-full"
                 x-transition:enter-end="translate-x-0"
-                x-transition:leave="transform transition ease-in-out duration-300"
+                x-transition:leave="transition ease-in-out duration-300 transform"
                 x-transition:leave-start="translate-x-0"
                 x-transition:leave-end="translate-x-full"
-                style="width: 800px; max-width: 90vw;"
-                class="absolute inset-y-0 right-0 z-50 bg-white border-l border-gray-200 shadow-2xl flex flex-col">
+                :style="'width:' + overlayAiWidth + 'px'"
+                class="shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden relative z-40 shadow-2xl">
                 
-                {{-- Drawer Header --}}
-                <div class="px-6 py-4 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
-                    <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                        AIアシスタント解析
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">設定</button>
-                        <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-                    </div>
-                </div>
-
-                {{-- Drawer Body --}}
-                <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                    {{-- Input Area --}}
-                    <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-4">
-                        <div class="space-y-3">
-                            <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示・追加コンテキスト</label>
-                            <textarea x-model="aiUserPrompt" rows="3" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示を入力... (空欄でデフォルト設定を使用)"></textarea>
+                <div class="ai-drawer-internal">
+                    {{-- Drawer Header --}}
+                    <div class="px-6 py-4 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
+                        <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                            AIアシスタント解析
+                        </h3>
+                        <div class="flex items-center gap-2">
+                            <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">設定</button>
+                            <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
                         </div>
-                        <div class="flex items-end gap-3">
-                            <div class="flex-1">
-                                <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
-                                <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-200 outline-none">
+                    </div>
+
+                    {{-- Drawer Body --}}
+                    <div class="scrollable-area p-6 space-y-6 custom-scrollbar">
+                        {{-- Input Area --}}
+                        <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-4">
+                            <div class="space-y-3">
+                                <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示・追加コンテキスト</label>
+                                <textarea x-model="aiUserPrompt" rows="3" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示を入力... (空欄でデフォルト設定を使用)"></textarea>
                             </div>
-                            <button @click="askAiForReply()" :disabled="aiLoading" class="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
-                                <span>生成</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {{-- Loading Indicator --}}
-                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-12 space-y-4">
-                        <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                        <p class="text-sm font-bold text-indigo-400 animate-pulse">AIが解析しています...</p>
-                    </div>
-
-                    {{-- 3-Column Analysis Grid --}}
-                    <div x-show="aiAnalysis && !aiLoading" class="grid grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        {{-- Col 1: Context --}}
-                        <div class="space-y-3">
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-width="2"/></svg>
-                                状況分析
-                            </h4>
-                            <div class="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed" x-text="aiAnalysis.columns.left.content"></div>
+                            <div class="flex items-end gap-3">
+                                <div class="flex-1">
+                                    <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
+                                    <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-200 outline-none">
+                                </div>
+                                <button @click="askAiForReply()" :disabled="aiLoading" class="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                    <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
+                                    <span>生成</span>
+                                </button>
+                            </div>
                         </div>
 
-                        {{-- Col 2: Draft --}}
-                        <div class="space-y-3">
-                            <div class="flex items-center justify-between">
-                                <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2"/></svg>
-                                    返信案
+                        {{-- Loading Indicator --}}
+                        <div x-show="aiLoading" class="flex flex-col items-center justify-center py-12 space-y-4">
+                            <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                            <p class="text-sm font-bold text-indigo-400 animate-pulse">AIが解析しています...</p>
+                        </div>
+
+                        {{-- 3-Column Analysis Grid --}}
+                        <div x-show="aiAnalysis && !aiLoading" class="grid grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            {{-- Col 1: Context --}}
+                            <div class="space-y-3">
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-width="2"/></svg>
+                                    状況分析
                                 </h4>
-                                <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm">反映する</button>
+                                <div class="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed min-h-[300px]" x-text="aiAnalysis.columns.left.content"></div>
                             </div>
-                            <div class="text-xs text-gray-800 whitespace-pre-wrap bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100 leading-relaxed font-medium" x-text="aiAnalysis.columns.center.body"></div>
-                        </div>
 
-                        {{-- Col 3: Advice --}}
-                        <div class="space-y-3">
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke-width="2"/></svg>
-                                アドバイス / 検証
-                            </h4>
-                            <div class="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed" x-text="aiAnalysis.columns.right.content"></div>
+                            {{-- Col 2: Draft --}}
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2"/></svg>
+                                        返信案
+                                    </h4>
+                                    <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm">反映する</button>
+                                </div>
+                                <div class="text-[11px] text-gray-800 whitespace-pre-wrap bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100 leading-relaxed font-medium min-h-[300px]" x-text="aiAnalysis.columns.center.body"></div>
+                            </div>
+
+                            {{-- Col 3: Advice --}}
+                            <div class="space-y-3">
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke-width="2"/></svg>
+                                    アドバイス / 検証
+                                </h4>
+                                <div class="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed min-h-[300px]" x-text="aiAnalysis.columns.right.content"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -811,6 +817,47 @@ function emailApp() {
         aiUserPrompt: '', aiAnalysis: null, aiLoading: false, sendingReply: false, selectedFiles: [],
         aiScrapeUrl: '', defaultAiPrompt: '', editingDefaultPrompt: '', defaultPromptModalOpen: false,
         quickCustomerFormOpen: false, quickCustomerName: '', quickCustomerEmailVal: '',
+
+        // Reply Overlay Resizing
+        overlayHistoryWidth: 40, // percentage
+        overlayAiWidth: 800, // pixels
+        isResizingOverlay: false,
+
+        startResizeOverlay(type, e) {
+            this.isResizingOverlay = true;
+            const startX = e.clientX;
+            const workspace = document.getElementById('reply-workspace');
+            if (!workspace) return;
+            const totalWidth = workspace.offsetWidth;
+
+            if (type === 'history') {
+                const startW = (this.overlayHistoryWidth / 100) * totalWidth;
+                const onMove = (em) => {
+                    const newW = startW + (em.clientX - startX);
+                    this.overlayHistoryWidth = Math.max(10, Math.min(60, (newW / totalWidth) * 100));
+                };
+                const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    this.isResizingOverlay = false;
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            } else if (type === 'ai') {
+                const startW = this.overlayAiWidth;
+                const onMove = (em) => {
+                    const newW = startW + (startX - em.clientX);
+                    this.overlayAiWidth = Math.max(300, Math.min(1000, newW));
+                };
+                const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    this.isResizingOverlay = false;
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            }
+        },
 
         // Core Data & Filter
         leftTab: 'inbox', searchQuery: '', customerSearchQuery: '', activeCustomerId: null, activeGroupId: null, activeTags: [], sortOrder: 'desc',
@@ -1547,5 +1594,46 @@ $(function() {
 .drag-handle, .c-drag-handle, .group-drag-handle { cursor: grab; }
 .drag-handle:active { cursor: grabbing; }
 .sortable-ghost { opacity: 0.4; background: #EEF2FF !important; border: 1px dashed #3B82F6; }
+
+/* Resizable 3-pane layout for Reply Overlay */
+.reply-workspace {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    background: #fff;
+}
+.resizable-panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    box-sizing: border-box;
+}
+.scrollable-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+.resize-handle-h {
+    width: 6px;
+    margin: 0 -3px;
+    cursor: col-resize;
+    z-index: 30;
+    background: transparent;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+.resize-handle-h:hover, .resize-handle-h.is-resizing {
+    background-color: #3b82f6;
+}
+.ai-drawer-internal {
+    width: 800px;
+    height: 100%;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+}
 </style>
 @endsection

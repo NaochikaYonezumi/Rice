@@ -85,8 +85,8 @@
         </div>
     </div>
 
-    {{-- 3カラム目: メール一覧 (固定幅 340px) --}}
-    <div x-show="!fullThreadMode" :class="isListMaximizing ? 'flex-1' : (selectedThread ? 'mail-list-fixed' : 'flex-1')" class="flex flex-col overflow-hidden bg-white border-r border-gray-200 relative z-20">
+    {{-- 3カラム目: メール一覧 (固定幅) --}}
+    <div x-show="!fullThreadMode" class="flex flex-col overflow-hidden bg-white border-r border-gray-200 relative z-20 thread-list-column">
         <div class="bg-white border-b border-gray-100 px-6 pt-4 shrink-0 shadow-sm z-10">
             <div class="flex items-center justify-between mb-4">
                 <div x-show="isListMaximizing" class="mr-2"><button @click="isListMaximizing = false" class="text-blue-600 p-2 hover:bg-blue-50 rounded-xl font-black text-xs flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M21 19l-7-7 7-7" stroke-width="2.5"/></svg> 戻る</button></div>
@@ -110,8 +110,18 @@
 
         {{-- 長押し一括操作アクションバー --}}
         <template x-if="selectionMode">
-            <div class="px-6 py-2.5 bg-blue-600 text-white flex items-center justify-between sticky top-0 z-30 shadow-lg animate-in slide-in-from-top duration-300">
-                <div class="flex items-center gap-4"><span class="text-[11px] font-black text-white/90" x-text="selectedThreadIds.length + ' 件選択中'"></span><div class="flex items-center gap-1.5"><button @click="bulkMoveToHold()" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition-all">保留</button><button @click="bulkMoveToComplete()" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-green-300 transition-all">完了</button><button @click="bulkMerge()" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg transition-all">マージ</button><button @click="bulkDelete()" class="text-[9px] font-black bg-red-500 hover:bg-red-600 px-3 py-1 rounded-lg transition-all shadow-sm">削除</button></div></div>
+            <div class="px-4 py-2.5 bg-blue-600 text-white flex items-center justify-between sticky top-0 z-30 shadow-lg animate-in slide-in-from-top duration-300">
+                <div class="flex items-center gap-2"><span class="text-[11px] font-black text-white/90" x-text="selectedThreadIds.length + ' 件選択'"></span><div class="flex items-center gap-1"><button @click="bulkMoveToHold()" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg transition-all">保留</button><button @click="bulkMoveToComplete()" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg text-green-300 transition-all">完了</button><button @click="bulkMerge()" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg transition-all">マージ</button><button @click="bulkDelete()" class="text-[9px] font-black bg-red-500 hover:bg-red-600 px-2 py-1 rounded-lg transition-all shadow-sm">削除</button>
+                <div class="relative" x-data="{ classifyOpen: false }">
+                    <button @click="classifyOpen = !classifyOpen" class="text-[9px] font-black bg-white/20 hover:bg-white/30 px-2 py-1 rounded-lg transition-all">顧客を分類 ▼</button>
+                    <div x-show="classifyOpen" @click.away="classifyOpen = false" class="absolute top-full left-0 mt-2 w-64 bg-white border border-gray-200 shadow-2xl rounded-xl z-50 overflow-hidden text-gray-800">
+                        <div class="p-2 border-b border-gray-100"><input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..." class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300 text-gray-800"></div>
+                        <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                            <template x-for="c in filteredCustomers" :key="c.id"><button @click="bulkAssignCustomerSubmit(c.id); classifyOpen = false" class="w-full text-left px-4 py-2 text-xs font-semibold hover:bg-blue-50 border-b border-gray-50 last:border-0" x-text="c.name"></button></template>
+                        </div>
+                        <div class="border-t border-gray-100 p-2"><button @click="quickCustomerFormOpen = !quickCustomerFormOpen" class="w-full flex items-center gap-2 text-[10px] font-bold text-blue-600 hover:text-blue-800 py-1 px-2 transition-all">＋ Add New Customer</button><div x-show="quickCustomerFormOpen" class="mt-2 space-y-2 px-2 pb-2"><input x-model="quickCustomerName" placeholder="氏名 / 会社名 *" class="w-full px-2 py-1.5 border border-gray-200 rounded text-[10px]"><input x-model="quickCustomerEmailVal" placeholder="メールアドレス" type="email" class="w-full px-2 py-1.5 border border-gray-200 rounded text-[10px]"><button @click="bulkQuickCreateAndAssign(); classifyOpen = false" class="w-full bg-blue-600 text-white text-[10px] font-bold py-1.5 rounded hover:bg-blue-700">作成して紐付け</button></div></div>
+                    </div>
+                </div></div></div>
                 <button @click="cancelSelection()" class="hover:bg-white/20 p-1 rounded-full transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             </div>
         </template>
@@ -121,39 +131,64 @@
                 <div :data-thread-id="thread.id"
                     @mousedown="startLongPress(thread, $event)" @mouseup="cancelLongPress()" @mouseleave="cancelLongPress()"
                     @click="if(!isLongPressing){ selectionMode ? toggleSelection(thread) : loadThread(thread.id) }"
-                    class="email-item w-full px-6 py-4 hover:bg-blue-50/20 cursor-pointer border-l-4 border-transparent relative transition-all duration-200"
-                    :class="selectedThreadId === thread.id ? 'bg-blue-50/50 border-l-blue-600' : (selectedThreadIds.includes(thread.id) ? 'bg-blue-50' : 'border-b border-gray-50')">
-                    <div class="flex items-center justify-between mb-1 gap-2">
-                        <div class="flex items-center gap-2 min-w-0">
-                             <template x-if="selectionMode"><span class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all" :class="selectedThreadIds.includes(thread.id) ? 'bg-blue-600 border-blue-600 text-white' : 'border-gray-300 bg-white'"><span x-show="selectedThreadIds.includes(thread.id)" class="text-[8px] font-black">✓</span></span></template>
-                             <span class="text-[13px] font-semibold text-gray-800 truncate" x-text="thread.latest_email?.from_label ?? '—'"></span>
+                    class="email-item w-full cursor-pointer transition-all duration-200 thread-list-row"
+                    :class="selectedThreadId === thread.id ? 'active' : (selectedThreadIds.includes(thread.id) ? 'selected' : '')">
+                    
+                    <div class="flex w-full">
+                        {{-- Checkbox Column (Fixed Width ~32px) --}}
+                        <div class="shrink-0 w-[32px] flex flex-col items-center pt-3">
+                            <input type="checkbox" class="thread-checkbox w-4 h-4 cursor-pointer text-blue-600 rounded" 
+                                :checked="selectedThreadIds.includes(thread.id)"
+                                @click.stop="selectionMode = true; toggleSelection(thread)">
                         </div>
-                        <div class="flex items-center gap-2 shrink-0">
-                            <span class="text-[10px] text-gray-400" x-text="thread.last_email_at"></span>
-                            <button @click.stop="openAiPanel(thread)"
-                                class="p-1 text-gray-300 hover:text-indigo-500 rounded transition-all"
-                                title="AIアシスタントを開く">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                            </button>
+
+                        {{-- Icons Column (Fixed Width ~24px) --}}
+                        <div class="shrink-0 w-[24px] pt-3 flex flex-col items-center gap-1.5">
+                            <template x-if="thread.status === 'inbox' || !thread.status"><i class="fas fa-envelope text-primary fa-sm"></i></template>
+                            <template x-if="thread.status !== 'inbox' && thread.status"><i class="fas fa-envelope-open text-muted fa-sm"></i></template>
+                            <template x-if="thread.has_attachments"><i class="fas fa-paperclip text-muted fa-xs"></i></template>
+                            <template x-if="thread.customer_id"><i class="fas fa-user-check text-success fa-xs"></i></template>
+                        </div>
+
+                        {{-- Main Content --}}
+                        <div class="flex-1 min-w-0 pr-3 pb-2 pt-2.5">
+                            <div class="flex items-center justify-between mb-1 gap-2">
+                                <div class="flex items-center gap-2 min-w-0">
+                                    <span class="text-[13px] font-bold text-gray-800 truncate" x-text="thread.latest_email?.from_label ?? '—'"></span>
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0">
+                                    <span class="text-[10px] text-gray-500 font-medium" x-text="thread.last_email_at"></span>
+                                </div>
+                            </div>
+                            <h4 class="subject-clamp text-[13px] font-medium text-gray-700 mb-1.5" x-text="thread.subject"></h4>
+                            
+                            {{-- Tags wrapper --}}
+                            <div class="thread-tags-wrapper">
+                                <template x-for="(tag, index) in (thread.tags || []).filter(t => !reservedWords.includes(t))">
+                                    <template x-if="index < 3">
+                                        <span class="thread-tag-badge bg-indigo-50 text-indigo-500 border border-indigo-100" x-text="'#' + tag"></span>
+                                    </template>
+                                </template>
+                                <template x-if="(thread.tags || []).filter(t => !reservedWords.includes(t)).length > 3">
+                                    <span class="thread-tag-badge bg-gray-100 text-gray-500 border border-gray-200" x-text="'＋' + ((thread.tags || []).filter(t => !reservedWords.includes(t)).length - 3)"></span>
+                                </template>
+                            </div>
                         </div>
                     </div>
-                    <h4 class="subject-clamp text-[13px] font-medium text-gray-700 mb-1.5" x-text="thread.subject"></h4>
-                    <div class="flex flex-wrap gap-1.5"><template x-for="tag in (thread.tags || [])"><span x-show="!reservedWords.includes(tag)" class="text-[9px] font-semibold bg-indigo-50 text-indigo-500 px-2 py-0.5 rounded-full" x-text="'#' + tag"></span></template></div>
                 </div>
             </template>
         </div>
     </div>
 
     {{-- 4カラム目: スレッド詳細 --}}
-    <div x-show="selectedThread || composeMode" :class="fullThreadMode ? 'w-full' : 'flex-1'" class="bg-white flex flex-col relative shadow-2xl z-40 overflow-hidden min-w-0 transition-all duration-300">
-        <div class="h-full flex flex-col relative">
+    <div x-show="selectedThread || composeMode" class="flex-1 bg-white flex flex-col relative shadow-2xl z-40 overflow-hidden min-w-0 transition-all duration-300">
+        <div class="h-full flex relative">
+            {{-- Left Sub-Pane: Thread Content (58%) --}}
+            <div style="width:58%;min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200">
             {{-- アクションバー --}}
             <div class="shrink-0 border-b border-gray-100 bg-gray-50/50 px-6 py-4 flex items-center justify-between">
                 <div class="flex items-center gap-4">
-                    {{-- >> アイコン (詳細を閉じてリストを全画面にする) --}}
-                    <button @click="selectedThread = null; isListMaximizing = true" class="text-gray-400 hover:text-blue-600 p-2 bg-white border border-gray-200 rounded-xl shadow-sm transition-all" title="メーリングリストを表示">
-                        <svg class="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7M3 5l7 7-7 7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </button>
+
                     {{-- ↑↓ スレッド間移動 --}}
                     <div class="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ml-1">
                         <button @click="loadPrevThread()" :disabled="!hasPrevThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 border-r border-gray-100 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -195,11 +230,14 @@
                 {{-- 件名 (2行クランプ) --}}
                 <div class="flex items-start justify-between gap-4">
                     <h2 class="subject-clamp text-lg font-bold text-gray-900 flex-1 leading-snug" x-text="selectedThread?.subject"></h2>
-                    <button @click="openReplyOverlay(threadEmails[0])"
-                        class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl shadow transition-all flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                        返信
-                    </button>
+                    <div class="flex gap-2">
+
+                        <button @click="openReplyOverlay(threadEmails[0])"
+                            class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl shadow transition-all flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            返信
+                        </button>
+                    </div>
                 </div>
 
                 {{-- 顧客選択 + タグ --}}
@@ -321,6 +359,72 @@
                     {{-- Files --}}
                     <div x-show="detailTab === 'files'" class="space-y-3"><h3 class="text-xl font-bold mb-5 text-gray-900">共有ファイル</h3><template x-for="file in allAttachments" :key="file.id"><div class="bg-white p-5 rounded-2xl border border-gray-100 flex items-center justify-between shadow-sm hover:shadow-md transition-shadow"><div class="flex items-center gap-4">📎 <div class="min-w-0"><p class="text-sm font-bold text-gray-900 truncate" x-text="file.filename"></p><p class="text-[10px] text-gray-400 mt-0.5" x-text="file.received_at"></p></div></div><a :href="file.url" target="_blank" class="px-5 py-2 text-blue-600 bg-blue-50 rounded-xl font-bold text-xs hover:bg-blue-600 hover:text-white transition-all">ダウンロード</a></div></template></div>
                 </div>
+                </div>
+            </div>
+
+            {{-- Right Sub-Pane: Memos and Comments (42%) --}}
+            <div style="width:42%;min-width:0;" class="flex flex-col overflow-hidden bg-gray-50">
+                <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-white">
+                    <span class="text-xs font-bold text-gray-700">メモ & コメント</span>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-6">
+                    {{-- Memos Section --}}
+                    <div>
+                        <div class="shrink-0 mb-4">
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メモを登録</label>
+                            <textarea x-model="newMemoContent" rows="4" class="w-full text-sm border border-gray-200 bg-white rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none mb-2" placeholder="スレッドに関するメモ..."></textarea>
+                            <div class="text-right">
+                                <button @click="saveMemo()" class="bg-blue-600 text-white font-bold py-1.5 px-6 rounded-xl hover:bg-blue-700 transition-all text-xs shadow-sm">保存</button>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">過去のメモ</label>
+                            <template x-for="memo in threadMemos" :key="memo.id">
+                                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-xs font-bold text-gray-700" x-text="memo.author"></span>
+                                        <span class="text-[10px] text-gray-500" x-text="memo.created_at"></span>
+                                    </div>
+                                    <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed" x-text="memo.content"></div>
+                                </div>
+                            </template>
+                            <template x-if="threadMemos.length === 0">
+                                <div class="text-center text-gray-400 text-xs py-2">メモはまだありません</div>
+                            </template>
+                        </div>
+                    </div>
+
+                    {{-- Comments Section --}}
+                    <div class="border-t border-gray-200 pt-6">
+                        <div class="shrink-0 mb-4">
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">コメントを投稿</label>
+                            <textarea x-model="newCommentContent" rows="3" class="w-full text-sm border border-gray-200 bg-white rounded-2xl p-3 focus:ring-2 focus:ring-green-200 outline-none leading-relaxed resize-none mb-2" placeholder="コメントを入力..."></textarea>
+                            <div class="text-right">
+                                <button @click="postComment()" class="bg-green-600 text-white font-bold py-1.5 px-6 rounded-xl hover:bg-green-700 transition-all text-xs shadow-sm">投稿</button>
+                            </div>
+                        </div>
+                        <div class="space-y-3">
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">コメント履歴</label>
+                            <template x-for="comment in threadComments" :key="comment.id">
+                                <div class="bg-white border border-gray-100 rounded-xl p-4 shadow-sm relative group">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-xs font-bold text-gray-700" x-text="comment.author"></span>
+                                        <div class="flex items-center gap-3">
+                                            <span class="text-[10px] text-gray-500" x-text="comment.created_at"></span>
+                                            <template x-if="comment.is_author">
+                                                <button @click="deleteComment(comment.id)" class="text-[10px] text-red-400 hover:text-red-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">削除</button>
+                                            </template>
+                                        </div>
+                                    </div>
+                                    <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed" x-text="comment.content"></div>
+                                </div>
+                            </template>
+                            <template x-if="threadComments.length === 0">
+                                <div class="text-center text-gray-400 text-xs py-2">コメントはまだありません</div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -370,7 +474,7 @@
                                 </div>
                                 <svg class="w-3.5 h-3.5 text-gray-400 transition-transform shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
-                            <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text">
+                            <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text" :class="email.is_agent ? 'bg-blue-50/30' : 'bg-white'">
                                 <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[80px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 20) + 'px'"></iframe>
                                 <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
                             </div>
@@ -546,6 +650,83 @@
         </div>
     </template>
 
+    {{-- 拡大表示/メモ モード (Full screen overlay for Memos) --}}
+    <template x-if="expandedMemoMode">
+        <div class="fixed inset-0 z-[100] bg-white flex flex-col flex-1 overflow-hidden">
+            {{-- Header --}}
+            <div class="px-6 py-4 bg-gray-900 text-white flex items-center justify-between shrink-0 shadow-md relative z-10">
+                <div class="flex items-center gap-4">
+                    <span class="text-sm font-bold truncate">拡大表示・メモ</span>
+                </div>
+                <button @click="expandedMemoMode = false" class="flex items-center gap-2 text-xs font-semibold hover:text-red-400 transition-all">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
+                    閉じる
+                </button>
+            </div>
+            
+            <div class="flex-1 flex overflow-hidden">
+                {{-- Left: Thread History (58%) --}}
+                <div style="width:58%;min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200 bg-gray-50">
+                    <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
+                        <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
+                        <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                        <template x-for="email in threadEmails" :key="'memo-'+email.id">
+                            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                                <div @click="toggleEmail(email.id)" class="px-5 py-3.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0" x-text="(email.from_label||'?').charAt(0).toUpperCase()"></div>
+                                        <div><p class="text-xs font-semibold text-gray-900" x-text="email.from_label"></p><p class="text-[10px] text-gray-400" x-text="email.received_at"></p></div>
+                                    </div>
+                                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                </div>
+                                <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text" :class="email.is_agent ? 'bg-blue-50/30' : 'bg-white'">
+                                    <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[80px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 20) + 'px'"></iframe>
+                                    <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                {{-- Right: Memo Area (42%) --}}
+                <div style="width:42%;min-width:0;" class="flex flex-col overflow-hidden bg-white">
+                    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
+                        <span class="text-xs font-semibold text-gray-500">スレッドメモ</span>
+                    </div>
+                    <div class="flex-1 flex flex-col p-5 overflow-hidden">
+                        {{-- Memo Input Form --}}
+                        <div class="shrink-0 mb-6">
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メモを登録</label>
+                            <textarea x-model="newMemoContent" rows="6" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none mb-2" placeholder="スレッドに関するメモ..."></textarea>
+                            <div class="text-right">
+                                <button @click="saveMemo()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-xl hover:bg-blue-700 transition-all text-xs shadow-sm">保存</button>
+                            </div>
+                        </div>
+
+                        {{-- Saved Memos List --}}
+                        <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">過去のメモ</label>
+                            <template x-for="memo in threadMemos" :key="memo.id">
+                                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-xs font-bold text-gray-700" x-text="memo.author"></span>
+                                        <span class="text-[10px] text-gray-500" x-text="memo.created_at"></span>
+                                    </div>
+                                    <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed" x-text="memo.content"></div>
+                                </div>
+                            </template>
+                            <template x-if="threadMemos.length === 0">
+                                <div class="text-center text-gray-400 text-xs py-4">メモはまだありません</div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
     {{-- 各種モーダル --}}
     <template x-if="customerGroupModalOpen"><div class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-md p-4" @click.self="customerGroupModalOpen = false"><div class="bg-white rounded-[3rem] shadow-2xl w-full max-w-md p-12 text-center animate-in zoom-in duration-300"><h3 class="text-2xl font-black mb-8 tracking-tighter uppercase text-gray-900">新しいフォルダ</h3><input type="text" x-model="newGroupName" placeholder="フォルダ名を入力..." class="w-full text-lg font-black border-gray-200 bg-gray-50 border-2 rounded-2xl px-8 py-6 outline-none mb-10 text-center focus:ring-4 focus:ring-blue-400 shadow-inner"><div class="flex gap-4"><button @click="customerGroupModalOpen = false" class="flex-1 py-5 text-sm font-black text-gray-400 hover:bg-gray-50 rounded-2xl transition-all">キャンセル</button><button @click="addCustomerGroup()" class="flex-[2] bg-blue-600 text-white py-5 rounded-2xl font-black text-base shadow-xl hover:bg-blue-700 transition-all">フォルダを作成</button></div></div></div></template>
     <template x-if="customerModalOpen"><div class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-md p-4" @click.self="customerModalOpen = false"><div class="bg-white rounded-[3rem] shadow-2xl w-full max-w-md p-12 animate-in zoom-in duration-300 shadow-indigo-100"><h3 class="text-2xl font-black mb-8 text-center tracking-tighter uppercase text-gray-900">顧客を追加</h3><div class="space-y-5 mb-10"><input type="text" x-model="newCustomerName" placeholder="氏名 / 会社名" class="w-full text-base font-black border-gray-200 border-2 bg-gray-50 rounded-2xl px-8 py-5 focus:bg-white focus:ring-4 focus:ring-blue-400 outline-none shadow-inner"><input type="email" x-model="newCustomerEmail" placeholder="メールアドレス (任意)" class="w-full text-base font-black border-gray-200 border-2 bg-gray-50 rounded-2xl px-8 py-5 focus:bg-white focus:ring-4 focus:ring-blue-400 outline-none shadow-inner"></div><div class="flex gap-4"><button @click="customerModalOpen = false" class="flex-1 py-5 text-sm font-black text-gray-400 hover:bg-gray-50 rounded-2xl transition-all">キャンセル</button><button @click="addCustomer()" class="flex-[2] bg-blue-600 text-white py-5 rounded-2xl font-black text-base shadow-xl hover:bg-blue-700 transition-all shadow-blue-100">登録する</button></div></div></div></template>
@@ -557,9 +738,10 @@
 function emailApp() {
     return {
         // UI Layout States
-        navPanelOpen: true, tagPanelOpen: false, customerModalOpen: false, customerGroupModalOpen: false, fetching: false, 
+        navPanelOpen: false, tagPanelOpen: false, customerModalOpen: false, customerGroupModalOpen: false, fetching: false, 
         detailTab: 'thread', tagEditorOpen: false, assignDropdownOpen: false, loadingThread: false, 
-        fullThreadMode: false, isListMaximizing: false, openGroupIds: [], 
+        fullThreadMode: false, isListMaximizing: false, openGroupIds: [], expandedMemoMode: false,
+        threadMemos: [], newMemoContent: '', threadComments: [], newCommentContent: '',
 
         // Resizing State
         sidebarWidth: parseInt(localStorage.getItem('sidebarWidth')) || 64,
@@ -636,6 +818,79 @@ function emailApp() {
             this.aiDrawerOpen = true;
         },
 
+        async loadMemos() {
+            if (!this.selectedThreadId) return;
+            try {
+                const res = await fetch(`/threads/${this.selectedThreadId}/memos`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.threadMemos = data.memos;
+                }
+            } catch (e) { console.error('Failed to load memos', e); }
+        },
+
+        async saveMemo() {
+            if (!this.newMemoContent.trim() || !this.selectedThreadId) return;
+            try {
+                const res = await fetch(`/threads/${this.selectedThreadId}/memos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ content: this.newMemoContent })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    this.threadMemos.unshift(data.memo);
+                    this.newMemoContent = '';
+                } else {
+                    alert('メモの保存に失敗しました');
+                }
+            } catch (e) { alert('エラーが発生しました'); }
+        },
+
+        async loadComments() {
+            if (!this.selectedThreadId) return;
+            try {
+                const res = await fetch(`/threads/${this.selectedThreadId}/comments`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.threadComments = data.comments;
+                }
+            } catch (e) { console.error('Failed to load comments', e); }
+        },
+
+        async postComment() {
+            if (!this.newCommentContent.trim() || !this.selectedThreadId) return;
+            try {
+                const res = await fetch(`/threads/${this.selectedThreadId}/comments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ content: this.newCommentContent })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    this.threadComments.push(data.comment);
+                    this.newCommentContent = '';
+                } else {
+                    alert('コメントの投稿に失敗しました');
+                }
+            } catch (e) { alert('エラーが発生しました'); }
+        },
+
+        async deleteComment(id) {
+            if(!confirm('コメントを削除しますか？')) return;
+            try {
+                const res = await fetch(`/thread-comments/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                if (res.ok) {
+                    this.threadComments = this.threadComments.filter(c => c.id !== id);
+                } else {
+                    alert('削除に失敗しました');
+                }
+            } catch (e) { alert('エラーが発生しました'); }
+        },
+
         initSorting() {
             Object.values(this.sortableInstances).forEach(i => i.destroy());
             this.sortableInstances = {};
@@ -694,6 +949,33 @@ function emailApp() {
         async assignCustomerToSelected(cid) { if (!this.selectionMode) return; for (const tid of this.selectedThreadIds) await this.assignCustomer(cid, tid); this.cancelSelection(); },
 
         // Bulk Actions & Thread Deletion
+        async bulkAssignCustomerSubmit(cid) {
+            if (!this.selectionMode || this.selectedThreadIds.length === 0) return;
+            try {
+                const res = await fetch('/emails/bulk-assign-customer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ thread_ids: this.selectedThreadIds, customer_id: cid })
+                });
+                if (!res.ok) throw new Error('一括紐付けに失敗しました');
+                await this.loadThreads();
+                this.cancelSelection();
+            } catch (e) { alert(e.message); }
+        },
+        async bulkQuickCreateAndAssign() {
+            if (!this.quickCustomerName.trim() || this.selectedThreadIds.length === 0) return;
+            try {
+                const res = await fetch('/customers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ name: this.quickCustomerName, email: this.quickCustomerEmailVal })
+                });
+                const customer = await res.json();
+                await this.bulkAssignCustomerSubmit(customer.id);
+                await Promise.all([this.loadCustomerData(), this.loadCustomerGroups()]);
+                this.quickCustomerName = ''; this.quickCustomerEmailVal = ''; this.quickCustomerFormOpen = false;
+            } catch (e) { alert('顧客作成と紐付けに失敗しました'); }
+        },
         async bulkMoveToHold() { for (const id of this.selectedThreadIds) await this.updateThreadStatus({id}, 'hold'); this.cancelSelection(); },
         async bulkMoveToComplete() { for (const id of this.selectedThreadIds) await this.updateThreadStatus({id}, 'completed'); this.cancelSelection(); },
         async bulkDelete() { if(confirm('本当に削除しますか？')) { for (const id of this.selectedThreadIds) await fetch(`/threads/${id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); await this.loadThreads(); this.cancelSelection(); } },
@@ -751,7 +1033,7 @@ function emailApp() {
             this.threadsLoading = false;
         },
 
-        async loadThread(id) {
+    async loadThread(id) {
             this.selectedThreadId = id; this.detailTab = 'thread'; this.loadingThread = true; this.composeMode = false; this.replyOverlayOpen = false; this.isListMaximizing = false; this.aiDrawerOpen = false;
             try {
                 const res = await fetch(`/threads/${id}`); const data = await res.json();
@@ -763,6 +1045,8 @@ function emailApp() {
                 data.emails.forEach(e => { (e.attachments||[]).forEach(a => { allFiles.push({...a, received_at: e.received_at}); }); });
                 this.allAttachments = allFiles.sort((a,b) => b.id - a.id);
                 if (data.thread.customer) await this.loadWikis(data.thread.customer.name);
+                
+                await Promise.all([this.loadMemos(), this.loadComments()]);
             } catch(e) {}
             this.loadingThread = false;
         },

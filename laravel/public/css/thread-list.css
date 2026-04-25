@@ -1,0 +1,48 @@
+/* thread-list.css */
+
+.thread-list-column {
+    min-width: 320px !important;
+    max-width: 360px !important;
+    width: 360px !important;
+    flex-shrink: 0 !important;
+}
+
+.thread-list-row {
+    padding: 8px 12px !important;
+    border-bottom: 1px solid #e9ecef !important;
+    border-left: 3px solid transparent !important;
+}
+
+.thread-list-row:hover {
+    background-color: #f8f9fa !important;
+}
+
+.thread-list-row.active {
+    background-color: #e3f2fd !important;
+    border-left: 3px solid #007bff !important;
+}
+
+.thread-list-row.selected {
+    background-color: #e3f2fd !important;
+}
+
+/* Tags flex wrap, max 2 rows */
+.thread-tags-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    max-height: 48px;
+    overflow: hidden;
+}
+
+.thread-tag-badge {
+    display: inline-block;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 9999px;
+}

@@ -131,7 +131,7 @@ class EmailController extends Controller
         $result = $threads->get()->map(fn($t) => [
             'id' => $t->id,
             'subject' => $t->subject,
-            'last_email_at' => $t->last_email_at?->diffForHumans(),
+            'last_email_at' => $t->last_email_at?->format('Y/m/d H:i'),
             'tags' => $t->tags ?? [],
             'customer_id' => $t->customer_id,
             'latest_email' => $t->latestEmail ? [
@@ -188,5 +188,22 @@ class EmailController extends Controller
     {
         $thread->update(['tags' => array_values(array_unique($request->tags))]);
         return response()->json(['status' => 'ok']);
+    }
+
+    public function bulkAssignCustomer(Request $request): JsonResponse
+    {
+        $request->validate([
+            'thread_ids' => 'required|array|min:1',
+            'customer_id' => 'required',
+        ]);
+
+        $customerId = $request->customer_id === 'none' ? null : $request->customer_id;
+        
+        EmailThread::whereIn('id', $request->thread_ids)->update(['customer_id' => $customerId]);
+
+        return response()->json([
+            'success' => true,
+            'updated' => count($request->thread_ids)
+        ]);
     }
 }

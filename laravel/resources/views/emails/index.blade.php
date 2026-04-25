@@ -747,6 +747,8 @@
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
+function newSearchParams(obj) { return new URLSearchParams(obj); }
+
 function emailApp() {
     return {
         // UI Layout States
@@ -754,6 +756,7 @@ function emailApp() {
         detailTab: 'thread', tagEditorOpen: false, assignDropdownOpen: false, loadingThread: false, 
         fullThreadMode: false, isListMaximizing: false, openGroupIds: [], expandedMemoMode: false,
         threadMemos: [], newMemoContent: '', threadComments: [], newCommentContent: '',
+        threadsLoading: true,
 
         // Resizing State
         sidebarWidth: parseInt(localStorage.getItem('sidebarWidth')) || 64,

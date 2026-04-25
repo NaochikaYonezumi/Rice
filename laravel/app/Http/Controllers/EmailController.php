@@ -21,50 +21,97 @@ class EmailController extends Controller
 
     public function index() { return view('emails.index'); }
 
-    // AI案生成 (スレッド全体コンテキスト + URLスクレイピング対応)
+    // AIアシスタントによる返信案・分析生成
     public function askAi(Request $request, Email $email): JsonResponse
     {
         $userPrompt = trim($request->input('prompt', ''));
         $scrapeUrl  = trim($request->input('url', ''));
+        
+        // 画面上の現在の入力値
+        $currentTo  = $request->input('current_to', []);
+        $currentCc  = $request->input('current_cc', []);
+        $currentBcc = $request->input('current_bcc', []);
 
-        // ユーザー指示がなければデフォルトプロンプトを使用
+        // AI設定
+        $aiSettings = AiSetting::getSettings();
         if (!$userPrompt) {
-            $aiSettings = AiSetting::getSettings();
-            $userPrompt = $aiSettings->default_reply_prompt
-                ?: 'このスレッドの内容を把握した上で、丁寧で的確な返信を日本語で作成してください。';
+            $userPrompt = $aiSettings->default_reply_prompt ?: '丁寧で的確な返信を日本語で作成してください。';
         }
 
-        // スレッド全体の履歴を構築
-        $thread = $email->thread;
-        $threadContext = "=== スレッド: " . ($thread->subject ?? $email->subject) . " ===\n\n";
-        $emails = $thread
-            ? $thread->emails()->orderBy('received_at')->get()
-            : collect([$email]);
+        // 元メール情報の構築
+        $originalEmail = [
+            'from'    => $email->from_address,
+            'to'      => $email->to_address_array ?? [$email->to_address],
+            'cc'      => $email->cc_address_array ?? [],
+            'subject' => $email->subject,
+            'body'    => mb_substr($email->body_text ?: strip_tags($email->body_html ?? ''), 0, 3000),
+        ];
 
-        foreach ($emails as $e) {
-            $threadContext .= "差出人: {$e->from_label}\n";
-            $threadContext .= "宛先: " . ($e->to_address ?? '') . "\n";
-            $threadContext .= "日時: " . ($e->received_at?->format('Y/m/d H:i') ?? '不明') . "\n";
-            $body = $e->body_text ?: strip_tags($e->body_html ?? '');
-            $threadContext .= "本文:\n" . mb_substr($body, 0, 2000) . "\n";
-            $threadContext .= "---\n\n";
+        // スレッド履歴の要約 (コンテキスト用)
+        $threadContext = "";
+        if ($email->thread) {
+            $threadEmails = $email->thread->emails()->orderBy('received_at')->get();
+            foreach ($threadEmails as $te) {
+                if ($te->id === $email->id) continue;
+                $threadContext .= "--- 過去のメール ({$te->received_at}) ---\n";
+                $threadContext .= "From: {$te->from_label}\n";
+                $threadContext .= "本文: " . Str::limit($te->body_text ?: strip_tags($te->body_html ?? ''), 500) . "\n\n";
+            }
         }
 
-        // URLスクレイピング (オプション)
-        $scrapedContent = '';
+        // 参考URL内容
+        $scrapedContent = "";
         if ($scrapeUrl) {
             try {
-                $html = Http::timeout(15)->get($scrapeUrl)->body();
-                $text = mb_substr(strip_tags($html), 0, 3000);
-                $scrapedContent = "=== 参考URL内容 ({$scrapeUrl}) ===\n{$text}\n\n";
+                $html = Http::timeout(10)->get($scrapeUrl)->body();
+                $scrapedContent = "=== 参考URL ({$scrapeUrl}) ===\n" . mb_substr(strip_tags($html), 0, 2000) . "\n\n";
             } catch (\Throwable) {}
         }
 
-        $question = "{$threadContext}{$scrapedContent}指示: {$userPrompt}";
-        $result   = $this->ragApi->query($question);
-        $answer   = is_array($result) ? ($result['answer'] ?? json_encode($result, JSON_UNESCAPED_UNICODE)) : (string) $result;
+        // AIへの指示書 (システムプロンプト的な巨大な指示)
+        $prompt = "【役割】\nあなたは「PaperCutサポート窓口」担当者（米住 直親）のメール作成支援AIです。\n";
+        $prompt .= "以下の情報をもとに、指定されたJSON形式でのみ回答してください。\n\n";
+        $prompt .= "【入力情報】\n";
+        $prompt .= "- current_to: " . json_encode($currentTo) . "\n";
+        $prompt .= "- current_cc: " . json_encode($currentCc) . "\n";
+        $prompt .= "- current_bcc: " . json_encode($currentBcc) . "\n";
+        $prompt .= "- original_email: " . json_encode($originalEmail, JSON_UNESCAPED_UNICODE) . "\n";
+        $prompt .= "- user_email: zumin0512@gmail.com\n";
+        $prompt .= "- thread_history: \n{$threadContext}\n";
+        $prompt .= "- extra_context: \n{$scrapedContent}\n";
+        $prompt .= "- user_instruction: {$userPrompt}\n\n";
+        
+        $prompt .= "【出力形式・補完ロジック・各列の内容指示】\n";
+        $prompt .= "1. auto_fill: 元メールのCC/BCCから、現在の入力欄に不足しているものを抽出。自分(zumin0512@gmail.com)と送信元は除外。\n";
+        $prompt .= "2. columns.left (コンテキスト): 元メール要点、送信先属性(販売店/SIer/エンドユーザー)、やり取り傾向を日本語で記載。\n";
+        $prompt .= "3. columns.center (下書き): 返信文面。件名は具体的名に変更可。属性に応じた敬語。PaperCut MFに関する正確な記述。具体的指示があれば厳守。\n";
+        $prompt .= "4. columns.right (提案・確認): 送信前確認事項、次アクション、トーン変更理由を箇条書きで。\n\n";
+        
+        $prompt .= "【絶対制約】\n";
+        $prompt .= "- 出力は指定のJSONスキーマのみ。説明文や```jsonなどは一切不要。\n";
+        $prompt .= "- ソースにない技術情報は創作しない。不確かな場合は「こちらで確認が必要です」と明記。\n";
+        $prompt .= "- 日時・タイムゾーンは日本時間(JST)で考慮。\n\n";
+        
+        $prompt .= "JSONレスポンスを開始してください:";
 
-        return response()->json(['answer' => $answer]);
+        // RAG API経由でLLMに問い合わせ (トップKは小さめで十分)
+        $result = $this->ragApi->query($prompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
+        
+        $answer = $result['answer'] ?? '';
+        
+        // AIがMarkdownブロックで返してきた場合のクレンジング
+        $json = preg_replace('/^```json\s*|```$/', '', trim($answer));
+        
+        try {
+            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+            return response()->json($decoded);
+        } catch (\JsonException $e) {
+            // パース失敗時は生のテキストを返す（フロントエンドでフォールバック）
+            return response()->json([
+                'error' => 'AIの回答がJSON形式ではありませんでした。',
+                'raw_text' => $answer
+            ], 500);
+        }
     }
 
     // 返信予約 (TO/CC/BCC/添付対応)

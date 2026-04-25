@@ -4,46 +4,66 @@
     min-width: 320px !important;
     max-width: 360px !important;
     flex-shrink: 0 !important;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
 }
 
+/* Row common style */
+.mailing-list-header-row {
+    flex-shrink: 0;
+}
+
+/* Custom scrollbar for tag area */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* Row 4 Tags Wrapping */
+.tag-container-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 12px;
+}
+
+/* Thread List Row & Hover */
 .thread-list-row {
-    padding: 8px 12px !important;
-    border-bottom: 1px solid #e9ecef !important;
-    border-left: 3px solid transparent !important;
+    padding: 0 !important;
+    border-left: 3px solid transparent;
+    transition: all 0.15s ease;
 }
 
 .thread-list-row:hover {
-    background-color: #f8f9fa !important;
+    background-color: #f9fafb !important;
 }
 
 .thread-list-row.active {
-    background-color: #e3f2fd !important;
-    border-left: 3px solid #007bff !important;
+    background-color: #eff6ff !important;
+    border-left-color: #3b82f6 !important;
 }
 
 .thread-list-row.selected {
-    background-color: #e3f2fd !important;
+    background-color: #fefce8 !important;
 }
 
-/* Tags flex wrap, max 2 rows */
-.thread-tags-wrapper {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    max-height: 48px;
-    overflow: hidden;
+/* Scroll Container Height Adjustment */
+#email-list-container {
+    flex: 1;
+    overflow-y: auto;
 }
 
+/* Tags in row */
 .thread-tag-badge {
-    display: inline-block;
+    font-size: 8px;
+    font-weight: 900;
+    padding: 1px 6px;
+    border-radius: 4px;
     white-space: nowrap;
-    max-width: 120px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 9px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 9999px;
 }
 
 /* Right Sidebar Styles */

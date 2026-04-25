@@ -449,26 +449,35 @@
         x-transition:leave-start="opacity-100"
         x-transition:leave-end="opacity-0"
         style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1050;background:#fff;"
-        class="flex flex-col">
+        class="flex flex-col relative overflow-hidden">
 
         {{-- オーバーレイヘッダー --}}
-        <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm">
+        <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm z-10">
             <div class="flex items-center gap-3 min-w-0">
                 <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="text-xs text-gray-400 font-semibold">返信:</span>
                 <span class="text-sm font-bold text-gray-800 truncate" x-text="composeMode ? '新規メッセージ' : (selectedThread?.subject || '')"></span>
             </div>
-            <button @click="closeReplyOverlay()" class="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-xl transition-all">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
-                閉じる
-            </button>
+            <div class="flex items-center gap-2">
+                {{-- AI Assistant Toggle Button --}}
+                <button @click="replyAiPanelOpen = !replyAiPanelOpen; if(replyAiPanelOpen && !aiAnalysis){ aiUserPrompt = defaultAiPrompt; }"
+                    :class="replyAiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
+                    class="flex items-center gap-2 text-xs font-bold border px-4 py-2 rounded-xl transition-all shadow-sm">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                    AIアシスタント
+                </button>
+                <button @click="closeReplyOverlay()" class="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-xl transition-all">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
+                    閉じる
+                </button>
+            </div>
         </div>
 
         {{-- オーバーレイ本体 --}}
-        <div class="flex-1 flex overflow-hidden">
+        <div class="flex-1 flex overflow-hidden relative">
 
-            {{-- 左ペイン (58%): スレッド履歴 (読み取り専用) --}}
-            <div x-show="!composeMode" style="width:58%;min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200 bg-gray-50">
+            {{-- 左ペイン (スレッド履歴) --}}
+            <div x-show="!composeMode" style="width:40%; min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200 bg-gray-50">
                 <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
                     <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
                     <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
@@ -492,69 +501,19 @@
                 </div>
             </div>
 
-            {{-- 左ペイン: 新規作成時はプレースホルダー --}}
-            <div x-show="composeMode" style="width:58%;" class="border-r border-gray-200 bg-gray-50 flex items-center justify-center">
+            {{-- 左ペイン (新規作成時はプレースホルダー) --}}
+            <div x-show="composeMode" style="width:40%;" class="border-r border-gray-200 bg-gray-50 flex items-center justify-center">
                 <div class="text-center text-gray-400">
                     <svg class="w-12 h-12 mx-auto mb-3 opacity-30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-width="1.5"/></svg>
                     <p class="text-sm font-semibold">新規メッセージ作成</p>
                 </div>
             </div>
 
-            {{-- 右ペイン (42%): 返信フォーム + AIパネル --}}
-            <div style="width:42%;min-width:0;" class="flex flex-col overflow-hidden bg-white">
-
-                {{-- AIパネル (明示的なAIアイコンクリックでのみ表示) --}}
-                <div x-show="replyAiPanelOpen"
-                    x-transition:enter="transition ease-out duration-200"
-                    x-transition:enter-start="opacity-0 -translate-y-2"
-                    x-transition:enter-end="opacity-100 translate-y-0"
-                    class="shrink-0 border-b border-indigo-100 bg-indigo-50/20 overflow-y-auto custom-scrollbar" style="max-height:55vh;">
-                    <div class="p-5 space-y-4">
-                        <div class="flex items-center justify-between">
-                            <h4 class="text-xs font-bold text-indigo-700 flex items-center gap-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                                AIアシスタント
-                            </h4>
-                            <div class="flex items-center gap-2">
-                                <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-2.5 py-1 rounded-lg transition-all">デフォルト設定</button>
-                                <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-red-500 p-1 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-                            </div>
-                        </div>
-                        <textarea x-model="aiUserPrompt" rows="4" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示を入力 (空欄でデフォルト使用)..."></textarea>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label class="text-[9px] font-semibold text-gray-400 uppercase block mb-1">参考URL (オプション)</label>
-                                <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-xs border border-gray-200 bg-white rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-200 outline-none">
-                            </div>
-                            <div class="flex items-end">
-                                <button @click="askAiForReply()" :disabled="aiLoading" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold text-xs shadow hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                    <svg class="w-3.5 h-3.5" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
-                                    <span x-text="aiLoading ? '生成中...' : '返信案を生成'"></span>
-                                </button>
-                            </div>
-                        </div>
-                        <div x-show="aiDraftBody && !aiLoading" class="space-y-2">
-                            <div class="flex items-center justify-between">
-                                <label class="text-[9px] font-bold text-indigo-400 uppercase tracking-widest">生成された返信案</label>
-                                <button @click="replyBody = aiDraftBody; replyAiPanelOpen = false" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">返信欄へ反映</button>
-                            </div>
-                            <div class="bg-gray-50 rounded-xl p-3 text-xs text-gray-700 leading-relaxed border border-gray-100 max-h-36 overflow-y-auto custom-scrollbar" x-text="aiDraftBody"></div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- 返信フォーム --}}
+            {{-- 右ペイン (返信フォーム) --}}
+            <div class="flex-1 flex flex-col overflow-hidden bg-white">
                 <div class="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
-                    {{-- フォームツールバー --}}
                     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
                         <span class="text-xs font-semibold text-gray-500" x-text="composeMode ? '新規メッセージ' : '返信フォーム'"></span>
-                        {{-- AI アイコンボタン (明示的クリックのみ) --}}
-                        <button @click="replyAiPanelOpen = !replyAiPanelOpen; if(replyAiPanelOpen){ aiUserPrompt = defaultAiPrompt; editingDefaultPrompt = defaultAiPrompt; aiDraftBody = ''; }"
-                            :class="replyAiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
-                            class="flex items-center gap-2 text-xs font-bold border px-4 py-2 rounded-xl transition-all shadow-sm">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                            AIアシスタント
-                        </button>
                     </div>
 
                     <div class="flex-1 p-5 space-y-4">
@@ -595,6 +554,90 @@
                     </div>
                 </div>
             </div>
+
+            {{-- AI Assistant Slide Drawer --}}
+            <aside x-show="replyAiPanelOpen"
+                x-transition:enter="transform transition ease-in-out duration-300"
+                x-transition:enter-start="translate-x-full"
+                x-transition:enter-end="translate-x-0"
+                x-transition:leave="transform transition ease-in-out duration-300"
+                x-transition:leave-start="translate-x-0"
+                x-transition:leave-end="translate-x-full"
+                style="width: 800px; max-width: 90vw;"
+                class="absolute inset-y-0 right-0 z-50 bg-white border-l border-gray-200 shadow-2xl flex flex-col">
+                
+                {{-- Drawer Header --}}
+                <div class="px-6 py-4 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
+                    <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                        AIアシスタント解析
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">設定</button>
+                        <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+                    </div>
+                </div>
+
+                {{-- Drawer Body --}}
+                <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+                    {{-- Input Area --}}
+                    <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-4">
+                        <div class="space-y-3">
+                            <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示・追加コンテキスト</label>
+                            <textarea x-model="aiUserPrompt" rows="3" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示を入力... (空欄でデフォルト設定を使用)"></textarea>
+                        </div>
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1">
+                                <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
+                                <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-200 outline-none">
+                            </div>
+                            <button @click="askAiForReply()" :disabled="aiLoading" class="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
+                                <span>生成</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Loading Indicator --}}
+                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-12 space-y-4">
+                        <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                        <p class="text-sm font-bold text-indigo-400 animate-pulse">AIが解析しています...</p>
+                    </div>
+
+                    {{-- 3-Column Analysis Grid --}}
+                    <div x-show="aiAnalysis && !aiLoading" class="grid grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        {{-- Col 1: Context --}}
+                        <div class="space-y-3">
+                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-width="2"/></svg>
+                                状況分析
+                            </h4>
+                            <div class="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed" x-text="aiAnalysis.columns.left.content"></div>
+                        </div>
+
+                        {{-- Col 2: Draft --}}
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2"/></svg>
+                                    返信案
+                                </h4>
+                                <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm">反映する</button>
+                            </div>
+                            <div class="text-xs text-gray-800 whitespace-pre-wrap bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100 leading-relaxed font-medium" x-text="aiAnalysis.columns.center.body"></div>
+                        </div>
+
+                        {{-- Col 3: Advice --}}
+                        <div class="space-y-3">
+                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke-width="2"/></svg>
+                                アドバイス / 検証
+                            </h4>
+                            <div class="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed" x-text="aiAnalysis.columns.right.content"></div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </div>
     </div>
 
@@ -634,12 +677,12 @@
                 </button>
             </div>
             <div x-show="aiLoading" class="text-center text-indigo-400 animate-pulse text-xs font-semibold uppercase tracking-wider">AI is thinking...</div>
-            <div x-show="aiDraftBody && !aiLoading" class="space-y-2">
+            <div x-show="aiAnalysis && !aiLoading" class="space-y-2">
                 <div class="flex items-center justify-between">
                     <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">生成された返信案</label>
-                    <button @click="replyBody = aiDraftBody; openReplyOverlay(null)" class="text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">返信フォームへ</button>
+                    <button @click="replyBody = aiAnalysis.columns.center.body; openReplyOverlay(null)" class="text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">返信フォームへ</button>
                 </div>
-                <div class="bg-gray-50 rounded-2xl p-4 text-sm text-gray-700 leading-relaxed border border-gray-100" x-text="aiDraftBody"></div>
+                <div class="bg-gray-50 rounded-2xl p-4 text-sm text-gray-700 leading-relaxed border border-gray-100" x-text="aiAnalysis.columns.center.body"></div>
             </div>
         </div>
     </div>
@@ -762,10 +805,10 @@ function emailApp() {
         // Selection & Long Press
         selectionMode: false, selectedThreadIds: [], longPressTimer: null, isLongPressing: false,
 
-        // AI & Reply
+        // AI & Reply (高度な分析対応)
         replyOverlayOpen: false, replyAiPanelOpen: false, composeMode: false, aiDrawerOpen: false,
         replyBody: '', replyToEmailId: null, replyToAddress: '', replyCc: '', replyBcc: '',
-        aiUserPrompt: '', aiDraftBody: '', aiLoading: false, sendingReply: false, selectedFiles: [],
+        aiUserPrompt: '', aiAnalysis: null, aiLoading: false, sendingReply: false, selectedFiles: [],
         aiScrapeUrl: '', defaultAiPrompt: '', editingDefaultPrompt: '', defaultPromptModalOpen: false,
         quickCustomerFormOpen: false, quickCustomerName: '', quickCustomerEmailVal: '',
 
@@ -823,9 +866,8 @@ function emailApp() {
                 this.replyToEmailId = latest.id;
                 this.replyToAddress = latest.from_address;
             }
-            this.aiUserPrompt = this.defaultAiPrompt;
-            this.editingDefaultPrompt = this.defaultAiPrompt;
-            this.aiDraftBody = '';
+            this.aiUserPrompt = '';
+            this.aiAnalysis = null;
             this.aiScrapeUrl = '';
             this.aiDrawerOpen = true;
         },
@@ -1070,9 +1112,8 @@ function emailApp() {
                 this.replyToAddress = email.from_address;
             }
             this.replyCc = ''; this.replyBcc = ''; this.replyBody = '';
-            this.aiDraftBody = ''; this.selectedFiles = [];
-            this.aiUserPrompt = this.defaultAiPrompt;
-            this.editingDefaultPrompt = this.defaultAiPrompt;
+            this.aiAnalysis = null; this.selectedFiles = [];
+            this.aiUserPrompt = '';
             this.aiScrapeUrl = '';
             this.replyAiPanelOpen = false;
             this.replyOverlayOpen = true;
@@ -1103,18 +1144,54 @@ function emailApp() {
         async askAiForReply() {
             if (!this.replyToEmailId && !this.composeMode) return;
             this.aiLoading = true;
+            this.aiAnalysis = null;
             try {
-                const payload = { prompt: this.aiUserPrompt };
+                // 画面上の現在の宛先入力を収集
+                const payload = { 
+                    prompt: this.aiUserPrompt,
+                    current_to: this.replyToAddress.split(/[,;]/).map(s => s.trim()).filter(Boolean),
+                    current_cc: this.replyCc ? this.replyCc.split(/[,;]/).map(s => s.trim()).filter(Boolean) : [],
+                    current_bcc: this.replyBcc ? this.replyBcc.split(/[,;]/).map(s => s.trim()).filter(Boolean) : []
+                };
                 if (this.aiScrapeUrl) payload.url = this.aiScrapeUrl;
+
                 const res = await fetch(`/emails/${this.replyToEmailId || 0}/ai`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                     body: JSON.stringify(payload)
                 });
+                
                 const data = await res.json();
-                this.aiDraftBody = typeof data.answer === 'string' ? data.answer : JSON.stringify(data.answer);
-            } catch(e) { alert('AI案の生成に失敗しました。'); }
+                if (res.ok) {
+                    this.aiAnalysis = data;
+                    
+                    // CC/BCCの自動補完 (既存の入力値を保持しつつ不足分をマージ)
+                    if (data.auto_fill) {
+                        if (data.auto_fill.cc && data.auto_fill.cc.length > 0) {
+                            const currentCcs = this.replyCc ? this.replyCc.split(/[,;]/).map(s => s.trim()) : [];
+                            const combinedCcs = [...new Set([...currentCcs, ...data.auto_fill.cc])];
+                            this.replyCc = combinedCcs.join(', ');
+                        }
+                        if (data.auto_fill.bcc && data.auto_fill.bcc.length > 0) {
+                            const currentBccs = this.replyBcc ? this.replyBcc.split(/[,;]/).map(s => s.trim()) : [];
+                            const combinedBccs = [...new Set([...currentBccs, ...data.auto_fill.bcc])];
+                            this.replyBcc = combinedBccs.join(', ');
+                        }
+                    }
+                } else {
+                    alert(data.error || 'AI解析に失敗しました。');
+                }
+            } catch(e) { 
+                console.error(e);
+                alert('AI案の生成に失敗しました。'); 
+            }
             this.aiLoading = false;
+        },
+        applyAiDraft() {
+            if (!this.aiAnalysis || !this.aiAnalysis.columns.center) return;
+            // 生成された本文を下書き欄にセット
+            this.replyBody = this.aiAnalysis.columns.center.body;
+            this.replyAiPanelOpen = false;
         },
         handleFileSelect(e) { this.selectedFiles = Array.from(e.target.files); },
         removeSelectedFile(i) { this.selectedFiles.splice(i, 1); },
@@ -1135,7 +1212,7 @@ function emailApp() {
 
         // Other Actions
         async setLeftTab(tab) { this.leftTab = tab; await this.loadThreads(); },
-        openCompose() { this.composeMode = true; this.selectedThreadId = null; this.selectedThread = { subject: '(新規メッセージ)', tags: [], customer: null }; this.threadEmails = []; this.threadMerges = []; this.replyBody = ''; this.replyOverlayOpen = true; this.replyAiPanelOpen = false; this.aiUserPrompt = this.defaultAiPrompt; this.editingDefaultPrompt = this.defaultAiPrompt; this.aiDraftBody = ''; this.aiScrapeUrl = ''; this.detailTab = 'thread'; this.isListMaximizing = false; },
+        openCompose() { this.composeMode = true; this.selectedThreadId = null; this.selectedThread = { subject: '(新規メッセージ)', tags: [], customer: null }; this.threadEmails = []; this.threadMerges = []; this.replyBody = ''; this.replyOverlayOpen = true; this.replyAiPanelOpen = false; this.aiUserPrompt = this.defaultAiPrompt; this.editingDefaultPrompt = this.defaultAiPrompt; this.aiAnalysis = null; this.aiScrapeUrl = ''; this.detailTab = 'thread'; this.isListMaximizing = false; },
         async updateThreadStatus(t, k) {
             await fetch(`/threads/${t.id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ status: k }) });
             await this.loadThreads(); this.selectedThread = null; this.fullThreadMode = false;

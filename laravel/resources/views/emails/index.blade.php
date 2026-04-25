@@ -5,7 +5,8 @@
 <div class="flex h-full bg-gray-50 overflow-hidden text-gray-900 font-sans" x-data="emailApp()" x-init="init()" x-cloak>
 
     {{-- 1カラム目: ミニサイドバー (リサイズ可能) --}}
-    <template x-if="!composeMode && !fullThreadMode && !isListMaximizing">
+    {{-- "Shift" behavior: Hide when replyAiPanelOpen is true. --}}
+    <template x-if="!replyAiPanelOpen && !fullThreadMode && !isListMaximizing">
         <div x-transition:enter="transition ease-out duration-300"
              x-transition:enter-start="-translate-x-full"
              x-transition:enter-end="translate-x-0"
@@ -45,7 +46,8 @@
                 <div class="flex-1 overflow-y-auto py-2 custom-scrollbar bg-gray-50/20" id="customer-group-container">
                     <div class="mb-4">
                         <button @click="selectionMode ? assignCustomerToSelected('none') : toggleGroupFilter('none')" :class="activeGroupId==='none'?'bg-blue-50 text-blue-700 shadow-inner ring-1 ring-blue-200':'text-gray-400 hover:bg-white'" class="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-tighter transition-all">未分類 / 紐付け解除</button>
-                        <div class="px-2 space-y-0.5 mt-1 min-h-[10px]">
+                        {{-- ID added for Sortable --}}
+                        <div id="customer-list-none" data-group-id="none" class="px-2 space-y-0.5 mt-1 min-h-[10px]">
                             <template x-for="c in filteredUnassignedCustomers" :key="c.id">
                                 <div :data-customer-id="c.id" class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
                                     <div class="c-drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover/c:opacity-100 font-black text-[10px] transition-all">⠿</div>
@@ -67,9 +69,10 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div x-show="isGroupOpen(group.id)" x-collapse class="ml-9 border-l border-gray-200/50 mt-1 space-y-1">
+                                {{-- ID and data-customer-id added for Sortable --}}
+                                <div x-show="isGroupOpen(group.id)" x-collapse :id="'customer-list-' + group.id" :data-group-id="group.id" class="ml-9 border-l border-gray-200/50 mt-1 space-y-1">
                                     <template x-for="c in (group.customers || [])" :key="c.id">
-                                        <div class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
+                                        <div :data-customer-id="c.id" class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
                                             <div class="c-drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover/c:opacity-100 transition-all font-black text-[10px]">⠿</div>
                                             <button @click="selectionMode ? assignCustomerToSelected(c.id) : toggleCustomerFilter(c.id, c.name)" :class="activeCustomerId===c.id?'bg-blue-600 text-white shadow-md':'text-gray-600 hover:bg-white'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold truncate transition-all shadow-sm" x-text="c.name"></button>
                                         </div>
@@ -97,9 +100,6 @@
         </div>
 
         {{-- 3カラム目: メール一覧 (received threads) --}}
-    {{-- ======================================================= --}}
-    {{-- 2カラム目: メール一覧 (Vertical 4-row Header)           --}}
-    {{-- ======================================================= --}}
     <div x-show="!fullThreadMode" 
         class="flex flex-col shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 thread-list-column shadow-sm"
         :style="'width:' + threadWidth + 'px'" style="min-width: 250px">
@@ -232,440 +232,310 @@
     </div>
 
     {{-- ======================================================= --}}
-    {{-- Column 3: 詳細・返信・作成エリア (Unified)               --}}
+    {{-- Column 3: ワークスペース (Unified 3-Pane Side-by-Side)    --}}
     {{-- ======================================================= --}}
     <div x-show="selectedThread || composeMode" 
          class="flex-1 flex flex-col relative overflow-hidden bg-white z-40 transition-all duration-300">
         
-        {{-- A: Thread Detail View (composeMode = false) --}}
-        <div x-show="!composeMode" class="flex-1 flex flex-col overflow-hidden">
-            <div class="h-full flex relative">
-                {{-- Left Sub-Pane: Thread Content (Flexible) --}}
-                <div id="thread-content-pane" class="flex-1 flex flex-col overflow-hidden border-r border-gray-200 transition-all duration-300">
-                    {{-- アクションバー --}}
-                    <div class="shrink-0 border-b border-gray-100 bg-gray-50/50 px-6 py-4 flex items-center justify-between">
-                        <div class="flex items-center gap-4">
-                            {{-- ↑↓ スレッド間移動 --}}
-                            <div class="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ml-1">
-                                <button @click="loadPrevThread()" :disabled="!hasPrevThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 border-r border-gray-100 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                                <button @click="loadNextThread()" :disabled="!hasNextThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                            </div>
-                            <div class="flex bg-gray-200 p-0.5 rounded-lg ml-2">
-                                <button @click="detailTab = 'thread'" :class="detailTab === 'thread' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">スレッド</button>
-                                <button @click="detailTab = 'wiki'; if(selectedThread?.customer) selectCategory(selectedThread.customer.name)" :class="detailTab === 'wiki' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">Wiki</button>
-                                <button @click="detailTab = 'files'" :class="detailTab === 'files' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">添付</button>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <template x-if="!composeMode">
-                                <div class="flex items-center gap-1.5 mr-2 pr-4 border-r border-gray-200">
-                                    <button @click="moveToHold(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-4 py-1.5 rounded-xl hover:bg-gray-50 shadow-sm transition-all">保留</button>
-                                    <button @click="markThreadIgnored(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-4 py-1.5 rounded-xl text-gray-400 hover:bg-gray-50 shadow-sm transition-all">不要</button>
-                                    <button @click="markThreadComplete(selectedThread)" class="text-[10px] font-black bg-green-600 text-white px-5 py-1.5 rounded-xl shadow-lg hover:bg-green-700 transition-all">完了</button>
-                                    <button @click="deleteThread(selectedThread)" class="text-[10px] font-black bg-red-50 text-red-600 border border-red-200 px-4 py-1.5 rounded-xl hover:bg-red-500 hover:text-white shadow-sm transition-all ml-1">削除</button>
-                                </div>
-                            </template>
-                            {{-- 全ウィンドウ表示ボタン --}}
-                            <button @click="fullThreadMode = !fullThreadMode" class="text-gray-400 hover:text-blue-600 p-2 bg-white border border-gray-200 rounded-xl transition-all shadow-sm">
-                                <svg x-show="!fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-width="2.5"/></svg>
-                                <svg x-show="fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"/></svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    {{-- 全画面モード時のみ表示される戻るバー --}}
-                    <template x-if="fullThreadMode">
-                         <div class="px-8 py-3 bg-blue-600 text-white flex items-center shrink-0 shadow-lg relative z-50">
-                            <button @click="fullThreadMode = false" class="text-[11px] font-black flex items-center gap-3 hover:bg-white/20 px-5 py-2 rounded-2xl transition-all uppercase tracking-widest"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M21 19l-7-7 7-7" stroke-width="3.5"/></svg> マルチウィンドウに戻る</button>
-                         </div>
+        {{-- Unified Header --}}
+        <div class="shrink-0 border-b border-gray-200 px-6 py-2.5 flex items-center justify-between bg-white shadow-sm z-50">
+            <div class="flex items-center gap-4 min-w-0">
+                <div x-show="!composeMode" class="flex items-center bg-gray-50 border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                    <button @click="loadPrevThread()" :disabled="!hasPrevThread" class="p-1.5 hover:bg-white disabled:opacity-20 border-r border-gray-100 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button @click="loadNextThread()" :disabled="!hasNextThread" class="p-1.5 hover:bg-white disabled:opacity-20 transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                </div>
+                <div class="flex items-center gap-2 min-w-0">
+                    <template x-if="composeMode">
+                        <span class="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest shrink-0">Reply Mode</span>
                     </template>
-
-                    {{-- 詳細帯: タグ・顧客・件名・返信ボタン --}}
-                    <div class="shrink-0 bg-white border-b border-gray-100 px-6 py-4 space-y-3 shadow-sm z-10">
-                        <div class="flex items-start justify-between gap-4">
-                            <h2 class="subject-clamp text-lg font-bold text-gray-900 flex-1 leading-snug" x-text="selectedThread?.subject"></h2>
-                            <div class="flex gap-2">
-                                <button @click="openReplyOverlay(threadEmails[0])"
-                                    class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl shadow transition-all flex items-center gap-2">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                    返信
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <div class="relative">
-                                <button @click="assignDropdownOpen = !assignDropdownOpen; quickCustomerFormOpen = false"
-                                    class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-blue-300 transition-all">
-                                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
-                                    <span x-text="selectedThread?.customer?.name || '顧客を選択'"></span>
-                                    <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2"/></svg>
-                                </button>
-                                <div x-show="assignDropdownOpen" @click.away="assignDropdownOpen = false; quickCustomerFormOpen = false"
-                                    class="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-2xl rounded-2xl z-[100] overflow-hidden">
-                                    <div class="p-2 border-b border-gray-100">
-                                        <input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..."
-                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
-                                    </div>
-                                    <div class="max-h-56 overflow-y-auto custom-scrollbar">
-                                        <template x-for="c in filteredCustomers" :key="c.id">
-                                            <button @click="assignCustomer(c.id); assignDropdownOpen = false"
-                                                class="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
-                                                x-text="c.name"></button>
-                                        </template>
-                                    </div>
-                                    <div class="border-t border-gray-100 p-3">
-                                        <button @click="quickCustomerFormOpen = !quickCustomerFormOpen; if(quickCustomerFormOpen && threadEmails[0]) quickCustomerEmailVal = threadEmails[0].from_address"
-                                            class="w-full flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-800 py-1 transition-all">
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg>
-                                            新規顧客を作成して紐付け
-                                        </button>
-                                        <div x-show="quickCustomerFormOpen" class="mt-3 space-y-2">
-                                            <input x-model="quickCustomerName" placeholder="氏名 / 会社名 *" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
-                                            <input x-model="quickCustomerEmailVal" placeholder="メールアドレス (任意)" type="email" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
-                                            <button @click="quickCreateAndAssign()"
-                                                class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-blue-700 transition-all">
-                                                作成して紐付け
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <template x-for="tag in (selectedThread?.tags || [])" :key="tag">
-                                <button @click="toggleTagFilter(tag)" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all group">
-                                    <span x-text="'#' + tag"></span>
-                                    <span @click.stop="removeTagFromThread(selectedThread, tag)" class="opacity-40 hover:opacity-100 group-hover:text-white">✕</span>
-                                </button>
-                            </template>
-                            <button @click="tagEditorOpen = !tagEditorOpen" class="text-[10px] font-bold text-indigo-400 bg-white border border-dashed border-indigo-200 px-3 py-1 rounded-full hover:bg-indigo-50 transition-all">+ タグ追加</button>
-                        </div>
-                        <div x-show="tagEditorOpen" class="flex gap-2">
-                            <input type="text" x-model="newTagName" @keydown.enter="addTagToSelected()" placeholder="タグ名を入力..." class="flex-1 text-xs px-4 py-2 bg-indigo-50/50 border border-indigo-100 rounded-xl focus:ring-2 focus:ring-indigo-300 outline-none">
-                            <button @click="addTagToSelected()" class="bg-indigo-600 text-white text-xs px-5 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all">追加</button>
-                        </div>
-                    </div>
-
-                    {{-- メインエリア: スレッド --}}
-                    <div class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar" id="thread-main-area">
-                        <div class="p-8 space-y-6 max-w-4xl mx-auto">
-                            {{-- マージ履歴 --}}
-                            <template x-if="detailTab === 'thread' && threadMerges && threadMerges.length > 0">
-                                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
-                                    <h4 class="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">マージされたスレッド履歴</h4>
-                                    <template x-for="m in threadMerges" :key="m.id">
-                                        <div class="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-amber-100 mb-2 shadow-sm">
-                                            <div><p class="text-xs font-semibold text-gray-700" x-text="m.source_subject"></p><p class="text-[10px] text-gray-400 mt-0.5" x-text="m.created_at"></p></div>
-                                            <button @click="unmerge(m.id)" class="text-[10px] font-bold text-amber-600 bg-amber-100 hover:bg-amber-200 px-4 py-1.5 rounded-lg transition-all">マージ解除</button>
-                                        </div>
-                                    </template>
-                                </div>
-                            </template>
-
-                            {{-- スレッド履歴 --}}
-                            <div x-show="detailTab === 'thread'" class="space-y-4">
-                                <template x-for="(email, idx) in threadEmails" :key="email.id">
-                                    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group/email">
-                                        <div @click="toggleEmail(email.id)" class="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                            <div class="flex items-center gap-4 min-w-0">
-                                                <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0" x-text="(email.from_label || '?').charAt(0).toUpperCase()"></div>
-                                                <div class="min-w-0">
-                                                    <p class="text-sm font-semibold text-gray-900 truncate" x-text="email.from_label"></p>
-                                                    <p class="text-[11px] text-gray-400" x-text="email.received_at"></p>
-                                                </div>
-                                            </div>
-                                            <div class="flex items-center gap-2 shrink-0">
-                                                <button @click.stop="openAiPanel(null, email)" class="text-gray-300 hover:text-indigo-500 p-1.5 rounded-full transition-all" title="AIアシスタント">
-                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                                                </button>
-                                                <button @click.stop="openReplyOverlay(email)" class="text-[11px] bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full font-semibold hover:bg-blue-600 hover:text-white transition-all">返信</button>
-                                                <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                            </div>
-                                        </div>
-                                        <div x-show="expandedEmailIds.includes(email.id)" class="px-6 py-5 border-t border-gray-100 email-body-text bg-white">
-                                            <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[100px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 30) + 'px'"></iframe>
-                                            <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
-                                        </div>
-                                    </div>
-                                </template>
-                                <div x-show="threadEmails.length > 0" class="text-center py-4">
-                                    <button @click="openReplyOverlay(threadEmails[0])"
-                                        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-8 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 mx-auto">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                        返信する
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Right Sidebar --}}
-                <div id="right-sidebar" class="bg-white border-left shadow transition-all duration-300">
-                    <div style="width: 380px; height: 100%; display: flex; flex-direction: column;">
-                        <div class="sidebar-header d-flex align-items-center justify-content-between p-2 bg-light border-bottom flex-shrink-0">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-primary active" data-sidebar-tab="thread">スレッド</button>
-                                <button type="button" class="btn btn-outline-primary" data-sidebar-tab="wiki">Wiki</button>
-                                <button type="button" class="btn btn-outline-primary" data-sidebar-tab="files">添付</button>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-light close-sidebar">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-
-                        <div class="sidebar-body flex-grow-1" style="overflow-y: auto;">
-                            <div id="sidebar-tab-thread" class="sidebar-tab-content active">
-                                <div class="sidebar-section-title px-3 py-2 bg-secondary text-white small font-weight-bold d-flex justify-content-between align-items-center">
-                                    スレッドメモ
-                                    <button class="btn btn-xs btn-light btn-sm text-secondary p-0 px-2 py-1" id="add-memo-toggle">＋追加</button>
-                                </div>
-                                <div id="memo-form-container" class="p-3 d-none border-bottom bg-light">
-                                    <textarea id="new-memo-content" class="form-control form-control-sm mb-2" rows="3" placeholder="メモを入力..."></textarea>
-                                    <button id="save-memo-btn" class="btn btn-sm btn-primary btn-block">保存</button>
-                                </div>
-                                <div id="sidebar-memo-list" class="px-0"></div>
-
-                                <div class="sidebar-section-title px-3 py-2 bg-success text-white small font-weight-bold d-flex justify-content-between align-items-center mt-3">
-                                    コメント
-                                    <button class="btn btn-xs btn-light btn-sm text-success p-0 px-2 py-1" id="add-comment-toggle">＋追加</button>
-                                </div>
-                                <div id="comment-form-container" class="p-3 d-none border-bottom bg-light">
-                                    <textarea id="new-comment-content" class="form-control form-control-sm mb-2" rows="3" placeholder="コメントを入力..."></textarea>
-                                    <button id="post-comment-btn" class="btn btn-sm btn-success btn-block">投稿</button>
-                                </div>
-                                <div id="sidebar-comment-list" class="px-0"></div>
-                            </div>
-
-                            <div id="sidebar-tab-wiki" class="sidebar-tab-content">
-                                <div class="sidebar-section-title px-3 py-2 bg-info text-white small font-weight-bold">Wiki (大学メモ)</div>
-                                <div class="p-3">
-                                    <div id="wiki-customer-name" class="font-weight-bold mb-2 text-primary small"></div>
-                                    <div id="wiki-content-container"></div>
-                                    <div class="mt-3">
-                                        <button class="btn btn-sm btn-outline-info btn-block" id="add-wiki-item-btn">+ 項目追加</button>
-                                        <button class="btn btn-sm btn-primary btn-block mt-2 d-none" id="save-wiki-btn">Wikiを保存</button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div id="sidebar-tab-files" class="sidebar-tab-content">
-                                <div class="sidebar-section-title px-3 py-2 bg-warning text-dark small font-weight-bold">添付ファイル</div>
-                                <div id="sidebar-file-list" class="list-group list-group-flush"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Sidebar Toggle button --}}
-                <div id="sidebar-toggle-collapsed">
-                    <i class="fas fa-chevron-left mr-1"></i>メモ・Wiki・添付
+                    <h2 class="text-sm font-bold text-gray-900 truncate" x-text="selectedThread?.subject || '新規メッセージ'"></h2>
                 </div>
             </div>
-
-            {{-- Standalone AI Assistant Drawer (Notion-style slide-in) --}}
-            <aside x-show="aiDrawerOpen"
-                x-transition:enter="transition ease-out duration-300"
-                x-transition:enter-start="translate-x-full opacity-0"
-                x-transition:enter-end="translate-x-0 opacity-100"
-                x-transition:leave="transition ease-in duration-200"
-                x-transition:leave-start="translate-x-0 opacity-100"
-                x-transition:leave-end="translate-x-full opacity-0"
-                class="bg-white border-l border-indigo-100 shadow-2xl flex flex-col shrink-0 z-40 absolute right-0 top-0 h-full"
-                style="width:420px;">
-                <div class="px-6 py-5 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
-                    <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                        AIアシスタント
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">デフォルト設定</button>
-                        <button @click="aiDrawerOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-                    </div>
-                </div>
-                <div class="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
-                    <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-3">
-                        <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示プロンプト</label>
-                        <textarea x-model="aiUserPrompt" rows="6" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示をここに書いてください... (空欄ならデフォルト指示を使用)"></textarea>
-                        <div>
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
-                            <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-200 outline-none">
-                        </div>
-                        <button @click="askAiForReply()" :disabled="aiLoading" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                            <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
-                            返信案を生成
-                        </button>
-                    </div>
-                    <div x-show="aiLoading" class="text-center text-indigo-400 animate-pulse text-xs font-semibold uppercase tracking-wider">AI is thinking...</div>
-                    <div x-show="aiAnalysis && !aiLoading" class="space-y-2">
-                        <div class="flex items-center justify-between">
-                            <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">生成された返信案</label>
-                            <button @click="replyBody = aiAnalysis.columns.center.body; openReplyOverlay(null)" class="text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">返信フォームへ</button>
-                        </div>
-                        <div class="bg-gray-50 rounded-2xl p-4 text-sm text-gray-700 leading-relaxed border border-gray-100" x-text="aiAnalysis.columns.center.body"></div>
-                    </div>
-                </div>
-            </aside>
+            <div class="flex items-center gap-3">
+                {{-- AI Toggle (Visible when composing) --}}
+                <button x-show="composeMode" @click="replyAiPanelOpen = !replyAiPanelOpen; if(replyAiPanelOpen && !aiAnalysis) aiUserPrompt = defaultAiPrompt;"
+                    :class="replyAiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
+                    class="flex items-center gap-2 text-[10px] font-black border px-4 py-2 rounded-xl transition-all shadow-sm uppercase tracking-widest">
+                    <i class="fas fa-magic"></i> AIアシスタント
+                </button>
+                {{-- Fullscreen Toggle --}}
+                <button @click="fullThreadMode = !fullThreadMode" class="text-gray-400 hover:text-blue-600 p-2 bg-white border border-gray-200 rounded-xl transition-all shadow-sm">
+                    <svg x-show="!fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-width="2.5"/></svg>
+                    <svg x-show="fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"/></svg>
+                </button>
+                {{-- Close button --}}
+                <button x-show="composeMode" @click="closeReplyOverlay()" class="text-gray-400 hover:text-red-500 p-2 bg-white border border-gray-200 rounded-xl transition-all shadow-sm">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
+                </button>
+            </div>
         </div>
 
-        {{-- B: Reply Form Workspace (composeMode = true) --}}
-        <div x-show="composeMode" class="flex-1 flex flex-col overflow-hidden bg-white">
-            {{-- オーバーレイヘッダー --}}
-            <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm z-50">
-                <div class="flex items-center gap-3 min-w-0">
-                    <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <span class="text-xs text-gray-400 font-semibold">返信:</span>
-                    <span class="text-sm font-bold text-gray-800 truncate" x-text="selectedThread?.subject || '新規メッセージ'"></span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <button @click="replyAiPanelOpen = !replyAiPanelOpen; if(replyAiPanelOpen){ if(!aiAnalysis){ aiUserPrompt = defaultAiPrompt; } }"
-                        :class="replyAiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
-                        class="flex items-center gap-2 text-xs font-bold border px-4 py-2 rounded-xl transition-all shadow-sm">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                        AIアシスタント
-                    </button>
-                    <button @click="closeReplyOverlay()" class="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-xl transition-all">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
-                        閉じる
-                    </button>
-                </div>
-            </div>
-
-            {{-- 3-Pane Workspace --}}
-            <div class="flex-1 flex min-h-0 overflow-hidden relative bg-gray-100" id="reply-workspace">
-                {{-- Left: History (Resizable) --}}
-                <div :style="'width:' + overlayHistoryWidth + '%'" class="border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
-                    <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
-                        <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
-                        <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
-                    </div>
-                    <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                        <template x-for="email in threadEmails" :key="email.id">
-                            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                                <div @click="toggleEmail(email.id)" class="px-5 py-3.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0" x-text="(email.from_label||'?').charAt(0).toUpperCase()"></div>
-                                        <div><p class="text-xs font-semibold text-gray-900" x-text="email.from_label"></p><p class="text-[10px] text-gray-400" x-text="email.received_at"></p></div>
-                                    </div>
-                                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        {{-- Flex Workspace Container: Pane 1, 2, 3 Side-by-Side --}}
+        <div x-ref="workspaceContainer" class="flex-1 flex overflow-hidden">
+            
+            {{-- Pane 1: Thread History / Detail View (Dynamic Width) --}}
+            <div x-show="selectedThread" 
+                 :style="composeMode ? 'width: ' + overlayHistoryWidth + '%; min-width: 200px;' : 'flex: 1'"
+                 class="flex flex-col overflow-hidden relative border-r border-gray-200 bg-gray-50 transition-all duration-75">
+                
+                {{-- If NOT composing: Full Detail View --}}
+                <div x-show="!composeMode" class="flex-1 flex flex-col overflow-hidden">
+                    <div class="h-full flex relative">
+                        {{-- Left Sub-Pane: Thread Content (Flexible) --}}
+                        <div id="thread-content-pane" class="flex-1 flex flex-col overflow-hidden border-r border-gray-200 transition-all duration-300">
+                            {{-- アクションバー (Tabs & Quick Actions) --}}
+                            <div class="shrink-0 border-b border-gray-100 bg-gray-50/50 px-6 py-2 flex items-center justify-between">
+                                <div class="flex bg-gray-200 p-0.5 rounded-lg">
+                                    <button @click="detailTab = 'thread'" :class="detailTab === 'thread' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">スレッド</button>
+                                    <button @click="detailTab = 'wiki'; if(selectedThread?.customer) selectCategory(selectedThread.customer.name)" :class="detailTab === 'wiki' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">Wiki</button>
+                                    <button @click="detailTab = 'files'" :class="detailTab === 'files' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">添付</button>
                                 </div>
-                                <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text" :class="email.is_agent ? 'bg-blue-50/30' : 'bg-white'">
-                                    <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[80px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 20) + 'px'"></iframe>
-                                    <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
+                                <div class="flex items-center gap-1.5">
+                                    <button @click="moveToHold(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-3 py-1 rounded-lg hover:bg-gray-50 shadow-sm transition-all">保留</button>
+                                    <button @click="markThreadComplete(selectedThread)" class="text-[10px] font-black bg-green-600 text-white px-4 py-1 rounded-lg shadow-lg hover:bg-green-700 transition-all">完了</button>
+                                </div>
+                            </div>
+
+                            {{-- 詳細帯: タグ・顧客・件名・返信ボタン --}}
+                            <div class="shrink-0 bg-white border-b border-gray-100 px-6 py-4 space-y-3 shadow-sm z-10">
+                                <div class="flex items-start justify-between gap-4">
+                                    <h2 class="subject-clamp text-lg font-bold text-gray-900 flex-1 leading-snug" x-text="selectedThread?.subject"></h2>
+                                    <div class="flex gap-2">
+                                        <button @click="openReplyOverlay(threadEmails[0])"
+                                            class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl shadow transition-all flex items-center gap-2">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                            返信
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3 flex-wrap">
+                                    <div class="relative">
+                                        <button @click="assignDropdownOpen = !assignDropdownOpen; quickCustomerFormOpen = false"
+                                            class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-blue-300 transition-all">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
+                                            <span x-text="selectedThread?.customer?.name || '顧客を選択'"></span>
+                                            <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2"/></svg>
+                                        </button>
+                                        <div x-show="assignDropdownOpen" @click.away="assignDropdownOpen = false"
+                                            class="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-2xl rounded-2xl z-[100] overflow-hidden">
+                                            <div class="p-2 border-b border-gray-100">
+                                                <input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..."
+                                                    class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
+                                            </div>
+                                            <div class="max-h-56 overflow-y-auto custom-scrollbar">
+                                                <template x-for="c in filteredCustomers" :key="c.id">
+                                                    <button @click="assignCustomer(c.id); assignDropdownOpen = false"
+                                                        class="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                                                        x-text="c.name"></button>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <template x-for="tag in (selectedThread?.tags || [])" :key="tag">
+                                        <button @click="toggleTagFilter(tag)" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all group">
+                                            <span x-text="'#' + tag"></span>
+                                            <span @click.stop="removeTagFromThread(selectedThread, tag)" class="opacity-40 hover:opacity-100 group-hover:text-white">✕</span>
+                                        </button>
+                                    </template>
+                                </div>
+                            </div>
+
+                            {{-- メインエリア: スレッド履歴 --}}
+                            <div class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar" id="thread-main-area">
+                                <div class="p-8 space-y-6 max-w-4xl mx-auto">
+                                    <div x-show="detailTab === 'thread'" class="space-y-4">
+                                        <template x-for="(email, idx) in threadEmails" :key="email.id">
+                                            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group/email">
+                                                <div @click="toggleEmail(email.id)" class="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                                    <div class="flex items-center gap-4 min-w-0">
+                                                        <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0" x-text="(email.from_label || '?').charAt(0).toUpperCase()"></div>
+                                                        <div class="min-w-0">
+                                                            <p class="text-sm font-semibold text-gray-900 truncate" x-text="email.from_label"></p>
+                                                            <p class="text-[11px] text-gray-400" x-text="email.received_at"></p>
+                                                        </div>
+                                                    </div>
+                                                    <div class="flex items-center gap-2 shrink-0">
+                                                        <button @click.stop="openAiPanel(null, email)" class="text-gray-300 hover:text-indigo-500 p-1.5 rounded-full transition-all" title="AIアシスタント">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                                                        </button>
+                                                        <button @click.stop="openReplyOverlay(email)" class="text-[11px] bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full font-semibold hover:bg-blue-600 hover:text-white transition-all">返信</button>
+                                                        <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                                    </div>
+                                                </div>
+                                                <div x-show="expandedEmailIds.includes(email.id)" class="px-6 py-5 border-t border-gray-100 email-body-text bg-white">
+                                                    <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[100px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 30) + 'px'"></iframe>
+                                                    <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {{-- Right Sidebar (jQuery) --}}
+                        <div id="right-sidebar" class="bg-white border-l shadow transition-all duration-300 overflow-hidden" style="width: 0;">
+                            <div style="width: 380px; height: 100%; display: flex; flex-direction: column;">
+                                <div class="sidebar-header d-flex align-items-center justify-content-between p-2 bg-light border-bottom flex-shrink-0">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-primary active" data-sidebar-tab="thread">スレッド</button>
+                                        <button type="button" class="btn btn-outline-primary" data-sidebar-tab="wiki">Wiki</button>
+                                        <button type="button" class="btn btn-outline-primary" data-sidebar-tab="files">添付</button>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-light close-sidebar"><i class="fas fa-times"></i></button>
+                                </div>
+                                <div class="sidebar-body flex-grow-1 overflow-y-auto">
+                                    <div id="sidebar-tab-thread" class="sidebar-tab-content active">
+                                        <div class="sidebar-section-title px-3 py-2 bg-secondary text-white small font-weight-bold d-flex justify-content-between align-items-center">メモ<button class="btn btn-xs btn-light btn-sm text-secondary p-0 px-2 py-1" id="add-memo-toggle">＋追加</button></div>
+                                        <div id="sidebar-memo-list" class="px-0"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="sidebar-toggle-collapsed" class="absolute right-0 top-1/2 -translate-y-1/2 bg-white border border-r-0 border-gray-200 py-4 px-1 rounded-l-xl cursor-pointer shadow-sm z-30 text-[10px] font-bold text-gray-400 hover:text-blue-600 transition-all flex flex-col items-center gap-2">
+                             <i class="fas fa-chevron-left"></i><span>メモ</span>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- If composing: Simplified History Pane (Active when composing) --}}
+                <div x-show="composeMode" class="flex-1 flex flex-col overflow-hidden">
+                    <div class="px-6 py-3 border-b border-gray-200 bg-white shrink-0">
+                         <h3 class="text-xs font-black text-gray-400 uppercase tracking-widest">Thread History</h3>
+                    </div>
+                    <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                        <template x-for="email in threadEmails" :key="'compose-history-' + email.id">
+                            <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                                <div @click="toggleEmail(email.id)" class="px-4 py-2.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <div class="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-[10px] shrink-0" x-text="(email.from_label||'?').charAt(0).toUpperCase()"></div>
+                                        <div class="min-w-0 text-left">
+                                            <p class="text-[11px] font-bold text-gray-900 truncate" x-text="email.from_label"></p>
+                                            <p class="text-[9px] text-gray-400" x-text="email.received_at"></p>
+                                        </div>
+                                    </div>
+                                    <svg class="w-3 h-3 text-gray-400 transition-transform" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2"/></svg>
+                                </div>
+                                <div x-show="expandedEmailIds.includes(email.id)" class="px-4 py-3 border-t border-gray-100 bg-white">
+                                     <div class="text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap" x-text="email.plain_body"></div>
                                 </div>
                             </div>
                         </template>
                     </div>
                 </div>
+            </div>
 
-                {{-- Resize Handle 1 --}}
-                <div class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('history', $event)"></div>
+            {{-- Handle 1 (History Resize) --}}
+            <div x-show="composeMode" 
+                 class="w-1 cursor-col-resize hover:bg-indigo-400 z-50 transition-colors"
+                 :class="resizingType === 'history' ? 'bg-indigo-400' : 'bg-gray-100'"
+                 @mousedown="startResizeOverlay('history', $event)"></div>
 
-                {{-- Center: Compose Form --}}
-                <div class="flex-1 bg-white flex flex-col overflow-hidden">
-                    <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
-                        <div class="space-y-2.5">
-                            <div class="relative">
-                                <label class="text-[10px] font-semibold text-gray-400 uppercase absolute left-3 top-1.5 z-10">宛先 (To)</label>
-                                <input type="text" x-model="replyToAddress" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200">
-                            </div>
-                            <div class="grid grid-cols-2 gap-2.5">
-                                <div class="relative"><label class="text-[10px] font-semibold text-gray-400 uppercase absolute left-3 top-1.5 z-10">Cc</label><input type="text" x-model="replyCc" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200"></div>
-                                <div class="relative"><label class="text-[10px] font-semibold text-gray-400 uppercase absolute left-3 top-1.5 z-10">Bcc</label><input type="text" x-model="replyBcc" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200"></div>
-                            </div>
+            {{-- Pane 2: Reply Draft Form (Anchor - Always visible in Compose Mode) --}}
+            <div x-show="composeMode" 
+                 style="min-width: 200px;"
+                 class="flex-1 flex flex-col overflow-hidden bg-white">
+                 <div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                    <div class="space-y-3">
+                        <div class="relative">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-1.5 z-10">宛先 (To)</label>
+                            <input type="text" x-model="replyToAddress" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200">
                         </div>
-                        <div>
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メッセージ本文</label>
-                            <textarea x-model="replyBody" rows="16" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none email-body-text" placeholder="返信内容を入力してください..."></textarea>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="relative"><label class="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-1.5 z-10">Cc</label><input type="text" x-model="replyCc" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200"></div>
+                            <div class="relative"><label class="text-[10px] font-bold text-gray-400 uppercase absolute left-3 top-1.5 z-10">Bcc</label><input type="text" x-model="replyBcc" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200"></div>
                         </div>
-                        <div>
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">添付ファイル</label>
-                            <input type="file" multiple @change="handleFileSelect($event)" class="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:bg-blue-600 file:text-white file:font-semibold cursor-pointer">
-                            <div class="flex flex-wrap gap-2 mt-2">
-                                <template x-for="(f, i) in selectedFiles" :key="i">
-                                    <span class="bg-gray-100 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2"><span x-text="f.name"></span><button @click="removeSelectedFile(i)" class="text-red-400 hover:text-red-600">✕</button></span>
-                                </template>
-                            </div>
+                    </div>
+                    <div class="flex-1 flex flex-col min-h-[500px]">
+                        <label class="text-[10px] font-bold text-gray-400 uppercase mb-2 block">メッセージ本文</label>
+                        <textarea x-model="replyBody" class="flex-1 w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-3 text-left focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none email-body-text" style="vertical-align: top;" placeholder="返信内容を入力してください..."></textarea>
+                    </div>
+                    <div class="pt-4 border-t border-gray-100 flex items-center justify-between">
+                         <div class="flex items-center gap-3">
+                             <input type="file" multiple @change="handleFileSelect($event)" class="hidden" id="reply-file-input">
+                             <label for="reply-file-input" class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-600 px-4 py-2 rounded-xl text-[11px] font-bold transition-all flex items-center gap-2">
+                                 <i class="fas fa-paperclip"></i> 添付
+                             </label>
+                             <div class="flex gap-1">
+                                 <template x-for="(f, i) in selectedFiles" :key="i">
+                                     <span class="bg-blue-50 text-blue-600 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1"><span x-text="f.name"></span><button @click="removeSelectedFile(i)">✕</button></span>
+                                 </template>
+                             </div>
+                         </div>
+                         <button @click="submitReply()" :disabled="!replyBody || sendingReply"
+                            class="bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center gap-3 disabled:opacity-50">
+                            <span x-text="sendingReply ? '送信中...' : '承認依頼'"></span>
+                            <i class="fas fa-paper-plane"></i>
+                         </button>
+                    </div>
+                 </div>
+            </div>
+
+            {{-- Handle 2 (AI Resize) --}}
+            <div x-show="composeMode && replyAiPanelOpen" 
+                 class="w-1 cursor-col-resize hover:bg-indigo-400 z-50 transition-colors"
+                 :class="resizingType === 'ai' ? 'bg-indigo-400' : 'bg-gray-100'"
+                 @mousedown="startResizeOverlay('ai', $event)"></div>
+
+            {{-- Pane 3: AI Assistant (Visible when AI Open) --}}
+            <aside x-show="composeMode && replyAiPanelOpen" 
+                   :style="'width: ' + overlayAiWidth + 'px; min-width: 200px;'"
+                   class="shrink-0 flex flex-col bg-white overflow-hidden shadow-2xl border-l border-indigo-50">
+                 <div class="px-6 py-4 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between">
+                    <h3 class="text-xs font-bold text-indigo-700 flex items-center gap-2">
+                        <i class="fas fa-magic"></i> AIアシスタント
+                    </h3>
+                    <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                    <div class="bg-indigo-50/40 rounded-2xl p-4 border border-indigo-100 space-y-4">
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示</label>
+                            <textarea x-model="aiUserPrompt" rows="3" class="w-full text-[11px] border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示を入力..."></textarea>
                         </div>
-                        <div class="pt-2 pb-8">
-                            <button @click="submitReply()" :disabled="!replyBody || sendingReply"
-                                class="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-bold text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
-                                <span x-text="sendingReply ? '送信中...' : '返信を予約 (承認待ちへ保存)'"></span>
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            </button>
-                        </div>
+                        <button @click="askAiForReply()" :disabled="aiLoading" class="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-bold text-[11px] shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                            <i class="fas fa-bolt" :class="aiLoading ? 'animate-spin' : ''"></i>
+                            <span>生成する</span>
+                        </button>
+                    </div>
+                    
+                    <div x-show="aiLoading" class="flex flex-col items-center justify-center py-12 space-y-4">
+                        <div class="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                        <p class="text-[10px] font-bold text-indigo-400 animate-pulse">解析中...</p>
+                    </div>
+
+                    <div x-show="aiAnalysis && !aiLoading" class="space-y-6">
+                         <div class="space-y-2">
+                             <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">状況分析</h4>
+                             <div class="text-[11px] text-gray-600 bg-gray-50 p-4 rounded-xl border border-gray-100 leading-relaxed" x-text="aiAnalysis.columns?.left?.content"></div>
+                         </div>
+                         <div class="space-y-2">
+                             <div class="flex items-center justify-between">
+                                 <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest">返信案</h4>
+                                 <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2 py-1 rounded text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all">反映</button>
+                             </div>
+                             <div class="text-[11px] text-gray-800 bg-indigo-50/30 p-4 rounded-xl border border-indigo-100 leading-relaxed font-medium" x-text="aiAnalysis.columns?.center?.body"></div>
+                         </div>
+                         <div class="space-y-2">
+                             <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest">アドバイス</h4>
+                             <div class="text-[11px] text-gray-600 bg-gray-50 p-4 rounded-xl border border-gray-100 leading-relaxed" x-text="aiAnalysis.columns?.right?.content"></div>
+                         </div>
                     </div>
                 </div>
-
-                {{-- Resize Handle 2 --}}
-                <div x-show="replyAiPanelOpen" class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('ai', $event)"></div>
-
-                {{-- Right: AI Assistant Drawer --}}
-                <aside x-show="replyAiPanelOpen"
-                    :style="'width:' + overlayAiWidth + 'px'"
-                    class="shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden relative shadow-2xl">
-                    <div class="px-6 py-4 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
-                        <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                            AIアシスタント解析
-                        </h3>
-                        <div class="flex items-center gap-2">
-                            <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-                        </div>
-                    </div>
-                    <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
-                        <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-4">
-                            <div class="space-y-3">
-                                <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示・追加コンテキスト</label>
-                                <textarea x-model="aiUserPrompt" rows="3" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示を入力... (空欄でデフォルト設定を使用)"></textarea>
-                            </div>
-                            <div class="flex items-end gap-3">
-                                <div class="flex-1">
-                                    <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
-                                    <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-200 outline-none">
-                                </div>
-                                <button @click="askAiForReply()" :disabled="aiLoading" class="bg-indigo-600 text-white px-8 py-2 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                                    <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
-                                    <span>生成</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div x-show="aiLoading" class="flex flex-col items-center justify-center py-12 space-y-4">
-                            <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                            <p class="text-sm font-bold text-indigo-400 animate-pulse">AIが解析しています...</p>
-                        </div>
-                        <div x-show="aiAnalysis && !aiLoading" class="grid grid-cols-3 gap-4">
-                            <div class="space-y-3">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">状況分析</h4>
-                                <div class="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed min-h-[300px]" x-text="aiAnalysis.columns.left.content"></div>
-                            </div>
-                            <div class="space-y-3">
-                                <div class="flex items-center justify-between">
-                                    <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">返信案</h4>
-                                    <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all">反映</button>
-                                </div>
-                                <div class="text-[11px] text-gray-800 whitespace-pre-wrap bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100 leading-relaxed font-medium min-h-[300px]" x-text="aiAnalysis.columns.center.body"></div>
-                            </div>
-                            <div class="space-y-3">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">アドバイス</h4>
-                                <div class="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed min-h-[300px]" x-text="aiAnalysis.columns.right.content"></div>
-                            </div>
-                        </div>
-                    </div>
-                </aside>
-            </div>
+            </aside>
         </div>
     </div>
 
-    </div> {{-- End of Main Workspace Container --}}
-
-    {{-- デフォルトプロンプト設定モーダル --}}
+    {{-- 各種モーダル等 --}}
     <template x-if="defaultPromptModalOpen">
         <div class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40 backdrop-blur-sm" @click.self="defaultPromptModalOpen = false">
             <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 animate-in zoom-in duration-200">
                 <h3 class="text-lg font-bold mb-2 text-gray-900">デフォルト返信プロンプト設定</h3>
-                <p class="text-xs text-gray-400 mb-5">AIアシスタントを開いたとき、プロンプト欄に自動で表示される指示文です。</p>
-                <textarea x-model="editingDefaultPrompt" rows="6" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-xl p-4 focus:ring-2 focus:ring-indigo-200 outline-none resize-y" placeholder="例: このスレッドの内容を把握した上で、丁寧で的確な返信を日本語で作成してください。"></textarea>
+                <textarea x-model="editingDefaultPrompt" rows="6" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-xl p-4 focus:ring-2 focus:ring-indigo-200 outline-none resize-y"></textarea>
                 <div class="flex gap-3 mt-5">
                     <button @click="defaultPromptModalOpen = false" class="flex-1 py-3 text-sm font-semibold text-gray-500 hover:bg-gray-50 rounded-xl border border-gray-100 transition-all">キャンセル</button>
                     <button @click="saveDefaultPrompt()" class="flex-[2] bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow-lg hover:bg-indigo-700 transition-all">保存する</button>
@@ -674,86 +544,9 @@
         </div>
     </template>
 
-    {{-- 拡大表示/メモ モード (Full screen overlay for Memos) --}}
-    <template x-if="expandedMemoMode">
-        <div class="fixed inset-0 z-[100] bg-white flex flex-col flex-1 overflow-hidden">
-            {{-- Header --}}
-            <div class="px-6 py-4 bg-gray-900 text-white flex items-center justify-between shrink-0 shadow-md relative z-10">
-                <div class="flex items-center gap-4">
-                    <span class="text-sm font-bold truncate">拡大表示・メモ</span>
-                </div>
-                <button @click="expandedMemoMode = false" class="flex items-center gap-2 text-xs font-semibold hover:text-red-400 transition-all">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
-                    閉じる
-                </button>
-            </div>
-            
-            <div class="flex-1 flex overflow-hidden">
-                {{-- Left: Thread History (58%) --}}
-                <div style="width:58%;min-width:0;" class="flex flex-col overflow-hidden border-r border-gray-200 bg-gray-50">
-                    <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
-                        <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
-                        <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
-                    </div>
-                    <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                        <template x-for="email in threadEmails" :key="'memo-'+email.id">
-                            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-                                <div @click="toggleEmail(email.id)" class="px-5 py-3.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0" x-text="(email.from_label||'?').charAt(0).toUpperCase()"></div>
-                                        <div><p class="text-xs font-semibold text-gray-900" x-text="email.from_label"></p><p class="text-[10px] text-gray-400" x-text="email.received_at"></p></div>
-                                    </div>
-                                    <svg class="w-3.5 h-3.5 text-gray-400 transition-transform shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                </div>
-                                <div x-show="expandedEmailIds.includes(email.id)" class="px-5 py-4 border-t border-gray-100 email-body-text" :class="email.is_agent ? 'bg-blue-50/30' : 'bg-white'">
-                                    <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[80px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 20) + 'px'"></iframe>
-                                    <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-
-                {{-- Right: Memo Area (42%) --}}
-                <div style="width:42%;min-width:0;" class="flex flex-col overflow-hidden bg-white">
-                    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
-                        <span class="text-xs font-semibold text-gray-500">スレッドメモ</span>
-                    </div>
-                    <div class="flex-1 flex flex-col p-5 overflow-hidden">
-                        {{-- Memo Input Form --}}
-                        <div class="shrink-0 mb-6">
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メモを登録</label>
-                            <textarea x-model="newMemoContent" rows="6" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none mb-2" placeholder="スレッドに関するメモ..."></textarea>
-                            <div class="text-right">
-                                <button @click="saveMemo()" class="bg-blue-600 text-white font-bold py-2 px-6 rounded-xl hover:bg-blue-700 transition-all text-xs shadow-sm">保存</button>
-                            </div>
-                        </div>
-
-                        {{-- Saved Memos List --}}
-                        <div class="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-4">
-                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">過去のメモ</label>
-                            <template x-for="memo in threadMemos" :key="memo.id">
-                                <div class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 shadow-sm">
-                                    <div class="flex justify-between items-center mb-2">
-                                        <span class="text-xs font-bold text-gray-700" x-text="memo.author"></span>
-                                        <span class="text-[10px] text-gray-500" x-text="memo.created_at"></span>
-                                    </div>
-                                    <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed" x-text="memo.content"></div>
-                                </div>
-                            </template>
-                            <template x-if="threadMemos.length === 0">
-                                <div class="text-center text-gray-400 text-xs py-4">メモはまだありません</div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </template>
-
-    {{-- 各種モーダル --}}
     <template x-if="customerGroupModalOpen"><div class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-md p-4" @click.self="customerGroupModalOpen = false"><div class="bg-white rounded-[3rem] shadow-2xl w-full max-w-md p-12 text-center animate-in zoom-in duration-300"><h3 class="text-2xl font-black mb-8 tracking-tighter uppercase text-gray-900">新しいフォルダ</h3><input type="text" x-model="newGroupName" placeholder="フォルダ名を入力..." class="w-full text-lg font-black border-gray-200 bg-gray-50 border-2 rounded-2xl px-8 py-6 outline-none mb-10 text-center focus:ring-4 focus:ring-blue-400 shadow-inner"><div class="flex gap-4"><button @click="customerGroupModalOpen = false" class="flex-1 py-5 text-sm font-black text-gray-400 hover:bg-gray-50 rounded-2xl transition-all">キャンセル</button><button @click="addCustomerGroup()" class="flex-[2] bg-blue-600 text-white py-5 rounded-2xl font-black text-base shadow-xl hover:bg-blue-700 transition-all">フォルダを作成</button></div></div></div></template>
     <template x-if="customerModalOpen"><div class="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 backdrop-blur-md p-4" @click.self="customerModalOpen = false"><div class="bg-white rounded-[3rem] shadow-2xl w-full max-w-md p-12 animate-in zoom-in duration-300 shadow-indigo-100"><h3 class="text-2xl font-black mb-8 text-center tracking-tighter uppercase text-gray-900">顧客を追加</h3><div class="space-y-5 mb-10"><input type="text" x-model="newCustomerName" placeholder="氏名 / 会社名" class="w-full text-base font-black border-gray-200 border-2 bg-gray-50 rounded-2xl px-8 py-5 focus:bg-white focus:ring-4 focus:ring-blue-400 outline-none shadow-inner"><input type="email" x-model="newCustomerEmail" placeholder="メールアドレス (任意)" class="w-full text-base font-black border-gray-200 border-2 bg-gray-50 rounded-2xl px-8 py-5 focus:bg-white focus:ring-4 focus:ring-blue-400 outline-none shadow-inner"></div><div class="flex gap-4"><button @click="customerModalOpen = false" class="flex-1 py-5 text-sm font-black text-gray-400 hover:bg-gray-50 rounded-2xl transition-all">キャンセル</button><button @click="addCustomer()" class="flex-[2] bg-blue-600 text-white py-5 rounded-2xl font-black text-base shadow-xl hover:bg-blue-700 transition-all shadow-blue-100">登録する</button></div></div></div></template>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -775,57 +568,19 @@ function emailApp() {
         sidebarWidth: parseInt(localStorage.getItem('sidebarWidth')) || 64,
         navPanelWidth: parseInt(localStorage.getItem('navPanelWidth')) || 280,
         threadWidth: parseInt(localStorage.getItem('threadWidth')) || 350,
+        overlayHistoryWidth: parseInt(localStorage.getItem('overlayHistoryWidth')) || 30, // %
+        overlayAiWidth: parseInt(localStorage.getItem('overlayAiWidth')) || 400, // px
+        resizingType: null,
 
         // Selection & Long Press
         selectionMode: false, selectedThreadIds: [], longPressTimer: null, isLongPressing: false,
 
-        // AI & Reply (高度な分析対応)
+        // AI & Reply
         replyOverlayOpen: false, replyAiPanelOpen: false, composeMode: false, aiDrawerOpen: false,
         replyBody: '', replyToEmailId: null, replyToAddress: '', replyCc: '', replyBcc: '',
         aiUserPrompt: '', aiAnalysis: null, aiLoading: false, sendingReply: false, selectedFiles: [],
         aiScrapeUrl: '', defaultAiPrompt: '', editingDefaultPrompt: '', defaultPromptModalOpen: false,
         quickCustomerFormOpen: false, quickCustomerName: '', quickCustomerEmailVal: '',
-
-        // Reply Overlay Resizing
-        overlayHistoryWidth: 40, // percentage
-        overlayAiWidth: 800, // pixels
-        isResizingOverlay: false,
-
-        startResizeOverlay(type, e) {
-            this.isResizingOverlay = true;
-            const startX = e.clientX;
-            const workspace = document.getElementById('reply-workspace');
-            if (!workspace) return;
-            const totalWidth = workspace.offsetWidth;
-
-            if (type === 'history') {
-                const startW = (this.overlayHistoryWidth / 100) * totalWidth;
-                const onMove = (em) => {
-                    const newW = startW + (em.clientX - startX);
-                    this.overlayHistoryWidth = Math.max(10, Math.min(60, (newW / totalWidth) * 100));
-                };
-                const onUp = () => {
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
-                    this.isResizingOverlay = false;
-                };
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
-            } else if (type === 'ai') {
-                const startW = this.overlayAiWidth;
-                const onMove = (em) => {
-                    const newW = startW + (startX - em.clientX);
-                    this.overlayAiWidth = Math.max(300, Math.min(1000, newW));
-                };
-                const onUp = () => {
-                    document.removeEventListener('mousemove', onMove);
-                    document.removeEventListener('mouseup', onUp);
-                    this.isResizingOverlay = false;
-                };
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
-            }
-        },
 
         // Core Data & Filter
         leftTab: 'inbox', searchQuery: '', customerSearchQuery: '', activeCustomerId: null, activeGroupId: null, activeTags: [], sortOrder: 'desc',
@@ -842,7 +597,7 @@ function emailApp() {
                     this.loadCustomerData(), this.loadTagMapData(), this.loadMasterTags(),
                     this.loadCustomerGroups(), this.loadDefaultPrompt()
                 ]);
-                const tid = new URLSearchParams(window.location.search).get('thread');
+                const tid = newSearchParams(window.location.search).get('thread');
                 if (tid) await this.loadThread(parseInt(tid));
                 this.$nextTick(() => this.initSorting());
             } catch (e) {}
@@ -868,7 +623,6 @@ function emailApp() {
             } catch(e) { alert('保存に失敗しました'); }
         },
 
-        // AI panel opener — can be called from email list (pass thread only) or thread card (pass email)
         async openAiPanel(thread, email = null) {
             this.sidebarVisible = false;
             if (thread && thread.id !== this.selectedThreadId) {
@@ -886,84 +640,14 @@ function emailApp() {
             this.aiAnalysis = null;
             this.aiScrapeUrl = '';
             this.aiDrawerOpen = true;
-        },
-
-        async loadMemos() {
-            if (!this.selectedThreadId) return;
-            try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/memos`);
-                if (res.ok) {
-                    const data = await res.json();
-                    this.threadMemos = data.memos;
-                }
-            } catch (e) { console.error('Failed to load memos', e); }
-        },
-
-        async saveMemo() {
-            if (!this.newMemoContent.trim() || !this.selectedThreadId) return;
-            try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/memos`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                    body: JSON.stringify({ content: this.newMemoContent })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    this.threadMemos.unshift(data.memo);
-                    this.newMemoContent = '';
-                } else {
-                    alert('メモの保存に失敗しました');
-                }
-            } catch (e) { alert('エラーが発生しました'); }
-        },
-
-        async loadComments() {
-            if (!this.selectedThreadId) return;
-            try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/comments`);
-                if (res.ok) {
-                    const data = await res.json();
-                    this.threadComments = data.comments;
-                }
-            } catch (e) { console.error('Failed to load comments', e); }
-        },
-
-        async postComment() {
-            if (!this.newCommentContent.trim() || !this.selectedThreadId) return;
-            try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/comments`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                    body: JSON.stringify({ content: this.newCommentContent })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    this.threadComments.push(data.comment);
-                    this.newCommentContent = '';
-                } else {
-                    alert('コメントの投稿に失敗しました');
-                }
-            } catch (e) { alert('エラーが発生しました'); }
-        },
-
-        async deleteComment(id) {
-            if(!confirm('コメントを削除しますか？')) return;
-            try {
-                const res = await fetch(`/thread-comments/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
-                });
-                if (res.ok) {
-                    this.threadComments = this.threadComments.filter(c => c.id !== id);
-                } else {
-                    alert('削除に失敗しました');
-                }
-            } catch (e) { alert('エラーが発生しました'); }
+            this.replyAiPanelOpen = true;
+            this.composeMode = true;
         },
 
         initSorting() {
             Object.values(this.sortableInstances).forEach(i => i.destroy());
             this.sortableInstances = {};
+            
             const emailList = document.getElementById('email-list-container');
             if (emailList) {
                 this.sortableInstances.emailList = new Sortable(emailList, {
@@ -971,6 +655,8 @@ function emailApp() {
                     sort: false, animation: 150, draggable: '.email-item'
                 });
             }
+
+            // Customer Ordering
             ['none', ...this.getAllGroupIds()].forEach(gid => {
                 const listEl = document.getElementById(`customer-list-${gid}`);
                 if (listEl) {
@@ -985,18 +671,22 @@ function emailApp() {
                     });
                 }
             });
+
+            // Email dropping onto customers
             document.querySelectorAll('.drop-target-customer').forEach(el => {
-                this.sortableInstances[`drop-cid-${el.dataset.cid}`] = new Sortable(el, {
+                const cid = el.dataset.cid;
+                this.sortableInstances[`drop-cid-${cid}`] = new Sortable(el, {
                     group: { name: 'assignTarget', put: ['emailAssignment'] },
                     onAdd: async (evt) => {
-                        const tid = evt.item.dataset.threadId; const cid = el.dataset.cid;
-                        await this.assignCustomer(cid, tid); evt.item.remove();
+                        const tid = evt.item.dataset.threadId;
+                        await this.assignCustomer(cid, tid);
+                        evt.item.remove();
                     }
                 });
             });
         },
 
-        // Thread Navigation (↑↓矢印)
+        // Thread Navigation
         get currentNavList() { return this.threads; },
         get currentNavIndex() { return this.currentNavList.findIndex(item => item.id === this.selectedThreadId); },
         get hasPrevThread() { return this.currentNavIndex > 0; },
@@ -1004,7 +694,7 @@ function emailApp() {
         async loadPrevThread() { if (this.hasPrevThread) await this.loadThread(this.currentNavList[this.currentNavIndex - 1].id); },
         async loadNextThread() { if (this.hasNextThread) await this.loadThread(this.currentNavList[this.currentNavIndex + 1].id); },
 
-        // Selection / Long Press (0.6s)
+        // Selection / Long Press
         startLongPress(thread, e) {
             this.isLongPressing = false; clearTimeout(this.longPressTimer);
             this.longPressTimer = setTimeout(() => { this.isLongPressing = true; this.selectionMode = true; this.toggleSelection(thread); }, 600);
@@ -1018,7 +708,7 @@ function emailApp() {
         cancelSelection() { this.selectionMode = false; this.selectedThreadIds = []; },
         async assignCustomerToSelected(cid) { if (!this.selectionMode) return; for (const tid of this.selectedThreadIds) await this.assignCustomer(cid, tid); this.cancelSelection(); },
 
-        // Bulk Actions & Thread Deletion
+        // Bulk Actions
         async bulkAssignCustomerSubmit(cid) {
             if (!this.selectionMode || this.selectedThreadIds.length === 0) return;
             try {
@@ -1032,49 +722,9 @@ function emailApp() {
                 this.cancelSelection();
             } catch (e) { alert(e.message); }
         },
-        async bulkQuickCreateAndAssign() {
-            if (!this.quickCustomerName.trim() || this.selectedThreadIds.length === 0) return;
-            try {
-                const res = await fetch('/customers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                    body: JSON.stringify({ name: this.quickCustomerName, email: this.quickCustomerEmailVal })
-                });
-                const customer = await res.json();
-                await this.bulkAssignCustomerSubmit(customer.id);
-                await Promise.all([this.loadCustomerData(), this.loadCustomerGroups()]);
-                this.quickCustomerName = ''; this.quickCustomerEmailVal = ''; this.quickCustomerFormOpen = false;
-            } catch (e) { alert('顧客作成と紐付けに失敗しました'); }
-        },
         async bulkMoveToHold() { for (const id of this.selectedThreadIds) await this.updateThreadStatus({id}, 'hold'); this.cancelSelection(); },
         async bulkMoveToComplete() { for (const id of this.selectedThreadIds) await this.updateThreadStatus({id}, 'completed'); this.cancelSelection(); },
         async bulkDelete() { if(confirm('本当に削除しますか？')) { for (const id of this.selectedThreadIds) await fetch(`/threads/${id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } }); await this.loadThreads(); this.cancelSelection(); } },
-        async bulkMerge() { 
-            if(this.selectedThreadIds.length !== 2) { alert('マージするにはスレッドを2つ選択してください'); return; }
-            if(confirm('選択した2つのスレッドをマージしますか？')) { 
-                const targetId = this.selectedThreadIds[0]; const sourceId = this.selectedThreadIds[1];
-                try {
-                    const res = await fetch(`/threads/${targetId}/merge`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ merge_thread_id: sourceId }) });
-                    if (!res.ok) throw new Error('マージに失敗しました');
-                    await this.loadThreads(); this.cancelSelection(); alert('マージ完了');
-                } catch(e) { alert(e.message); }
-            } 
-        },
-        async deleteThread(t) {
-            if(!confirm('本当にこのスレッドを削除しますか？')) return;
-            try {
-                await fetch(`/threads/${t.id}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } });
-                await this.loadThreads(); this.selectedThread = null; this.fullThreadMode = false;
-            } catch(e) { alert('削除に失敗しました'); }
-        },
-        async unmerge(mergeId) {
-            if(!confirm('マージを解除して元のスレッドに戻しますか？')) return;
-            try {
-                const res = await fetch(`/thread-merges/${mergeId}`, { method: 'DELETE', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content } });
-                if (!res.ok) throw new Error('解除失敗');
-                await this.loadThreads(); if (this.selectedThreadId) await this.loadThread(this.selectedThreadId); alert('マージを解除しました');
-            } catch(e) { alert(e.message); }
-        },
 
         // Resize Logic
         startResizeSidebar(e) {
@@ -1089,6 +739,33 @@ function emailApp() {
             const onUp = () => { document.removeEventListener('mousemove', onMove); localStorage.setItem('navPanelWidth', this.navPanelWidth); };
             document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
         },
+        startResizeOverlay(type, e) {
+            this.resizingType = type;
+            const startX = e.clientX;
+            const containerWidth = this.$refs.workspaceContainer.offsetWidth;
+            const startHistoryPercent = this.overlayHistoryWidth;
+            const startAiWidth = this.overlayAiWidth;
+            const onMove = (me) => {
+                if (this.resizingType === 'history') {
+                    const deltaX = me.clientX - startX;
+                    const deltaPercent = (deltaX / containerWidth) * 100;
+                    this.overlayHistoryWidth = Math.max(15, Math.min(50, startHistoryPercent + deltaPercent));
+                } else if (this.resizingType === 'ai') {
+                    const deltaX = startX - me.clientX;
+                    this.overlayAiWidth = Math.max(200, Math.min(800, startAiWidth + deltaX));
+                }
+            };
+            const onUp = () => {
+                this.resizingType = null;
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                localStorage.setItem('overlayHistoryWidth', this.overlayHistoryWidth);
+                localStorage.setItem('overlayAiWidth', this.overlayAiWidth);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+
         // API Loading
         async loadThreads() {
             this.threadsLoading = true;
@@ -1097,170 +774,88 @@ function emailApp() {
             if (this.activeCustomerId) params.set('customer_id', this.activeCustomerId);
             if (this.activeGroupId) params.set('group_id', this.activeGroupId);
             this.activeTags.forEach(t => params.append('tags[]', t));
-            const statusMap = { inbox: 'inbox', hold: 'hold', completed: 'completed', ignored: 'ignored', pending: 'pending' };
+            const statusMap = { inbox: 'inbox', hold: 'hold', completed: 'completed', pending: 'pending' };
             if (statusMap[this.leftTab]) params.set('status', statusMap[this.leftTab]);
-            try { const res = await fetch('/emails/search?' + params.toString()); this.threads = await res.json(); } catch(e) { this.threads = []; }
+            try { 
+                const res = await fetch('/emails/search?' + params.toString()); 
+                this.threads = await res.json(); 
+            } catch(e) { this.threads = []; }
             this.threadsLoading = false;
         },
 
-    async loadThread(id) {
-            this.selectedThreadId = id; this.detailTab = 'thread'; this.loadingThread = true; this.composeMode = false; this.replyOverlayOpen = false; this.isListMaximizing = false; this.aiDrawerOpen = false;
+        async loadThread(id) {
+            this.selectedThreadId = id; this.detailTab = 'thread'; this.loadingThread = true; this.composeMode = false; this.replyAiPanelOpen = false;
             try {
                 const res = await fetch(`/threads/${id}`); const data = await res.json();
                 this.selectedThread = data.thread;
                 this.threadEmails = data.emails.sort((a,b) => b.id - a.id);
                 this.expandedEmailIds = [this.threadEmails[0]?.id].filter(Boolean);
-                this.threadMerges = data.merges || [];
-                const allFiles = [];
-                data.emails.forEach(e => { (e.attachments||[]).forEach(a => { allFiles.push({...a, received_at: e.received_at}); }); });
-                this.allAttachments = allFiles.sort((a,b) => b.id - a.id);
-                if (data.thread.customer) await this.loadWikis(data.thread.customer.name);
-                
-                await Promise.all([this.loadMemos(), this.loadComments()]);
             } catch(e) {}
             this.loadingThread = false;
         },
 
-        // Reply / AI Logic
+        // AI & Reply logic
         openReplyOverlay(email) {
             if (email) {
                 this.replyToEmailId = email.id;
                 this.replyToAddress = email.from_address;
             }
-            this.replyCc = ''; this.replyBcc = ''; this.replyBody = '';
+            this.replyBody = ''; this.replyCc = ''; this.replyBcc = '';
             this.aiAnalysis = null; this.selectedFiles = [];
-            this.aiUserPrompt = '';
-            this.aiScrapeUrl = '';
+            this.aiUserPrompt = this.defaultAiPrompt;
             this.replyAiPanelOpen = false;
-            this.replyOverlayOpen = true;
-            this.composeMode = true; // 返信モードをオンにする
-            this.$nextTick(() => {
-                const el = document.querySelector('textarea[x-model="replyBody"]');
-                if (el) el.focus();
-            });
+            this.composeMode = true;
+            this.$nextTick(() => { document.querySelector('textarea[x-model="replyBody"]')?.focus(); });
         },
-        closeReplyOverlay() {
-            this.replyOverlayOpen = false;
-            this.replyAiPanelOpen = false;
-            this.composeMode = false; // 返信モードをオフにする
-            this.selectedFiles = [];
-        },
-        async quickCreateAndAssign() {
-            if (!this.quickCustomerName.trim()) return;
-            try {
-                const res = await fetch('/customers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                    body: JSON.stringify({ name: this.quickCustomerName, email: this.quickCustomerEmailVal })
-                });
-                const customer = await res.json();
-                await this.assignCustomer(customer.id);
-                await Promise.all([this.loadCustomerData(), this.loadCustomerGroups()]);
-                this.quickCustomerFormOpen = false;
-                this.quickCustomerName = '';
-                this.quickCustomerEmailVal = '';
-                this.assignDropdownOpen = false;
-            } catch(e) { alert('顧客の作成に失敗しました'); }
-        },
+        closeReplyOverlay() { this.composeMode = false; this.replyAiPanelOpen = false; },
         async askAiForReply() {
-            if (!this.replyToEmailId && !this.composeMode) return;
-            this.aiLoading = true;
-            this.aiAnalysis = null;
+            if (!this.replyToEmailId) return;
+            this.aiLoading = true; this.aiAnalysis = null;
             try {
-                // 画面上の現在の宛先入力を収集
-                const payload = { 
-                    prompt: this.aiUserPrompt,
-                    current_to: this.replyToAddress.split(/[,;]/).map(s => s.trim()).filter(Boolean),
-                    current_cc: this.replyCc ? this.replyCc.split(/[,;]/).map(s => s.trim()).filter(Boolean) : [],
-                    current_bcc: this.replyBcc ? this.replyBcc.split(/[,;]/).map(s => s.trim()).filter(Boolean) : []
-                };
-                if (this.aiScrapeUrl) payload.url = this.aiScrapeUrl;
-
-                const res = await fetch(`/emails/${this.replyToEmailId || 0}/ai`, {
+                const res = await fetch(`/emails/${this.replyToEmailId}/ai`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ prompt: this.aiUserPrompt })
                 });
-                
                 const data = await res.json();
-                if (res.ok) {
-                    this.aiAnalysis = data;
-                    
-                    // CC/BCCの自動補完 (既存の入力値を保持しつつ不足分をマージ)
-                    if (data.auto_fill) {
-                        if (data.auto_fill.cc && data.auto_fill.cc.length > 0) {
-                            const currentCcs = this.replyCc ? this.replyCc.split(/[,;]/).map(s => s.trim()) : [];
-                            const combinedCcs = [...new Set([...currentCcs, ...data.auto_fill.cc])];
-                            this.replyCc = combinedCcs.join(', ');
-                        }
-                        if (data.auto_fill.bcc && data.auto_fill.bcc.length > 0) {
-                            const currentBccs = this.replyBcc ? this.replyBcc.split(/[,;]/).map(s => s.trim()) : [];
-                            const combinedBccs = [...new Set([...currentBccs, ...data.auto_fill.bcc])];
-                            this.replyBcc = combinedBccs.join(', ');
-                        }
-                    }
-                } else {
-                    alert(data.error || 'AI解析に失敗しました。');
-                }
-            } catch(e) { 
-                console.error(e);
-                alert('AI案の生成に失敗しました。'); 
-            }
+                if (res.ok) this.aiAnalysis = data; else alert(data.error || 'AI解析に失敗');
+            } catch(e) { alert('AI生成に失敗'); }
             this.aiLoading = false;
         },
         applyAiDraft() {
-            if (!this.aiAnalysis || !this.aiAnalysis.columns.center) return;
-            // 生成された本文を下書き欄にセット
-            this.replyBody = this.aiAnalysis.columns.center.body;
-            this.replyAiPanelOpen = false;
+            if (this.aiAnalysis?.columns?.center?.body) {
+                this.replyBody = this.aiAnalysis.columns.center.body;
+                this.replyAiPanelOpen = false;
+            }
         },
-        handleFileSelect(e) { this.selectedFiles = Array.from(e.target.files); },
-        removeSelectedFile(i) { this.selectedFiles.splice(i, 1); },
         async submitReply() {
             if (!this.replyBody) return;
             this.sendingReply = true;
-            const fd = new FormData();
-            fd.append('body', this.replyBody); fd.append('to', this.replyToAddress); fd.append('cc', this.replyCc); fd.append('bcc', this.replyBcc);
+            const fd = new FormData(); fd.append('body', this.replyBody); fd.append('to', this.replyToAddress);
+            fd.append('cc', this.replyCc); fd.append('bcc', this.replyBcc);
             this.selectedFiles.forEach(f => fd.append('attachments[]', f));
             try {
-                const url = this.composeMode ? '/emails/send' : `/emails/${this.replyToEmailId}/reply`;
-                await fetch(url, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: fd });
-                this.closeReplyOverlay(); this.aiDrawerOpen = false;
-                alert('返信を承認待ちに保存しました。'); await this.loadPending();
-            } catch(e) { alert('処理に失敗しました。'); }
+                await fetch(`/emails/${this.replyToEmailId}/reply`, { method: 'POST', headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: fd });
+                this.closeReplyOverlay(); alert('返信を承認待ちに保存しました'); await this.loadPending();
+            } catch(e) { alert('送信失敗'); }
             this.sendingReply = false;
         },
 
-        // Other Actions
+        // Helpers
         async setLeftTab(tab) { this.leftTab = tab; await this.loadThreads(); },
-        openCompose() { this.composeMode = true; this.selectedThreadId = null; this.selectedThread = { subject: '(新規メッセージ)', tags: [], customer: null }; this.threadEmails = []; this.threadMerges = []; this.replyBody = ''; this.replyOverlayOpen = true; this.replyAiPanelOpen = false; this.aiUserPrompt = this.defaultAiPrompt; this.editingDefaultPrompt = this.defaultAiPrompt; this.aiAnalysis = null; this.aiScrapeUrl = ''; this.detailTab = 'thread'; this.isListMaximizing = false; },
+        openCompose() { this.composeMode = true; this.selectedThreadId = null; this.selectedThread = null; this.replyBody = ''; },
         async updateThreadStatus(t, k) {
             await fetch(`/threads/${t.id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ status: k }) });
-            await this.loadThreads(); this.selectedThread = null; this.fullThreadMode = false;
+            await this.loadThreads(); this.selectedThread = null;
         },
         async moveToHold(t) { await this.updateThreadStatus(t, 'hold'); },
-        async markThreadIgnored(t) { await this.updateThreadStatus(t, 'ignored'); },
         async markThreadComplete(t) { await this.updateThreadStatus(t, 'completed'); },
-
-        async addTagToSelected() {
-            if (!this.newTagName.trim() || !this.selectedThreadId) return;
-            const tags = [...(this.selectedThread.tags || []), ...this.newTagName.split(/[,、]/).map(s=>s.trim()).filter(s=>s!='')];
-            await fetch(`/threads/${this.selectedThreadId}/tags`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ tags: [...new Set(tags)] }) });
-            this.newTagName = ''; this.tagEditorOpen = false; await this.loadThread(this.selectedThreadId); await this.loadThreads(); await this.loadTagMapData();
-        },
-        async removeTagFromThread(t, tag) {
-            const tags = (t.tags || []).filter(v => v !== tag);
-            await fetch(`/threads/${t.id}/tags`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ tags }) });
-            await this.loadThread(t.id); await this.loadThreads();
-        },
         async assignCustomer(cid, tid = null) { 
             const threadId = tid || this.selectedThreadId; if (!threadId) return;
             await fetch(`/threads/${threadId}/assign-customer`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ customer_id: cid }) }); 
             if (this.selectedThreadId === threadId) await this.loadThread(threadId);
-            await Promise.all([this.loadThreads(), this.loadCustomerData(), this.loadCustomerGroups()]); 
+            await this.loadThreads();
         },
-
-        // API Helpers
         async loadMasterTags() { try { const res = await fetch('/master/tags'); this.masterTags = await res.json(); } catch(e) {} },
         async loadCustomerData() { try { const res = await fetch('/customers/data'); this.customerData = await res.json(); } catch(e) {} },
         async loadTagMapData() { try { const res = await fetch('/tags/data'); this.tagMap = await res.json(); } catch(e) {} },
@@ -1271,8 +866,6 @@ function emailApp() {
         getAllGroupIds() { let ids = []; const walk = (groups) => { groups.forEach(g => { ids.push(g.id); if (g.children) walk(g.children); }); }; if(this.customerGroups) walk(this.customerGroups); return ids; },
         toggleGroup(id) { const idx = this.openGroupIds.indexOf(id); if (idx === -1) this.openGroupIds.push(id); else this.openGroupIds.splice(idx, 1); },
         isGroupOpen(id) { return this.openGroupIds.includes(id); },
-
-        // Utils
         get filteredUnassignedCustomers() { const q = (this.customerSearchQuery||'').toLowerCase(); return (this.customerData || []).filter(c => !this.isCustomerInAnyGroup(c.id) && c.name.toLowerCase().includes(q)); },
         isCustomerInAnyGroup(cid) { const walk = (groups) => { for (let g of groups) { if ((g.customers||[]).some(c => c.id === cid)) return true; if (g.children && walk(g.children)) return true; } return false; }; if(!this.customerGroups) return false; return walk(this.customerGroups); },
         get filteredMasterTags() { return (this.masterTags || []).filter(mt => !this.reservedWords.includes(mt.name)); },
@@ -1282,332 +875,22 @@ function emailApp() {
         toggleCustomerFilter(id, name) { this.activeCustomerId = (this.activeCustomerId === id ? null : id); this.loadThreads(); },
         toggleTagFilter(tag) { const idx = this.activeTags.indexOf(tag); if (idx === -1) this.activeTags.push(tag); else this.activeTags.splice(idx, 1); this.loadThreads(); },
         toggleEmail(id) { const idx = this.expandedEmailIds.indexOf(id); if (idx === -1) this.expandedEmailIds.push(id); else this.expandedEmailIds.splice(idx, 1); },
-        renderMarkdown(t) { return typeof marked !== 'undefined' ? marked.parse(t || '') : t; },
-        async loadWikis(name) { try { const res = await fetch(`/tag-notes/${encodeURIComponent(name)}`); const d = await res.json(); this.wikis = (d.content || []).map(w => ({ ...w, mode: 'preview' })); } catch(e) { this.wikis = []; } },
-        async saveWikis() { const name = this.selectedThread?.customer?.name; if (!name) return; this.noteSaving = true; await fetch(`/tag-notes/${encodeURIComponent(name)}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ content: this.wikis.map(w => ({ title: w.title, body: w.body })) }) }); this.noteSaving = false; },
-        addWiki() { this.wikis.push({ title: '新規項目', body: '', mode: 'edit' }); },
-        removeWiki(i) { if (confirm('削除しますか？')) this.wikis.splice(i, 1); },
-        selectCategory(name) { this.loadWikis(name); },
         openCreateGroup(p) { this.newGroupName = ''; this.customerGroupModalOpen = true; },
         async addCustomerGroup() { await fetch('/customer-groups', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ name: this.newGroupName }) }); this.customerGroupModalOpen = false; await this.loadCustomerGroups(); },
-        async renameCustomerGroup(g) { const n = prompt('名前変更:', g.name); if(n) { await fetch(`/customer-groups/${g.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ name: n }) }); await this.loadCustomerGroups(); } },
-        async renameCustomer(c) { const n = prompt('名前変更:', c.name); if(n) { await fetch(`/customers/${c.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ name: n, email: c.email }) }); await Promise.all([this.loadCustomerGroups(), this.loadCustomerData(), this.loadThreads()]); } },
-        async moveCustomerToGroup(cid, gid) { await fetch(`/customers/${cid}/move`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ group_id: gid === 'none' ? null : gid }) }); await this.loadCustomerGroups(); await this.loadCustomerData(); },
         async addCustomer() { await fetch('/customers', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ name: this.newCustomerName, email: this.newCustomerEmail }) }); this.customerModalOpen = false; await this.loadCustomerData(); },
-        async openMasterTagAdd() { const input = prompt('新しいタグ名:'); if (!input) return; for (const name of input.split(/[,、]/).map(s=>s.trim()).filter(s=>s!='')) { try { await fetch('/master/tags', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ name }) }); } catch(e){} } await Promise.all([this.loadMasterTags(), this.loadTagMapData()]); },
-        async saveTagOrder(ids) { await fetch('/master/tags/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ ids }) }); },
-        async saveGroupOrder(ids, p) { await fetch('/customer-groups/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ ids, parent_id: p }) }); },
-        async saveCustomerOrder(gid, ids) { if(ids.length===0)return; await fetch('/customers/reorder', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ ids }) }); }
+        handleFileSelect(e) { this.selectedFiles = Array.from(e.target.files); },
+        removeSelectedFile(i) { this.selectedFiles.splice(i, 1); }
     };
 }
-function newSearchParams(obj) { return new URLSearchParams(obj); }
-
-// jQuery Sidebar Logic
-$(function() {
-    let currentThreadId = null;
-    let currentCustomerName = null;
-    let wikis = [];
-
-    // Sidebar Toggle
-    function toggleSidebar(open) {
-        if (open) {
-            $('#right-sidebar').addClass('open').css('width', '380px');
-            $('#sidebar-toggle-collapsed').addClass('d-none');
-        } else {
-            $('#right-sidebar').removeClass('open').css('width', '0');
-            $('#sidebar-toggle-collapsed').removeClass('d-none');
-        }
-    }
-
-    $(document).on('click', '#sidebar-toggle-collapsed, .close-sidebar', function() {
-        toggleSidebar(!$('#right-sidebar').hasClass('open'));
-    });
-
-    // Sidebar Tabs
-    $(document).on('click', '[data-sidebar-tab]', function() {
-        const tab = $(this).data('sidebar-tab');
-        $('[data-sidebar-tab]').removeClass('active');
-        $(this).addClass('active');
-        $('.sidebar-tab-content').removeClass('active');
-        $('#sidebar-tab-' + tab).addClass('active');
-    });
-
-    // Hook into thread selection (we can observe selectedThreadId or just wait for calls)
-    // For this implementation, we'll use a polling check or just listen for clicks on thread list
-    $(document).on('click', '.thread-list-row', function() {
-        const threadId = $(this).data('thread-id');
-        if (threadId && threadId !== currentThreadId) {
-            currentThreadId = threadId;
-            loadSidebarData(threadId);
-            toggleSidebar(true); // Open sidebar on thread selection
-        }
-    });
-
-    function loadSidebarData(threadId) {
-        // Fetch Thread Data (to get customer name for Wiki)
-        $.get(`/threads/${threadId}`, function(data) {
-            currentCustomerName = data.thread.customer ? data.thread.customer.name : null;
-            renderWiki();
-            renderFiles(data.emails);
-        });
-
-        // Fetch Memos
-        loadMemos(threadId);
-
-        // Fetch Comments
-        loadComments(threadId);
-    }
-
-    function loadMemos(threadId) {
-        $.get(`/threads/${threadId}/memos`, function(data) {
-            let html = '';
-            data.memos.forEach(m => {
-                html += `
-                    <div class="memo-item bg-warning-light p-2 mb-2 rounded shadow-sm border" style="background-color: #fff9db;">
-                        <div class="d-flex justify-content-between x-small font-weight-bold text-muted mb-1">
-                            <span>${m.author}</span>
-                            <span>${m.created_at}</span>
-                        </div>
-                        <div class="small text-dark text-break">${m.content}</div>
-                    </div>
-                `;
-            });
-            $('#sidebar-memo-list').html(html || '<div class="text-center text-muted py-3 small">メモはありません</div>');
-        });
-    }
-
-    function loadComments(threadId) {
-        $.get(`/threads/${threadId}/comments`, function(data) {
-            let html = '';
-            data.comments.forEach(c => {
-                html += `
-                    <div class="comment-item bg-light p-2 mb-2 rounded shadow-sm border">
-                        <div class="d-flex justify-content-between x-small font-weight-bold text-muted mb-1">
-                            <span>${c.author}</span>
-                            <span>${c.created_at}</span>
-                        </div>
-                        <div class="small text-dark text-break">${c.content}</div>
-                    </div>
-                `;
-            });
-            $('#sidebar-comment-list').html(html || '<div class="text-center text-muted py-3 small">コメントはありません</div>');
-        });
-    }
-
-    // Memo Store
-    $('#add-memo-toggle').on('click', function() {
-        $('#memo-form-container').toggleClass('d-none');
-    });
-
-    $('#save-memo-btn').on('click', function() {
-        const content = $('#new-memo-content').val().trim();
-        if (!content || !currentThreadId) return;
-
-        $.post(`/threads/${currentThreadId}/memos`, {
-            _token: $('meta[name="csrf-token"]').attr('content'),
-            content: content
-        }, function(data) {
-            $('#new-memo-content').val('');
-            $('#memo-form-container').addClass('d-none');
-            loadMemos(currentThreadId);
-        });
-    });
-
-    // Comment Store
-    $('#add-comment-toggle').on('click', function() {
-        $('#comment-form-container').toggleClass('d-none');
-    });
-
-    $('#post-comment-btn').on('click', function() {
-        const content = $('#new-comment-content').val().trim();
-        if (!content || !currentThreadId) return;
-
-        $.post(`/threads/${currentThreadId}/comments`, {
-            _token: $('meta[name="csrf-token"]').attr('content'),
-            content: content
-        }, function(data) {
-            $('#new-comment-content').val('');
-            $('#comment-form-container').addClass('d-none');
-            loadComments(currentThreadId);
-        });
-    });
-
-    // Wiki Rendering & Store
-    function renderWiki() {
-        if (!currentCustomerName) {
-            $('#wiki-customer-name').text('顧客未設定');
-            $('#wiki-content-container').html('<div class="text-center text-muted py-4 small">顧客が設定されていません</div>');
-            $('#save-wiki-btn').addClass('d-none');
-            return;
-        }
-
-        $('#wiki-customer-name').text(currentCustomerName);
-        $.get(`/tag-notes/${encodeURIComponent(currentCustomerName)}`, function(data) {
-            wikis = data.content || [];
-            let html = '';
-            wikis.forEach((w, i) => {
-                html += `
-                    <div class="wiki-item border rounded p-2 mb-2 bg-white shadow-sm">
-                        <div class="form-group mb-1">
-                            <input type="text" class="form-control form-control-sm font-weight-bold wiki-title-input" data-index="${i}" value="${w.title}">
-                        </div>
-                        <textarea class="form-control form-control-sm wiki-body-input" data-index="${i}" rows="3">${w.body}</textarea>
-                        <div class="text-right mt-1">
-                            <button class="btn btn-xs btn-link text-danger remove-wiki-item" data-index="${i}">削除</button>
-                        </div>
-                    </div>
-                `;
-            });
-            $('#wiki-content-container').html(html || '<div class="text-center text-muted py-3 small">Wiki項目がありません</div>');
-            $('#save-wiki-btn').removeClass('d-none');
-        });
-    }
-
-    $('#add-wiki-item-btn').on('click', function() {
-        if (!currentCustomerName) return;
-        wikis.push({ title: '新規項目', body: '' });
-        refreshWikiUI();
-    });
-
-    function refreshWikiUI() {
-        let html = '';
-        wikis.forEach((w, i) => {
-            html += `
-                <div class="wiki-item border rounded p-2 mb-2 bg-white shadow-sm">
-                    <div class="form-group mb-1">
-                        <input type="text" class="form-control form-control-sm font-weight-bold wiki-title-input" data-index="${i}" value="${w.title}">
-                    </div>
-                    <textarea class="form-control form-control-sm wiki-body-input" data-index="${i}" rows="3">${w.body}</textarea>
-                    <div class="text-right mt-1">
-                        <button class="btn btn-xs btn-link text-danger remove-wiki-item" data-index="${i}">削除</button>
-                    </div>
-                </div>
-            `;
-        });
-        $('#wiki-content-container').html(html);
-        $('#save-wiki-btn').removeClass('d-none');
-    }
-
-    $(document).on('change', '.wiki-title-input', function() { wikis[$(this).data('index')].title = $(this).val(); });
-    $(document).on('change', '.wiki-body-input', function() { wikis[$(this).data('index')].body = $(this).val(); });
-    $(document).on('click', '.remove-wiki-item', function() {
-        wikis.splice($(this).data('index'), 1);
-        refreshWikiUI();
-    });
-
-    $('#save-wiki-btn').on('click', function() {
-        if (!currentCustomerName) return;
-        $.ajax({
-            url: `/tag-notes/${encodeURIComponent(currentCustomerName)}`,
-            method: 'PUT',
-            data: JSON.stringify({ content: wikis }),
-            contentType: 'application/json',
-            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
-            success: function() {
-                alert('Wikiを保存しました');
-            }
-        });
-    });
-
-    // Files Rendering
-    function renderFiles(emails) {
-        const allFiles = [];
-        emails.forEach(e => {
-            (e.attachments || []).forEach(a => {
-                allFiles.push({ ...a, received_at: e.received_at });
-            });
-        });
-
-        let html = '';
-        allFiles.sort((a,b) => b.id - a.id).forEach(f => {
-            html += `
-                <a href="${f.url}" target="_blank" class="list-group-item list-group-item-action p-2">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="text-truncate mr-2 small font-weight-bold">
-                            <i class="fas fa-file-alt mr-1 text-muted"></i> ${f.filename}
-                        </div>
-                        <span class="x-small text-muted">${f.received_at}</span>
-                    </div>
-                </a>
-            `;
-        });
-        $('#sidebar-file-list').html(html || '<div class="text-center text-muted py-4 small">添付ファイルはありません</div>');
-    }
-});
 </script>
 
 <style>
-/* Scrollbar */
 .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-.no-scrollbar::-webkit-scrollbar { display: none; }
 [x-cloak] { display: none !important; }
-
-/* Thread list subject: wrap to 2 lines max with ellipsis */
-.subject-clamp {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    white-space: normal;
-    word-break: break-word;
-}
-
-/* Clean readable font for thread/email body text */
-.email-body-text, #email-list-container {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #374151;
-}
-
-/* Fixed email list column */
-.mail-list-fixed { min-width: 340px; max-width: 340px; width: 340px; flex-shrink: 0; }
-
-/* Drag handles */
-.drag-handle, .c-drag-handle, .group-drag-handle { cursor: grab; }
-.drag-handle:active { cursor: grabbing; }
+.subject-clamp { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.email-body-text { font-size: 14px; line-height: 1.6; color: #374151; }
 .sortable-ghost { opacity: 0.4; background: #EEF2FF !important; border: 1px dashed #3B82F6; }
-
-/* Resizable 3-pane layout for Reply Overlay */
-.reply-workspace {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    position: relative;
-    background: #fff;
-}
-.resizable-panel {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    height: 100%;
-    position: relative;
-    box-sizing: border-box;
-}
-.scrollable-area {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-}
-.resize-handle-h {
-    width: 6px;
-    margin: 0 -3px;
-    cursor: col-resize;
-    z-index: 30;
-    background: transparent;
-    transition: background-color 0.2s;
-    flex-shrink: 0;
-}
-.resize-handle-h:hover, .resize-handle-h.is-resizing {
-    background-color: #3b82f6;
-}
-.ai-drawer-internal {
-    width: 800px;
-    height: 100%;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-}
+.c-drag-handle { cursor: grab; }
 </style>
 @endsection

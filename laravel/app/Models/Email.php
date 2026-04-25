@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Email extends Model
 {
@@ -18,9 +19,16 @@ class Email extends Model
         'is_read' => 'boolean',
     ];
 
+    protected $appends = ['from_label', 'plain_body'];
+
     public function thread(): BelongsTo
     {
         return $this->belongsTo(EmailThread::class, 'thread_id');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(EmailAttachment::class);
     }
 
     public function getFromLabelAttribute(): string

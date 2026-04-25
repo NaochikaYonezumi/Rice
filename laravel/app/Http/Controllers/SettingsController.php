@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AiSetting;
 use App\Models\MailSetting;
 use App\Services\RagApiService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class SettingsController extends Controller
@@ -56,13 +57,27 @@ class SettingsController extends Controller
         return view('settings.ai', compact('settings', 'models'));
     }
 
+    public function getDefaultPrompt(): JsonResponse
+    {
+        $settings = AiSetting::getSettings();
+        return response()->json(['prompt' => $settings->default_reply_prompt ?? '']);
+    }
+
+    public function saveDefaultPrompt(Request $request): JsonResponse
+    {
+        $settings = AiSetting::getSettings();
+        $settings->update(['default_reply_prompt' => $request->input('prompt', '')]);
+        return response()->json(['status' => 'ok']);
+    }
+
     public function updateAi(Request $request)
     {
         $validated = $request->validate([
-            'anthropic_api_key' => 'nullable|string|max:2048',
-            'gemini_api_key'    => 'nullable|string|max:2048',
-            'default_provider'  => 'required|in:ollama,claude,gemini',
-            'default_model'     => 'nullable|string|max:128',
+            'anthropic_api_key'    => 'nullable|string|max:2048',
+            'gemini_api_key'       => 'nullable|string|max:2048',
+            'default_provider'     => 'required|in:ollama,claude,gemini',
+            'default_model'        => 'nullable|string|max:128',
+            'default_reply_prompt' => 'nullable|string|max:5000',
         ]);
 
         $settings = AiSetting::getSettings();

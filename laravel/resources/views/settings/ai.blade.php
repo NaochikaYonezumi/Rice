@@ -226,6 +226,24 @@
                 </div>
             </div>
 
+            {{-- デフォルト返信プロンプト --}}
+            <div class="bg-white rounded-xl border border-gray-100 p-6 mb-6">
+                <h2 class="font-medium text-gray-700 mb-1 flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-indigo-400 inline-block"></span>
+                    AIデフォルト返信プロンプト
+                </h2>
+                <p class="text-xs text-gray-400 mb-4">AIアシスタントがメール返信案を生成する際のデフォルト指示文です。AIパネルで上書き可能です。</p>
+                <textarea
+                    name="default_reply_prompt"
+                    rows="5"
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-y"
+                    placeholder="例: このスレッドの内容を把握した上で、丁寧で的確な返信を日本語で作成してください。"
+                >{{ old('default_reply_prompt', $settings->default_reply_prompt) }}</textarea>
+                @error('default_reply_prompt')
+                    <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
             <button type="submit"
                     class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-6 py-2 rounded-lg">
                 保存

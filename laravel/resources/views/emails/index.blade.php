@@ -5,105 +5,156 @@
 <div class="flex h-full bg-gray-50 overflow-hidden text-gray-900 font-sans" x-data="emailApp()" x-init="init()" x-cloak>
 
     {{-- 1カラム目: ミニサイドバー (リサイズ可能) --}}
-    <div x-show="!fullThreadMode && !isListMaximizing" :style="'width:' + sidebarWidth + 'px'" class="shrink-0 border-r border-gray-200 bg-white flex flex-col items-center py-6 gap-6 z-50 shadow-sm relative transition-all duration-150">
-        <button @click="navPanelOpen = !navPanelOpen; tagPanelOpen = false" :class="navPanelOpen ? 'bg-blue-100 text-blue-600 shadow-inner' : 'text-gray-400'" class="p-2.5 rounded-2xl transition-all hover:bg-blue-50 group flex items-center gap-3 overflow-hidden">
-            <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
-            <span x-show="sidebarWidth > 100" class="text-[11px] font-black truncate uppercase tracking-widest">顧客フォルダ</span>
-        </button>
-        <button @click="tagPanelOpen = !tagPanelOpen; navPanelOpen = false" :class="tagPanelOpen ? 'bg-indigo-100 text-indigo-600 shadow-inner' : 'text-gray-400'" class="p-2.5 rounded-2xl transition-all hover:bg-indigo-50 group flex items-center gap-3 overflow-hidden">
-            <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" stroke-width="2"/></svg>
-            <span x-show="sidebarWidth > 100" class="text-[11px] font-black truncate uppercase tracking-widest">タグマスター</span>
-        </button>
-        <div class="mt-auto flex flex-col items-center gap-4">
-            <button @click="fetchEmails()" class="p-2 text-gray-300 hover:text-blue-500" :class="fetching ? 'animate-spin' : ''"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.001 0 01-15.357-2m15.357 2H15" stroke-width="2"/></svg></button>
-            <button @click="navPanelOpen = false; tagPanelOpen = false" class="text-gray-300 hover:text-gray-600 p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7" stroke-width="2"/></svg></button>
-        </div>
-        <div class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400 z-50 transition-colors" @mousedown.prevent="startResizeSidebar($event)"></div>
-    </div>
-
-    {{-- 2カラム目: ナビゲーション (一括紐付け対応) --}}
-    <div x-show="!fullThreadMode && !isListMaximizing && (navPanelOpen || tagPanelOpen)" :style="'width:' + navPanelWidth + 'px'" class="shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm z-30 relative transition-all duration-75">
-        <div x-show="navPanelOpen" class="flex flex-col h-full">
-            <div class="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
-                <h2 class="text-[11px] font-black uppercase tracking-widest">顧客フォルダ</h2>
-                <div class="flex items-center gap-1">
-                    <button @click="openCreateGroup(null)" class="text-blue-600 p-1.5 hover:bg-blue-50 rounded-full transition-all" title="ルートフォルダ作成"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke-width="2.5"/></svg></button>
-                    <button @click="customerModalOpen = true" class="text-blue-500 p-1.5 hover:bg-blue-50 rounded-full transition-all" title="顧客追加"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button>
-                </div>
+    <template x-if="!composeMode && !fullThreadMode && !isListMaximizing">
+        <div x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="-translate-x-full"
+             x-transition:enter-end="translate-x-0"
+             x-transition:leave="transition ease-in duration-300"
+             x-transition:leave-start="translate-x-0"
+             x-transition:leave-end="-translate-x-full"
+             :style="'width:' + sidebarWidth + 'px'" 
+             class="shrink-0 border-r border-gray-200 bg-white flex flex-col items-center py-6 gap-6 z-50 shadow-sm relative transition-all duration-300 overflow-hidden">
+            <button @click="navPanelOpen = !navPanelOpen; tagPanelOpen = false" :class="navPanelOpen ? 'bg-blue-100 text-blue-600 shadow-inner' : 'text-gray-400'" class="p-2.5 rounded-2xl transition-all hover:bg-blue-50 group flex items-center gap-3 overflow-hidden">
+                <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
+                <span x-show="sidebarWidth > 100" class="text-[11px] font-black truncate uppercase tracking-widest">顧客フォルダ</span>
+            </button>
+            <button @click="tagPanelOpen = !tagPanelOpen; navPanelOpen = false" :class="tagPanelOpen ? 'bg-indigo-100 text-indigo-600 shadow-inner' : 'text-gray-400'" class="p-2.5 rounded-2xl transition-all hover:bg-indigo-50 group flex items-center gap-3 overflow-hidden">
+                <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" stroke-width="2"/></svg>
+                <span x-show="sidebarWidth > 100" class="text-[11px] font-black truncate uppercase tracking-widest">タグマスター</span>
+            </button>
+            <div class="mt-auto flex flex-col items-center gap-4">
+                <button @click="fetchEmails()" class="p-2 text-gray-300 hover:text-blue-500" :class="fetching ? 'animate-spin' : ''"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.001 0 01-15.357-2m15.357 2H15" stroke-width="2"/></svg></button>
+                <button @click="navPanelOpen = false; tagPanelOpen = false" class="text-gray-300 hover:text-gray-600 p-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7" stroke-width="2"/></svg></button>
             </div>
-            <div class="flex-1 overflow-y-auto py-2 custom-scrollbar bg-gray-50/20" id="customer-group-container">
-                <div class="mb-4">
-                    <button @click="selectionMode ? assignCustomerToSelected('none') : toggleGroupFilter('none')" :class="activeGroupId==='none'?'bg-blue-50 text-blue-700 shadow-inner ring-1 ring-blue-200':'text-gray-400 hover:bg-white'" class="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-tighter transition-all">未分類 / 紐付け解除</button>
-                    <div class="px-2 space-y-0.5 mt-1 min-h-[10px]">
-                        <template x-for="c in filteredUnassignedCustomers" :key="c.id">
-                            <div :data-customer-id="c.id" class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
-                                <div class="c-drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover/c:opacity-100 font-black text-[10px] transition-all">⠿</div>
-                                <button @click="selectionMode ? assignCustomerToSelected(c.id) : toggleCustomerFilter(c.id, c.name)" :class="activeCustomerId===c.id?'bg-blue-600 text-white shadow-md':'text-gray-600 hover:bg-white'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold truncate transition-all shadow-sm" x-text="c.name"></button>
+            <div class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400 z-50 transition-colors" @mousedown.prevent="startResizeSidebar($event)"></div>
+        </div>
+    </template>
+
+    {{-- メインワークスペースコンテナ --}}
+    <div class="flex flex-1 min-h-0 overflow-hidden">
+        {{-- 2カラム目: ナビゲーション (一括紐付け対応) --}}
+        <div x-show="!fullThreadMode && !isListMaximizing && (navPanelOpen || tagPanelOpen)" :style="'width:' + navPanelWidth + 'px'" class="shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm z-30 relative transition-all duration-75">
+            <div x-show="navPanelOpen" class="flex flex-col h-full">
+                <div class="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
+                    <h2 class="text-[11px] font-black uppercase tracking-widest">顧客フォルダ</h2>
+                    <div class="flex items-center gap-1">
+                        <button @click="openCreateGroup(null)" class="text-blue-600 p-1.5 hover:bg-blue-50 rounded-full transition-all" title="ルートフォルダ作成"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke-width="2.5"/></svg></button>
+                        <button @click="customerModalOpen = true" class="text-blue-500 p-1.5 hover:bg-blue-50 rounded-full transition-all" title="顧客追加"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto py-2 custom-scrollbar bg-gray-50/20" id="customer-group-container">
+                    <div class="mb-4">
+                        <button @click="selectionMode ? assignCustomerToSelected('none') : toggleGroupFilter('none')" :class="activeGroupId==='none'?'bg-blue-50 text-blue-700 shadow-inner ring-1 ring-blue-200':'text-gray-400 hover:bg-white'" class="w-full text-left px-4 py-2 text-[10px] font-black uppercase tracking-tighter transition-all">未分類 / 紐付け解除</button>
+                        <div class="px-2 space-y-0.5 mt-1 min-h-[10px]">
+                            <template x-for="c in filteredUnassignedCustomers" :key="c.id">
+                                <div :data-customer-id="c.id" class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
+                                    <div class="c-drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover/c:opacity-100 font-black text-[10px] transition-all">⠿</div>
+                                    <button @click="selectionMode ? assignCustomerToSelected(c.id) : toggleCustomerFilter(c.id, c.name)" :class="activeCustomerId===c.id?'bg-blue-600 text-white shadow-md':'text-gray-600 hover:bg-white'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold truncate transition-all shadow-sm" x-text="c.name"></button>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <div id="nested-groups">
+                        <template x-for="group in customerGroups" :key="group.id">
+                            <div class="mb-2">
+                                <div class="mx-2 flex items-center gap-0.5 group">
+                                    <button @click="toggleGroup(group.id)" class="p-1.5 text-gray-400 hover:text-blue-600 transition-transform duration-200" :class="isGroupOpen(group.id)?'rotate-90' : ''"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="3"/></svg></button>
+                                    <div @click="toggleGroupFilter(group.id)" :class="activeGroupId===group.id?'bg-blue-600 text-white shadow-lg':'text-blue-900 bg-blue-50/50 hover:bg-white'" class="flex-1 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center justify-between group-drag-handle cursor-pointer border border-transparent shadow-sm transition-all">
+                                        <span class="truncate" x-text="group.name"></span>
+                                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                            <button @click.stop="openCreateGroup(group.id)" class="text-gray-400 hover:text-blue-600 p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button>
+                                            <button @click.stop="renameCustomerGroup(group)" class="text-gray-400 hover:text-blue-600 p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div x-show="isGroupOpen(group.id)" x-collapse class="ml-9 border-l border-gray-200/50 mt-1 space-y-1">
+                                    <template x-for="c in (group.customers || [])" :key="c.id">
+                                        <div class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
+                                            <div class="c-drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover/c:opacity-100 transition-all font-black text-[10px]">⠿</div>
+                                            <button @click="selectionMode ? assignCustomerToSelected(c.id) : toggleCustomerFilter(c.id, c.name)" :class="activeCustomerId===c.id?'bg-blue-600 text-white shadow-md':'text-gray-600 hover:bg-white'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold truncate transition-all shadow-sm" x-text="c.name"></button>
+                                        </div>
+                                    </template>
+                                </div>
                             </div>
                         </template>
                     </div>
                 </div>
-                <div id="nested-groups">
-                    <template x-for="group in customerGroups" :key="group.id">
-                        <div class="mb-2">
-                            <div class="mx-2 flex items-center gap-0.5 group">
-                                <button @click="toggleGroup(group.id)" class="p-1.5 text-gray-400 hover:text-blue-600 transition-transform duration-200" :class="isGroupOpen(group.id)?'rotate-90' : ''"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" stroke-width="3"/></svg></button>
-                                <div @click="toggleGroupFilter(group.id)" :class="activeGroupId===group.id?'bg-blue-600 text-white shadow-lg':'text-blue-900 bg-blue-50/50 hover:bg-white'" class="flex-1 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter flex items-center justify-between group-drag-handle cursor-pointer border border-transparent shadow-sm transition-all">
-                                    <span class="truncate" x-text="group.name"></span>
-                                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                        <button @click.stop="openCreateGroup(group.id)" class="text-gray-400 hover:text-blue-600 p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button>
-                                        <button @click.stop="renameCustomerGroup(group)" class="text-gray-400 hover:text-blue-600 p-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-width="2"/></svg></button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div x-show="isGroupOpen(group.id)" x-collapse class="ml-9 border-l border-gray-200/50 mt-1 space-y-1">
-                                <template x-for="c in (group.customers || [])" :key="c.id">
-                                    <div class="group/c flex items-center gap-1 drop-target-customer" :data-cid="c.id">
-                                        <div class="c-drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover/c:opacity-100 transition-all font-black text-[10px]">⠿</div>
-                                        <button @click="selectionMode ? assignCustomerToSelected(c.id) : toggleCustomerFilter(c.id, c.name)" :class="activeCustomerId===c.id?'bg-blue-600 text-white shadow-md':'text-gray-600 hover:bg-white'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold truncate transition-all shadow-sm" x-text="c.name"></button>
-                                    </div>
-                                </template>
-                            </div>
+                <div class="px-4 py-4 border-t border-gray-100 bg-white"><input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..." class="w-full px-3 py-2 bg-gray-50 border-none rounded-xl text-[10px] focus:ring-2 focus:ring-blue-400 font-bold outline-none shadow-inner"></div>
+                <div class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-blue-400 z-50 transition-colors" @mousedown.prevent="startResizeNav($event)"></div>
+            </div>
+            <div x-show="tagPanelOpen" class="flex flex-col h-full bg-white">
+                <div class="px-5 py-5 border-b border-gray-100 flex items-center justify-between"><h2 class="text-[11px] font-black text-indigo-900 uppercase tracking-widest">タグマスター</h2><button @click="openMasterTagAdd()" class="text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-full transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button></div>
+                <div class="flex-1 overflow-y-auto py-2 custom-scrollbar bg-indigo-50/10" id="master-tag-list">
+                    <template x-for="mt in filteredMasterTags" :key="mt.id">
+                        <div class="group flex items-center gap-1 px-2" :data-id="mt.id">
+                            <div class="drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover:opacity-100 transition-all font-black text-[10px]">⠿</div>
+                            <button @click="toggleTagFilter(mt.name)" :class="activeTags.includes(mt.name)?'bg-indigo-600 text-white shadow-md':'text-gray-600 hover:bg-white hover:text-indigo-700'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-between shadow-sm truncate transition-all"><span x-text="mt.name"></span><span class="text-[10px] opacity-40 group-hover:opacity-100" x-text="(tagMap[mt.name]||[]).length"></span></button>
                         </div>
                     </template>
                 </div>
+                <div class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-blue-400 z-50 transition-colors" @mousedown.prevent="startResizeNav($event)"></div>
             </div>
-            <div class="px-4 py-4 border-t border-gray-100 bg-white"><input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..." class="w-full px-3 py-2 bg-gray-50 border-none rounded-xl text-[10px] focus:ring-2 focus:ring-blue-400 font-bold outline-none shadow-inner"></div>
-            <div class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-blue-400 z-50 transition-colors" @mousedown.prevent="startResizeNav($event)"></div>
         </div>
-        <div x-show="tagPanelOpen" class="flex flex-col h-full bg-white">
-            <div class="px-5 py-5 border-b border-gray-100 flex items-center justify-between"><h2 class="text-[11px] font-black text-indigo-900 uppercase tracking-widest">タグマスター</h2><button @click="openMasterTagAdd()" class="text-indigo-600 p-1.5 hover:bg-indigo-50 rounded-full transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg></button></div>
-            <div class="flex-1 overflow-y-auto py-2 custom-scrollbar bg-indigo-50/10" id="master-tag-list">
-                <template x-for="mt in filteredMasterTags" :key="mt.id">
-                    <div class="group flex items-center gap-1 px-2" :data-id="mt.id">
-                        <div class="drag-handle p-2 text-gray-300 cursor-grab opacity-0 group-hover:opacity-100 transition-all font-black text-[10px]">⠿</div>
-                        <button @click="toggleTagFilter(mt.name)" :class="activeTags.includes(mt.name)?'bg-indigo-600 text-white shadow-md':'text-gray-600 hover:bg-white hover:text-indigo-700'" class="flex-1 text-left px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-between shadow-sm truncate transition-all"><span x-text="mt.name"></span><span class="text-[10px] opacity-40 group-hover:opacity-100" x-text="(tagMap[mt.name]||[]).length"></span></button>
-                    </div>
-                </template>
-            </div>
-            <div class="absolute top-0 right-0 w-1.5 h-full cursor-col-resize hover:bg-blue-400 z-50 transition-colors" @mousedown.prevent="startResizeNav($event)"></div>
-        </div>
-    </div>
 
-    {{-- 3カラム目: メール一覧 (固定幅) --}}
-    <div x-show="!fullThreadMode" class="flex flex-col overflow-hidden bg-white border-r border-gray-200 relative z-20 thread-list-column">
-        <div class="bg-white border-b border-gray-100 px-6 pt-4 shrink-0 shadow-sm z-10">
-            <div class="flex items-center justify-between mb-4">
-                <div x-show="isListMaximizing" class="mr-2"><button @click="isListMaximizing = false" class="text-blue-600 p-2 hover:bg-blue-50 rounded-xl font-black text-xs flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M21 19l-7-7 7-7" stroke-width="2.5"/></svg> 戻る</button></div>
-                <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shadow-inner border border-gray-50 flex-1 mr-2 overflow-hidden">
-                    <button @click="setLeftTab('inbox')" :class="leftTab==='inbox'?'bg-white shadow text-blue-600':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all">受信</button>
-                    <button @click="setLeftTab('hold')" :class="leftTab==='hold'?'bg-white shadow text-gray-800':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all">保留</button>
-                    <button @click="setLeftTab('completed')" :class="leftTab==='completed'?'bg-white shadow text-green-600':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all">完了</button>
-                    <button @click="setLeftTab('pending')" :class="leftTab==='pending'?'bg-white shadow text-amber-600':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1">承認待ち <span x-show="pendingCount > 0" class="bg-amber-500 text-white px-1.5 rounded-full text-[8px]" x-text="pendingCount"></span></button>
-                </div>
-                <button @click="openCompose()" class="bg-blue-600 text-white text-[10px] px-5 py-2 rounded-xl font-black shadow-lg hover:bg-blue-700 transition-all shrink-0">+ 新規作成</button>
+        {{-- 3カラム目: メール一覧 (received threads) --}}
+    {{-- ======================================================= --}}
+    {{-- 2カラム目: メール一覧 (Vertical 4-row Header)           --}}
+    {{-- ======================================================= --}}
+    <div x-show="!fullThreadMode" 
+        class="flex flex-col shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 thread-list-column shadow-sm"
+        :style="'width:' + threadWidth + 'px'" style="min-width: 250px">
+        
+        {{-- Row 1: 新規作成 --}}
+        <div class="shrink-0 px-4 py-3 border-b border-gray-100 bg-white flex justify-end items-center">
+            <button @click="openCompose()" 
+                class="bg-blue-600 text-white text-[11px] px-6 py-2 rounded-xl font-black shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2">
+                <i class="fas fa-plus"></i> 新規作成
+            </button>
+        </div>
+
+        {{-- Row 2: ステータスフィルター --}}
+        <div class="shrink-0 px-3 py-2 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
+            <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
+                <button @click="setLeftTab('inbox')" :class="leftTab==='inbox'?'bg-white shadow text-blue-600':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">受信</button>
+                <button @click="setLeftTab('hold')" :class="leftTab==='hold'?'bg-white shadow text-gray-800':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">保留</button>
+                <button @click="setLeftTab('completed')" :class="leftTab==='completed'?'bg-white shadow text-green-600':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">完了</button>
+                <button @click="setLeftTab('pending')" :class="leftTab==='pending'?'bg-white shadow text-amber-600':'text-gray-500'" class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all flex items-center justify-center gap-1 truncate">
+                    承認待ち <span x-show="pendingCount > 0" class="bg-amber-500 text-white px-1.5 rounded-full text-[8px]" x-text="pendingCount"></span>
+                </button>
             </div>
-            <div class="relative mb-4"><svg class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><input type="text" x-model="searchQuery" @input="onSearchInput()" placeholder="メッセージ、件名、差出人を検索..." class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-none rounded-2xl text-xs focus:ring-2 focus:ring-blue-400 outline-none font-medium shadow-inner"></div>
-            
-            {{-- トップタグ --}}
-            <div class="flex items-center gap-2 pb-4 overflow-x-auto no-scrollbar border-t border-gray-50 pt-3">
+        </div>
+
+        {{-- Row 3: 列ヘッダー --}}
+        <div class="shrink-0 px-3 py-1.5 border-b border-gray-100 bg-white flex items-center text-gray-400 font-black uppercase tracking-tighter text-[9px]">
+            <div class="shrink-0 w-[32px] flex justify-center">
+                <input type="checkbox" class="rounded-sm border-gray-300 text-blue-600 focus:ring-blue-500" 
+                    @click="selectionMode = !selectionMode; if(selectionMode) selectedThreadIds = threads.map(t => t.id); else selectedThreadIds = []">
+            </div>
+            <div class="shrink-0 w-[24px]"></div>
+            <div class="flex-1 min-w-0 pl-1 flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors">
+                差出人 / 日時 <i class="fas fa-sort-down opacity-50"></i>
+            </div>
+            <div class="w-20 text-right flex items-center justify-end gap-1 cursor-pointer hover:text-blue-600 transition-colors">
+                件名 <i class="fas fa-sort opacity-20"></i>
+            </div>
+        </div>
+
+        {{-- Row 4: 検索 & タグフィルター --}}
+        <div class="shrink-0 px-4 py-3 border-b border-gray-100 bg-white space-y-3">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-[10px]"></i>
+                <input type="text" x-model="searchQuery" @input="onSearchInput()" placeholder="検索..." 
+                    class="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-2xl text-[11px] focus:ring-2 focus:ring-blue-400 outline-none font-medium shadow-inner">
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5 max-h-32 overflow-y-auto no-scrollbar">
+                <button @click="activeTags = []" 
+                    :class="activeTags.length === 0 ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'" 
+                    class="shrink-0 text-[8px] font-black px-3 py-1 rounded-full transition-all">すべて</button>
                 <template x-for="tag in filteredMasterTags" :key="tag.id">
-                    <button @click="toggleTagFilter(tag.name)" :class="activeTags.includes(tag.name)?'bg-indigo-600 text-white shadow-md':'bg-indigo-50 text-indigo-500 hover:bg-indigo-100 shadow-sm'" class="shrink-0 text-[9px] font-black px-3.5 py-1 rounded-full transition-all border border-indigo-100" x-text="'#' + tag.name"></button>
+                    <button @click="toggleTagFilter(tag.name)" 
+                        :class="activeTags.includes(tag.name)?'bg-indigo-600 text-white shadow-md':'bg-indigo-50 text-indigo-500 hover:bg-indigo-100'" 
+                        class="shrink-0 text-[8px] font-black px-3 py-1 rounded-full transition-all border border-indigo-100" 
+                        x-text="'#' + tag.name"></button>
                 </template>
             </div>
         </div>
@@ -180,310 +231,315 @@
         </div>
     </div>
 
-    {{-- 4カラム目: スレッド詳細 --}}
-    <div x-show="selectedThread || composeMode" class="flex-1 bg-white flex flex-col relative shadow-2xl z-40 overflow-hidden min-w-0 transition-all duration-300">
-        <div class="h-full flex relative">
-            {{-- Left Sub-Pane: Thread Content (Flexible) --}}
-            <div id="thread-content-pane" class="flex-1 flex flex-col overflow-hidden border-r border-gray-200 transition-all duration-300">
-            {{-- アクションバー --}}
-            <div class="shrink-0 border-b border-gray-100 bg-gray-50/50 px-6 py-4 flex items-center justify-between">
-                <div class="flex items-center gap-4">
-
-                    {{-- ↑↓ スレッド間移動 --}}
-                    <div class="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ml-1">
-                        <button @click="loadPrevThread()" :disabled="!hasPrevThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 border-r border-gray-100 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                        <button @click="loadNextThread()" :disabled="!hasNextThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-                    </div>
-                    <div class="flex bg-gray-200 p-0.5 rounded-lg ml-2">
-                        <button @click="detailTab = 'thread'" :class="detailTab === 'thread' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">スレッド</button>
-                        <button @click="detailTab = 'wiki'; if(selectedThread?.customer) selectCategory(selectedThread.customer.name)" :class="detailTab === 'wiki' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">Wiki</button>
-                        <button @click="detailTab = 'files'" :class="detailTab === 'files' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">添付</button>
-                    </div>
-                </div>
-                <div class="flex items-center gap-3">
-                    <template x-if="!composeMode">
-                        <div class="flex items-center gap-1.5 mr-2 pr-4 border-r border-gray-200">
-                            <button @click="moveToHold(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-4 py-1.5 rounded-xl hover:bg-gray-50 shadow-sm transition-all">保留</button>
-                            <button @click="markThreadIgnored(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-4 py-1.5 rounded-xl text-gray-400 hover:bg-gray-50 shadow-sm transition-all">不要</button>
-                            <button @click="markThreadComplete(selectedThread)" class="text-[10px] font-black bg-green-600 text-white px-5 py-1.5 rounded-xl shadow-lg hover:bg-green-700 transition-all">完了</button>
-                            {{-- 追加: スレッド上部の削除ボタン --}}
-                            <button @click="deleteThread(selectedThread)" class="text-[10px] font-black bg-red-50 text-red-600 border border-red-200 px-4 py-1.5 rounded-xl hover:bg-red-500 hover:text-white shadow-sm transition-all ml-1">削除</button>
+    {{-- ======================================================= --}}
+    {{-- Column 3: 詳細・返信・作成エリア (Unified)               --}}
+    {{-- ======================================================= --}}
+    <div x-show="selectedThread || composeMode" 
+         class="flex-1 flex flex-col relative overflow-hidden bg-white z-40 transition-all duration-300">
+        
+        {{-- A: Thread Detail View (composeMode = false) --}}
+        <div x-show="!composeMode" class="flex-1 flex flex-col overflow-hidden">
+            <div class="h-full flex relative">
+                {{-- Left Sub-Pane: Thread Content (Flexible) --}}
+                <div id="thread-content-pane" class="flex-1 flex flex-col overflow-hidden border-r border-gray-200 transition-all duration-300">
+                    {{-- アクションバー --}}
+                    <div class="shrink-0 border-b border-gray-100 bg-gray-50/50 px-6 py-4 flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            {{-- ↑↓ スレッド間移動 --}}
+                            <div class="flex items-center bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden ml-1">
+                                <button @click="loadPrevThread()" :disabled="!hasPrevThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 border-r border-gray-100 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                                <button @click="loadNextThread()" :disabled="!hasNextThread" class="p-2 hover:bg-gray-50 disabled:opacity-20 transition-all"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+                            </div>
+                            <div class="flex bg-gray-200 p-0.5 rounded-lg ml-2">
+                                <button @click="detailTab = 'thread'" :class="detailTab === 'thread' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">スレッド</button>
+                                <button @click="detailTab = 'wiki'; if(selectedThread?.customer) selectCategory(selectedThread.customer.name)" :class="detailTab === 'wiki' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">Wiki</button>
+                                <button @click="detailTab = 'files'" :class="detailTab === 'files' ? 'bg-white shadow text-blue-600' : 'text-gray-500'" class="px-4 py-1 text-[10px] font-black rounded-md transition-all">添付</button>
+                            </div>
                         </div>
-                    </template>
-                    {{-- 全ウィンドウ表示ボタン --}}
-                    <button @click="fullThreadMode = !fullThreadMode" class="text-gray-400 hover:text-blue-600 p-2 bg-white border border-gray-200 rounded-xl transition-all shadow-sm">
-                        <svg x-show="!fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-width="2.5"/></svg>
-                        <svg x-show="fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"/></svg>
-                    </button>
-                </div>
-            </div>
-
-            {{-- 全画面モード時のみ表示される戻るバー --}}
-            <template x-if="fullThreadMode">
-                 <div class="px-8 py-3 bg-blue-600 text-white flex items-center shrink-0 shadow-lg relative z-50">
-                    <button @click="fullThreadMode = false" class="text-[11px] font-black flex items-center gap-3 hover:bg-white/20 px-5 py-2 rounded-2xl transition-all uppercase tracking-widest"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M21 19l-7-7 7-7" stroke-width="3.5"/></svg> マルチウィンドウに戻る</button>
-                 </div>
-            </template>
-
-            {{-- 詳細帯: タグ・顧客・件名・返信ボタン --}}
-            <div class="shrink-0 bg-white border-b border-gray-100 px-6 py-4 space-y-3 shadow-sm z-10">
-                {{-- 件名 (2行クランプ) --}}
-                <div class="flex items-start justify-between gap-4">
-                    <h2 class="subject-clamp text-lg font-bold text-gray-900 flex-1 leading-snug" x-text="selectedThread?.subject"></h2>
-                    <div class="flex gap-2">
-
-                        <button @click="openReplyOverlay(threadEmails[0])"
-                            class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl shadow transition-all flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                            返信
-                        </button>
+                        <div class="flex items-center gap-3">
+                            <template x-if="!composeMode">
+                                <div class="flex items-center gap-1.5 mr-2 pr-4 border-r border-gray-200">
+                                    <button @click="moveToHold(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-4 py-1.5 rounded-xl hover:bg-gray-50 shadow-sm transition-all">保留</button>
+                                    <button @click="markThreadIgnored(selectedThread)" class="text-[10px] font-black bg-white border border-gray-200 px-4 py-1.5 rounded-xl text-gray-400 hover:bg-gray-50 shadow-sm transition-all">不要</button>
+                                    <button @click="markThreadComplete(selectedThread)" class="text-[10px] font-black bg-green-600 text-white px-5 py-1.5 rounded-xl shadow-lg hover:bg-green-700 transition-all">完了</button>
+                                    <button @click="deleteThread(selectedThread)" class="text-[10px] font-black bg-red-50 text-red-600 border border-red-200 px-4 py-1.5 rounded-xl hover:bg-red-500 hover:text-white shadow-sm transition-all ml-1">削除</button>
+                                </div>
+                            </template>
+                            {{-- 全ウィンドウ表示ボタン --}}
+                            <button @click="fullThreadMode = !fullThreadMode" class="text-gray-400 hover:text-blue-600 p-2 bg-white border border-gray-200 rounded-xl transition-all shadow-sm">
+                                <svg x-show="!fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" stroke-width="2.5"/></svg>
+                                <svg x-show="fullThreadMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="3"/></svg>
+                            </button>
+                        </div>
                     </div>
-                </div>
 
-                {{-- 顧客選択 + タグ --}}
-                <div class="flex items-center gap-3 flex-wrap">
-                    {{-- 顧客ドロップダウン (Add New 対応) --}}
-                    <div class="relative">
-                        <button @click="assignDropdownOpen = !assignDropdownOpen; quickCustomerFormOpen = false"
-                            class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-blue-300 transition-all">
-                            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
-                            <span x-text="selectedThread?.customer?.name || '顧客を選択'"></span>
-                            <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2"/></svg>
-                        </button>
-                        <div x-show="assignDropdownOpen" @click.away="assignDropdownOpen = false; quickCustomerFormOpen = false"
-                            class="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-2xl rounded-2xl z-[100] overflow-hidden">
-                            <div class="p-2 border-b border-gray-100">
-                                <input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..."
-                                    class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
-                            </div>
-                            <div class="max-h-56 overflow-y-auto custom-scrollbar">
-                                <template x-for="c in filteredCustomers" :key="c.id">
-                                    <button @click="assignCustomer(c.id); assignDropdownOpen = false"
-                                        class="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
-                                        x-text="c.name"></button>
-                                </template>
-                            </div>
-                            {{-- ＋ 新規顧客を作成 --}}
-                            <div class="border-t border-gray-100 p-3">
-                                <button @click="quickCustomerFormOpen = !quickCustomerFormOpen; if(quickCustomerFormOpen && threadEmails[0]) quickCustomerEmailVal = threadEmails[0].from_address"
-                                    class="w-full flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-800 py-1 transition-all">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg>
-                                    新規顧客を作成して紐付け
+                    {{-- 全画面モード時のみ表示される戻るバー --}}
+                    <template x-if="fullThreadMode">
+                         <div class="px-8 py-3 bg-blue-600 text-white flex items-center shrink-0 shadow-lg relative z-50">
+                            <button @click="fullThreadMode = false" class="text-[11px] font-black flex items-center gap-3 hover:bg-white/20 px-5 py-2 rounded-2xl transition-all uppercase tracking-widest"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 19l-7-7 7-7M21 19l-7-7 7-7" stroke-width="3.5"/></svg> マルチウィンドウに戻る</button>
+                         </div>
+                    </template>
+
+                    {{-- 詳細帯: タグ・顧客・件名・返信ボタン --}}
+                    <div class="shrink-0 bg-white border-b border-gray-100 px-6 py-4 space-y-3 shadow-sm z-10">
+                        <div class="flex items-start justify-between gap-4">
+                            <h2 class="subject-clamp text-lg font-bold text-gray-900 flex-1 leading-snug" x-text="selectedThread?.subject"></h2>
+                            <div class="flex gap-2">
+                                <button @click="openReplyOverlay(threadEmails[0])"
+                                    class="shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl shadow transition-all flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                    返信
                                 </button>
-                                <div x-show="quickCustomerFormOpen" class="mt-3 space-y-2">
-                                    <input x-model="quickCustomerName" placeholder="氏名 / 会社名 *" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
-                                    <input x-model="quickCustomerEmailVal" placeholder="メールアドレス (任意)" type="email" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
-                                    <button @click="quickCreateAndAssign()"
-                                        class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-blue-700 transition-all">
-                                        作成して紐付け
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <div class="relative">
+                                <button @click="assignDropdownOpen = !assignDropdownOpen; quickCustomerFormOpen = false"
+                                    class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-700 hover:border-blue-300 transition-all">
+                                    <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" stroke-width="2"/></svg>
+                                    <span x-text="selectedThread?.customer?.name || '顧客を選択'"></span>
+                                    <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-width="2"/></svg>
+                                </button>
+                                <div x-show="assignDropdownOpen" @click.away="assignDropdownOpen = false; quickCustomerFormOpen = false"
+                                    class="absolute top-full left-0 mt-1 w-72 bg-white border border-gray-200 shadow-2xl rounded-2xl z-[100] overflow-hidden">
+                                    <div class="p-2 border-b border-gray-100">
+                                        <input type="text" x-model="customerSearchQuery" placeholder="顧客を検索..."
+                                            class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
+                                    </div>
+                                    <div class="max-h-56 overflow-y-auto custom-scrollbar">
+                                        <template x-for="c in filteredCustomers" :key="c.id">
+                                            <button @click="assignCustomer(c.id); assignDropdownOpen = false"
+                                                class="w-full text-left px-4 py-2.5 text-xs font-semibold text-gray-700 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
+                                                x-text="c.name"></button>
+                                        </template>
+                                    </div>
+                                    <div class="border-t border-gray-100 p-3">
+                                        <button @click="quickCustomerFormOpen = !quickCustomerFormOpen; if(quickCustomerFormOpen && threadEmails[0]) quickCustomerEmailVal = threadEmails[0].from_address"
+                                            class="w-full flex items-center gap-2 text-xs font-bold text-blue-600 hover:text-blue-800 py-1 transition-all">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-width="2.5"/></svg>
+                                            新規顧客を作成して紐付け
+                                        </button>
+                                        <div x-show="quickCustomerFormOpen" class="mt-3 space-y-2">
+                                            <input x-model="quickCustomerName" placeholder="氏名 / 会社名 *" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
+                                            <input x-model="quickCustomerEmailVal" placeholder="メールアドレス (任意)" type="email" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-300">
+                                            <button @click="quickCreateAndAssign()"
+                                                class="w-full bg-blue-600 text-white text-xs font-bold py-2 rounded-lg hover:bg-blue-700 transition-all">
+                                                作成して紐付け
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <template x-for="tag in (selectedThread?.tags || [])" :key="tag">
+                                <button @click="toggleTagFilter(tag)" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all group">
+                                    <span x-text="'#' + tag"></span>
+                                    <span @click.stop="removeTagFromThread(selectedThread, tag)" class="opacity-40 hover:opacity-100 group-hover:text-white">✕</span>
+                                </button>
+                            </template>
+                            <button @click="tagEditorOpen = !tagEditorOpen" class="text-[10px] font-bold text-indigo-400 bg-white border border-dashed border-indigo-200 px-3 py-1 rounded-full hover:bg-indigo-50 transition-all">+ タグ追加</button>
+                        </div>
+                        <div x-show="tagEditorOpen" class="flex gap-2">
+                            <input type="text" x-model="newTagName" @keydown.enter="addTagToSelected()" placeholder="タグ名を入力..." class="flex-1 text-xs px-4 py-2 bg-indigo-50/50 border border-indigo-100 rounded-xl focus:ring-2 focus:ring-indigo-300 outline-none">
+                            <button @click="addTagToSelected()" class="bg-indigo-600 text-white text-xs px-5 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all">追加</button>
+                        </div>
+                    </div>
+
+                    {{-- メインエリア: スレッド --}}
+                    <div class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar" id="thread-main-area">
+                        <div class="p-8 space-y-6 max-w-4xl mx-auto">
+                            {{-- マージ履歴 --}}
+                            <template x-if="detailTab === 'thread' && threadMerges && threadMerges.length > 0">
+                                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
+                                    <h4 class="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">マージされたスレッド履歴</h4>
+                                    <template x-for="m in threadMerges" :key="m.id">
+                                        <div class="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-amber-100 mb-2 shadow-sm">
+                                            <div><p class="text-xs font-semibold text-gray-700" x-text="m.source_subject"></p><p class="text-[10px] text-gray-400 mt-0.5" x-text="m.created_at"></p></div>
+                                            <button @click="unmerge(m.id)" class="text-[10px] font-bold text-amber-600 bg-amber-100 hover:bg-amber-200 px-4 py-1.5 rounded-lg transition-all">マージ解除</button>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+
+                            {{-- スレッド履歴 --}}
+                            <div x-show="detailTab === 'thread'" class="space-y-4">
+                                <template x-for="(email, idx) in threadEmails" :key="email.id">
+                                    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group/email">
+                                        <div @click="toggleEmail(email.id)" class="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
+                                            <div class="flex items-center gap-4 min-w-0">
+                                                <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0" x-text="(email.from_label || '?').charAt(0).toUpperCase()"></div>
+                                                <div class="min-w-0">
+                                                    <p class="text-sm font-semibold text-gray-900 truncate" x-text="email.from_label"></p>
+                                                    <p class="text-[11px] text-gray-400" x-text="email.received_at"></p>
+                                                </div>
+                                            </div>
+                                            <div class="flex items-center gap-2 shrink-0">
+                                                <button @click.stop="openAiPanel(null, email)" class="text-gray-300 hover:text-indigo-500 p-1.5 rounded-full transition-all" title="AIアシスタント">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                                                </button>
+                                                <button @click.stop="openReplyOverlay(email)" class="text-[11px] bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full font-semibold hover:bg-blue-600 hover:text-white transition-all">返信</button>
+                                                <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                                            </div>
+                                        </div>
+                                        <div x-show="expandedEmailIds.includes(email.id)" class="px-6 py-5 border-t border-gray-100 email-body-text bg-white">
+                                            <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[100px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 30) + 'px'"></iframe>
+                                            <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div x-show="threadEmails.length > 0" class="text-center py-4">
+                                    <button @click="openReplyOverlay(threadEmails[0])"
+                                        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-8 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 mx-auto">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                        返信する
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
-
-                    {{-- タグ --}}
-                    <template x-for="tag in (selectedThread?.tags || [])" :key="tag">
-                        <button @click="toggleTagFilter(tag)" class="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-3 py-1 rounded-full border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all group">
-                            <span x-text="'#' + tag"></span>
-                            <span @click.stop="removeTagFromThread(selectedThread, tag)" class="opacity-40 hover:opacity-100 group-hover:text-white">✕</span>
-                        </button>
-                    </template>
-                    <button @click="tagEditorOpen = !tagEditorOpen" class="text-[10px] font-bold text-indigo-400 bg-white border border-dashed border-indigo-200 px-3 py-1 rounded-full hover:bg-indigo-50 transition-all">+ タグ追加</button>
                 </div>
-                <div x-show="tagEditorOpen" class="flex gap-2">
-                    <input type="text" x-model="newTagName" @keydown.enter="addTagToSelected()" placeholder="タグ名を入力..." class="flex-1 text-xs px-4 py-2 bg-indigo-50/50 border border-indigo-100 rounded-xl focus:ring-2 focus:ring-indigo-300 outline-none">
-                    <button @click="addTagToSelected()" class="bg-indigo-600 text-white text-xs px-5 py-2 rounded-xl font-bold hover:bg-indigo-700 transition-all">追加</button>
-                </div>
-            </div>
 
-            {{-- メインエリア: スレッド --}}
-            <div class="flex-1 overflow-y-auto bg-gray-50 custom-scrollbar" id="thread-main-area">
-                <div class="p-8 space-y-6 max-w-4xl mx-auto">
-
-                    {{-- マージ履歴 --}}
-                    <template x-if="detailTab === 'thread' && threadMerges && threadMerges.length > 0">
-                        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
-                            <h4 class="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">マージされたスレッド履歴</h4>
-                            <template x-for="m in threadMerges" :key="m.id">
-                                <div class="flex items-center justify-between bg-white px-5 py-3 rounded-xl border border-amber-100 mb-2 shadow-sm">
-                                    <div><p class="text-xs font-semibold text-gray-700" x-text="m.source_subject"></p><p class="text-[10px] text-gray-400 mt-0.5" x-text="m.created_at"></p></div>
-                                    <button @click="unmerge(m.id)" class="text-[10px] font-bold text-amber-600 bg-amber-100 hover:bg-amber-200 px-4 py-1.5 rounded-lg transition-all">マージ解除</button>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    {{-- スレッド履歴 --}}
-                    <div x-show="detailTab === 'thread'" class="space-y-4">
-                        <template x-for="(email, idx) in threadEmails" :key="email.id">
-                            <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group/email">
-                                {{-- Email header --}}
-                                <div @click="toggleEmail(email.id)"
-                                    class="px-6 py-4 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
-                                    <div class="flex items-center gap-4 min-w-0">
-                                        <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-sm shrink-0" x-text="(email.from_label || '?').charAt(0).toUpperCase()"></div>
-                                        <div class="min-w-0">
-                                            <p class="text-sm font-semibold text-gray-900 truncate" x-text="email.from_label"></p>
-                                            <p class="text-[11px] text-gray-400" x-text="email.received_at"></p>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center gap-2 shrink-0">
-                                        <button @click.stop="openAiPanel(null, email)" class="text-gray-300 hover:text-indigo-500 p-1.5 rounded-full transition-all" title="AIアシスタント">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                                        </button>
-                                        <button @click.stop="openReplyOverlay(email)" class="text-[11px] bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full font-semibold hover:bg-blue-600 hover:text-white transition-all">返信</button>
-                                        <svg class="w-4 h-4 text-gray-400 transition-transform" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                                    </div>
-                                </div>
-                                {{-- Email body --}}
-                                <div x-show="expandedEmailIds.includes(email.id)" class="px-6 py-5 border-t border-gray-100 email-body-text bg-white">
-                                    <iframe x-show="!!email.body_html" class="w-full border-0 min-h-[100px]" :srcdoc="email.body_html" sandbox="allow-same-origin allow-popups allow-scripts" @load="$el.style.height = ($el.contentWindow.document.documentElement.scrollHeight + 30) + 'px'"></iframe>
-                                    <div x-show="!email.body_html" class="whitespace-pre-wrap leading-relaxed" x-text="email.plain_body"></div>
-                                </div>
+                {{-- Right Sidebar --}}
+                <div id="right-sidebar" class="bg-white border-left shadow transition-all duration-300">
+                    <div style="width: 380px; height: 100%; display: flex; flex-direction: column;">
+                        <div class="sidebar-header d-flex align-items-center justify-content-between p-2 bg-light border-bottom flex-shrink-0">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-primary active" data-sidebar-tab="thread">スレッド</button>
+                                <button type="button" class="btn btn-outline-primary" data-sidebar-tab="wiki">Wiki</button>
+                                <button type="button" class="btn btn-outline-primary" data-sidebar-tab="files">添付</button>
                             </div>
-                        </template>
-                        {{-- Reply prompt at bottom --}}
-                        <div x-show="threadEmails.length > 0" class="text-center py-4">
-                            <button @click="openReplyOverlay(threadEmails[0])"
-                                class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-8 py-3 rounded-2xl shadow-lg transition-all flex items-center gap-2 mx-auto">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                                返信する
+                            <button type="button" class="btn btn-sm btn-light close-sidebar">
+                                <i class="fas fa-times"></i>
                             </button>
                         </div>
+
+                        <div class="sidebar-body flex-grow-1" style="overflow-y: auto;">
+                            <div id="sidebar-tab-thread" class="sidebar-tab-content active">
+                                <div class="sidebar-section-title px-3 py-2 bg-secondary text-white small font-weight-bold d-flex justify-content-between align-items-center">
+                                    スレッドメモ
+                                    <button class="btn btn-xs btn-light btn-sm text-secondary p-0 px-2 py-1" id="add-memo-toggle">＋追加</button>
+                                </div>
+                                <div id="memo-form-container" class="p-3 d-none border-bottom bg-light">
+                                    <textarea id="new-memo-content" class="form-control form-control-sm mb-2" rows="3" placeholder="メモを入力..."></textarea>
+                                    <button id="save-memo-btn" class="btn btn-sm btn-primary btn-block">保存</button>
+                                </div>
+                                <div id="sidebar-memo-list" class="px-0"></div>
+
+                                <div class="sidebar-section-title px-3 py-2 bg-success text-white small font-weight-bold d-flex justify-content-between align-items-center mt-3">
+                                    コメント
+                                    <button class="btn btn-xs btn-light btn-sm text-success p-0 px-2 py-1" id="add-comment-toggle">＋追加</button>
+                                </div>
+                                <div id="comment-form-container" class="p-3 d-none border-bottom bg-light">
+                                    <textarea id="new-comment-content" class="form-control form-control-sm mb-2" rows="3" placeholder="コメントを入力..."></textarea>
+                                    <button id="post-comment-btn" class="btn btn-sm btn-success btn-block">投稿</button>
+                                </div>
+                                <div id="sidebar-comment-list" class="px-0"></div>
+                            </div>
+
+                            <div id="sidebar-tab-wiki" class="sidebar-tab-content">
+                                <div class="sidebar-section-title px-3 py-2 bg-info text-white small font-weight-bold">Wiki (大学メモ)</div>
+                                <div class="p-3">
+                                    <div id="wiki-customer-name" class="font-weight-bold mb-2 text-primary small"></div>
+                                    <div id="wiki-content-container"></div>
+                                    <div class="mt-3">
+                                        <button class="btn btn-sm btn-outline-info btn-block" id="add-wiki-item-btn">+ 項目追加</button>
+                                        <button class="btn btn-sm btn-primary btn-block mt-2 d-none" id="save-wiki-btn">Wikiを保存</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="sidebar-tab-files" class="sidebar-tab-content">
+                                <div class="sidebar-section-title px-3 py-2 bg-warning text-dark small font-weight-bold">添付ファイル</div>
+                                <div id="sidebar-file-list" class="list-group list-group-flush"></div>
+                            </div>
+                        </div>
                     </div>
+                </div>
+
+                {{-- Sidebar Toggle button --}}
+                <div id="sidebar-toggle-collapsed">
+                    <i class="fas fa-chevron-left mr-1"></i>メモ・Wiki・添付
                 </div>
             </div>
 
-            {{-- Right Sidebar --}}
-            <div id="right-sidebar" class="bg-white border-left shadow transition-all duration-300">
-                <div style="width: 380px; height: 100%; display: flex; flex-direction: column;">
-                    <!-- Header: Tabs + Close -->
-                    <div class="sidebar-header d-flex align-items-center justify-content-between p-2 bg-light border-bottom flex-shrink-0">
-                        <div class="btn-group btn-group-sm" role="group">
-                            <button type="button" class="btn btn-outline-primary active" data-sidebar-tab="thread">スレッド</button>
-                            <button type="button" class="btn btn-outline-primary" data-sidebar-tab="wiki">Wiki</button>
-                            <button type="button" class="btn btn-outline-primary" data-sidebar-tab="files">添付</button>
+            {{-- Standalone AI Assistant Drawer (Notion-style slide-in) --}}
+            <aside x-show="aiDrawerOpen"
+                x-transition:enter="transition ease-out duration-300"
+                x-transition:enter-start="translate-x-full opacity-0"
+                x-transition:enter-end="translate-x-0 opacity-100"
+                x-transition:leave="transition ease-in duration-200"
+                x-transition:leave-start="translate-x-0 opacity-100"
+                x-transition:leave-end="translate-x-full opacity-0"
+                class="bg-white border-l border-indigo-100 shadow-2xl flex flex-col shrink-0 z-40 absolute right-0 top-0 h-full"
+                style="width:420px;">
+                <div class="px-6 py-5 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
+                    <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                        AIアシスタント
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">デフォルト設定</button>
+                        <button @click="aiDrawerOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
+                    <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-3">
+                        <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示プロンプト</label>
+                        <textarea x-model="aiUserPrompt" rows="6" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示をここに書いてください... (空欄ならデフォルト指示を使用)"></textarea>
+                        <div>
+                            <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
+                            <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-200 outline-none">
                         </div>
-                        <button type="button" class="btn btn-sm btn-light close-sidebar">
-                            <i class="fas fa-times"></i>
+                        <button @click="askAiForReply()" :disabled="aiLoading" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                            <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
+                            返信案を生成
                         </button>
                     </div>
-
-                    <!-- Tab Contents -->
-                    <div class="sidebar-body flex-grow-1" style="overflow-y: auto;">
-                        <!-- Thread Tab: Memo & Comments -->
-                        <div id="sidebar-tab-thread" class="sidebar-tab-content active">
-                            <!-- Memos Section -->
-                            <div class="sidebar-section-title px-3 py-2 bg-secondary text-white small font-weight-bold d-flex justify-content-between align-items-center">
-                                スレッドメモ
-                                <button class="btn btn-xs btn-light btn-sm text-secondary p-0 px-2 py-1" id="add-memo-toggle">＋追加</button>
-                            </div>
-                            <div id="memo-form-container" class="p-3 d-none border-bottom bg-light">
-                                <textarea id="new-memo-content" class="form-control form-control-sm mb-2" rows="3" placeholder="メモを入力..."></textarea>
-                                <button id="save-memo-btn" class="btn btn-sm btn-primary btn-block">保存</button>
-                            </div>
-                            <div id="sidebar-memo-list" class="px-0">
-                                <!-- Memos will be rendered here by jQuery -->
-                            </div>
-
-                            <!-- Comments Section -->
-                            <div class="sidebar-section-title px-3 py-2 bg-success text-white small font-weight-bold d-flex justify-content-between align-items-center mt-3">
-                                コメント
-                                <button class="btn btn-xs btn-light btn-sm text-success p-0 px-2 py-1" id="add-comment-toggle">＋追加</button>
-                            </div>
-                            <div id="comment-form-container" class="p-3 d-none border-bottom bg-light">
-                                <textarea id="new-comment-content" class="form-control form-control-sm mb-2" rows="3" placeholder="コメントを入力..."></textarea>
-                                <button id="post-comment-btn" class="btn btn-sm btn-success btn-block">投稿</button>
-                            </div>
-                            <div id="sidebar-comment-list" class="px-0">
-                                <!-- Comments will be rendered here by jQuery -->
-                            </div>
+                    <div x-show="aiLoading" class="text-center text-indigo-400 animate-pulse text-xs font-semibold uppercase tracking-wider">AI is thinking...</div>
+                    <div x-show="aiAnalysis && !aiLoading" class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">生成された返信案</label>
+                            <button @click="replyBody = aiAnalysis.columns.center.body; openReplyOverlay(null)" class="text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">返信フォームへ</button>
                         </div>
-
-                        <!-- Wiki Tab: University/Customer notes -->
-                        <div id="sidebar-tab-wiki" class="sidebar-tab-content">
-                            <div class="sidebar-section-title px-3 py-2 bg-info text-white small font-weight-bold">
-                                Wiki (大学メモ)
-                            </div>
-                            <div class="p-3">
-                                <div id="wiki-customer-name" class="font-weight-bold mb-2 text-primary small"></div>
-                                <div id="wiki-content-container">
-                                    <!-- Wiki items will be rendered here -->
-                                </div>
-                                <div class="mt-3">
-                                    <button class="btn btn-sm btn-outline-info btn-block" id="add-wiki-item-btn">+ 項目追加</button>
-                                    <button class="btn btn-sm btn-primary btn-block mt-2 d-none" id="save-wiki-btn">Wikiを保存</button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Files Tab: Attachments -->
-                        <div id="sidebar-tab-files" class="sidebar-tab-content">
-                            <div class="sidebar-section-title px-3 py-2 bg-warning text-dark small font-weight-bold">
-                                添付ファイル
-                            </div>
-                            <div id="sidebar-file-list" class="list-group list-group-flush">
-                                <!-- Files will be rendered here -->
-                            </div>
-                        </div>
+                        <div class="bg-gray-50 rounded-2xl p-4 text-sm text-gray-700 leading-relaxed border border-gray-100" x-text="aiAnalysis.columns.center.body"></div>
                     </div>
+                </div>
+            </aside>
+        </div>
+
+        {{-- B: Reply Form Workspace (composeMode = true) --}}
+        <div x-show="composeMode" class="flex-1 flex flex-col overflow-hidden bg-white">
+            {{-- オーバーレイヘッダー --}}
+            <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm z-50">
+                <div class="flex items-center gap-3 min-w-0">
+                    <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="text-xs text-gray-400 font-semibold">返信:</span>
+                    <span class="text-sm font-bold text-gray-800 truncate" x-text="selectedThread?.subject || '新規メッセージ'"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="replyAiPanelOpen = !replyAiPanelOpen; if(replyAiPanelOpen){ if(!aiAnalysis){ aiUserPrompt = defaultAiPrompt; } }"
+                        :class="replyAiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
+                        class="flex items-center gap-2 text-xs font-bold border px-4 py-2 rounded-xl transition-all shadow-sm">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
+                        AIアシスタント
+                    </button>
+                    <button @click="closeReplyOverlay()" class="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-xl transition-all">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
+                        閉じる
+                    </button>
                 </div>
             </div>
 
-            <!-- Toggle button (visible when sidebar is closed) -->
-            <div id="sidebar-toggle-collapsed">
-                <i class="fas fa-chevron-left mr-1"></i>メモ・Wiki・添付
-            </div>
-        </div>
-    </div>
-
-    {{-- ======================================================= --}}
-    {{-- 全画面返信オーバーレイ (Reply / Compose full-window)    --}}
-    {{-- ======================================================= --}}
-    <div x-show="replyOverlayOpen"
-        x-transition:enter="transition ease-out duration-200"
-        x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100"
-        x-transition:leave="transition ease-in duration-150"
-        x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        style="position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1050;background:#fff;"
-        class="flex flex-col relative overflow-hidden">
-
-        {{-- オーバーレイヘッダー (Fixed Height) --}}
-        <div class="shrink-0 border-b border-gray-200 px-6 py-3.5 flex items-center justify-between bg-white shadow-sm z-50">
-            <div class="flex items-center gap-3 min-w-0">
-                <svg class="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                <span class="text-xs text-gray-400 font-semibold">返信:</span>
-                <span class="text-sm font-bold text-gray-800 truncate" x-text="composeMode ? '新規メッセージ' : (selectedThread?.subject || '')"></span>
-            </div>
-            <div class="flex items-center gap-2">
-                {{-- AI Assistant Toggle Button --}}
-                <button @click="replyAiPanelOpen = !replyAiPanelOpen; if(replyAiPanelOpen && !aiAnalysis){ aiUserPrompt = defaultAiPrompt; }"
-                    :class="replyAiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
-                    class="flex items-center gap-2 text-xs font-bold border px-4 py-2 rounded-xl transition-all shadow-sm">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                    AIアシスタント
-                </button>
-                <button @click="closeReplyOverlay()" class="flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-red-500 bg-gray-50 hover:bg-red-50 border border-gray-200 hover:border-red-200 px-4 py-2 rounded-xl transition-all">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg>
-                    閉じる
-                </button>
-            </div>
-        </div>
-
-        {{-- オーバーレイ本体 (Resizable 3-Pane Layout) --}}
-        <div class="flex-1 flex min-h-0 overflow-hidden relative bg-gray-100" id="reply-workspace">
-
-            {{-- 左ペイン (スレッド履歴) --}}
-            <div :style="'width:' + overlayHistoryWidth + '%'" class="resizable-panel border-r border-gray-200 bg-gray-50">
-                <div x-show="!composeMode" class="flex flex-col h-full">
+            {{-- 3-Pane Workspace --}}
+            <div class="flex-1 flex min-h-0 overflow-hidden relative bg-gray-100" id="reply-workspace">
+                {{-- Left: History (Resizable) --}}
+                <div :style="'width:' + overlayHistoryWidth + '%'" class="border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
                     <div class="px-8 py-4 border-b border-gray-200 bg-white shrink-0">
                         <h3 class="subject-clamp text-base font-bold text-gray-900 leading-snug" x-text="selectedThread?.subject"></h3>
                         <p class="text-xs text-gray-400 mt-1" x-text="selectedThread?.customer?.name || '顧客未設定'"></p>
                     </div>
-                    <div class="scrollable-area p-6 space-y-4 custom-scrollbar">
+                    <div class="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
                         <template x-for="email in threadEmails" :key="email.id">
                             <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
                                 <div @click="toggleEmail(email.id)" class="px-5 py-3.5 cursor-pointer flex items-center justify-between hover:bg-gray-50 transition-colors">
@@ -501,24 +557,13 @@
                         </template>
                     </div>
                 </div>
-                <div x-show="composeMode" class="flex flex-col items-center justify-center h-full text-gray-400 p-12 text-center">
-                    <svg class="w-12 h-12 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke-width="1.5"/></svg>
-                    <p class="text-sm font-semibold">新規メッセージ作成</p>
-                </div>
-            </div>
 
-            {{-- リサイズハンドル 1 --}}
-            <div class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('history', $event)"></div>
+                {{-- Resize Handle 1 --}}
+                <div class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('history', $event)"></div>
 
-            {{-- 中ペイン (返信フォーム) --}}
-            <div class="flex-1 resizable-panel bg-white">
-                <div class="scrollable-area custom-scrollbar">
-                    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between shrink-0 bg-gray-50/50">
-                        <span class="text-xs font-semibold text-gray-500" x-text="composeMode ? '新規メッセージ' : '返信フォーム'"></span>
-                    </div>
-
-                    <div class="p-5 space-y-4">
-                        {{-- To, CC, BCC --}}
+                {{-- Center: Compose Form --}}
+                <div class="flex-1 bg-white flex flex-col overflow-hidden">
+                    <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4">
                         <div class="space-y-2.5">
                             <div class="relative">
                                 <label class="text-[10px] font-semibold text-gray-400 uppercase absolute left-3 top-1.5 z-10">宛先 (To)</label>
@@ -529,12 +574,10 @@
                                 <div class="relative"><label class="text-[10px] font-semibold text-gray-400 uppercase absolute left-3 top-1.5 z-10">Bcc</label><input type="text" x-model="replyBcc" class="w-full pt-6 pb-2 px-3 bg-gray-50 border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200"></div>
                             </div>
                         </div>
-                        {{-- Body --}}
                         <div>
                             <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">メッセージ本文</label>
                             <textarea x-model="replyBody" rows="16" class="w-full text-sm border border-gray-200 bg-gray-50 rounded-2xl p-4 focus:ring-2 focus:ring-blue-200 outline-none leading-relaxed resize-none email-body-text" placeholder="返信内容を入力してください..."></textarea>
                         </div>
-                        {{-- Attachments --}}
                         <div>
                             <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1.5 block">添付ファイル</label>
                             <input type="file" multiple @change="handleFileSelect($event)" class="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:bg-blue-600 file:text-white file:font-semibold cursor-pointer">
@@ -544,7 +587,6 @@
                                 </template>
                             </div>
                         </div>
-                        {{-- Send button --}}
                         <div class="pt-2 pb-8">
                             <button @click="submitReply()" :disabled="!replyBody || sendingReply"
                                 class="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-bold text-sm shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-3 disabled:opacity-50">
@@ -554,38 +596,24 @@
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {{-- リサイズハンドル 2 (AI用) --}}
-            <div x-show="replyAiPanelOpen" class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('ai', $event)"></div>
+                {{-- Resize Handle 2 --}}
+                <div x-show="replyAiPanelOpen" class="resize-handle-h" :class="isResizingOverlay ? 'is-resizing' : ''" @mousedown.prevent="startResizeOverlay('ai', $event)"></div>
 
-            {{-- 右ペイン (AI Assistant Drawer) --}}
-            <aside x-show="replyAiPanelOpen"
-                x-transition:enter="transition ease-in-out duration-300 transform"
-                x-transition:enter-start="translate-x-full"
-                x-transition:enter-end="translate-x-0"
-                x-transition:leave="transition ease-in-out duration-300 transform"
-                x-transition:leave-start="translate-x-0"
-                x-transition:leave-end="translate-x-full"
-                :style="'width:' + overlayAiWidth + 'px'"
-                class="shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden relative z-40 shadow-2xl">
-                
-                <div class="ai-drawer-internal">
-                    {{-- Drawer Header --}}
+                {{-- Right: AI Assistant Drawer --}}
+                <aside x-show="replyAiPanelOpen"
+                    :style="'width:' + overlayAiWidth + 'px'"
+                    class="shrink-0 border-l border-gray-200 bg-white flex flex-col overflow-hidden relative shadow-2xl">
                     <div class="px-6 py-4 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
                         <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
                             AIアシスタント解析
                         </h3>
                         <div class="flex items-center gap-2">
-                            <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">設定</button>
                             <button @click="replyAiPanelOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
                         </div>
                     </div>
-
-                    {{-- Drawer Body --}}
-                    <div class="scrollable-area p-6 space-y-6 custom-scrollbar">
-                        {{-- Input Area --}}
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
                         <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-4">
                             <div class="space-y-3">
                                 <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示・追加コンテキスト</label>
@@ -602,96 +630,34 @@
                                 </button>
                             </div>
                         </div>
-
-                        {{-- Loading Indicator --}}
                         <div x-show="aiLoading" class="flex flex-col items-center justify-center py-12 space-y-4">
                             <div class="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
                             <p class="text-sm font-bold text-indigo-400 animate-pulse">AIが解析しています...</p>
                         </div>
-
-                        {{-- 3-Column Analysis Grid --}}
-                        <div x-show="aiAnalysis && !aiLoading" class="grid grid-cols-3 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            {{-- Col 1: Context --}}
+                        <div x-show="aiAnalysis && !aiLoading" class="grid grid-cols-3 gap-4">
                             <div class="space-y-3">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-width="2"/></svg>
-                                    状況分析
-                                </h4>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">状況分析</h4>
                                 <div class="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed min-h-[300px]" x-text="aiAnalysis.columns.left.content"></div>
                             </div>
-
-                            {{-- Col 2: Draft --}}
                             <div class="space-y-3">
                                 <div class="flex items-center justify-between">
-                                    <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" stroke-width="2"/></svg>
-                                        返信案
-                                    </h4>
-                                    <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm">反映する</button>
+                                    <h4 class="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">返信案</h4>
+                                    <button @click="applyAiDraft()" class="text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all">反映</button>
                                 </div>
                                 <div class="text-[11px] text-gray-800 whitespace-pre-wrap bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100 leading-relaxed font-medium min-h-[300px]" x-text="aiAnalysis.columns.center.body"></div>
                             </div>
-
-                            {{-- Col 3: Advice --}}
                             <div class="space-y-3">
-                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" stroke-width="2"/></svg>
-                                    アドバイス / 検証
-                                </h4>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">アドバイス</h4>
                                 <div class="text-[11px] text-gray-600 whitespace-pre-wrap bg-gray-50 p-4 rounded-2xl border border-gray-100 leading-relaxed min-h-[300px]" x-text="aiAnalysis.columns.right.content"></div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </aside>
+                </aside>
+            </div>
         </div>
     </div>
 
-    {{-- ====================================================== --}}
-    {{-- スタンドアロン AI ドロワー (メール一覧から開くとき)      --}}
-    {{-- ====================================================== --}}
-    <div x-show="aiDrawerOpen"
-        x-transition:enter="transition ease-out duration-300"
-        x-transition:enter-start="translate-x-full opacity-0"
-        x-transition:enter-end="translate-x-0 opacity-100"
-        x-transition:leave="transition ease-in duration-200"
-        x-transition:leave-start="translate-x-0 opacity-100"
-        x-transition:leave-end="translate-x-full opacity-0"
-        style="position:fixed;top:0;right:0;height:100vh;width:420px;z-index:1040;"
-        class="bg-white border-l border-indigo-100 shadow-2xl flex flex-col">
-        <div class="px-6 py-5 border-b border-indigo-50 bg-indigo-50/20 flex items-center justify-between shrink-0">
-            <h3 class="text-sm font-bold text-indigo-700 flex items-center gap-2">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .03 2.798-1.415 2.798H4.213c-1.445 0-2.414-1.798-1.414-2.798L4 15.298"/></svg>
-                AIアシスタント
-            </h3>
-            <div class="flex items-center gap-2">
-                <button @click="defaultPromptModalOpen = true" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-700 bg-white border border-indigo-100 px-3 py-1.5 rounded-lg transition-all">デフォルト設定</button>
-                <button @click="aiDrawerOpen = false" class="text-gray-400 hover:text-indigo-600 p-1.5 bg-white rounded-full border border-gray-100 shadow-sm transition-all"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-width="2.5"/></svg></button>
-            </div>
-        </div>
-        <div class="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
-            <div class="bg-indigo-50/40 rounded-2xl p-5 border border-indigo-100 space-y-3">
-                <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest block">AIへの指示プロンプト</label>
-                <textarea x-model="aiUserPrompt" rows="6" class="w-full text-sm border border-indigo-100 bg-white rounded-xl p-3 focus:ring-2 focus:ring-indigo-200 outline-none leading-relaxed resize-none" placeholder="指示をここに書いてください... (空欄ならデフォルト指示を使用)"></textarea>
-                <div>
-                    <label class="text-[10px] font-semibold text-gray-400 uppercase mb-1 block">参考URL (オプション)</label>
-                    <input type="url" x-model="aiScrapeUrl" placeholder="https://..." class="w-full text-sm border border-gray-200 bg-white rounded-xl px-3 py-2.5 focus:ring-2 focus:ring-indigo-200 outline-none">
-                </div>
-                <button @click="askAiForReply()" :disabled="aiLoading" class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
-                    <svg class="w-4 h-4" :class="aiLoading ? 'animate-spin' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-width="2.5"/></svg>
-                    返信案を生成
-                </button>
-            </div>
-            <div x-show="aiLoading" class="text-center text-indigo-400 animate-pulse text-xs font-semibold uppercase tracking-wider">AI is thinking...</div>
-            <div x-show="aiAnalysis && !aiLoading" class="space-y-2">
-                <div class="flex items-center justify-between">
-                    <label class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">生成された返信案</label>
-                    <button @click="replyBody = aiAnalysis.columns.center.body; openReplyOverlay(null)" class="text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-indigo-100 transition-all">返信フォームへ</button>
-                </div>
-                <div class="bg-gray-50 rounded-2xl p-4 text-sm text-gray-700 leading-relaxed border border-gray-100" x-text="aiAnalysis.columns.center.body"></div>
-            </div>
-        </div>
-    </div>
+    </div> {{-- End of Main Workspace Container --}}
 
     {{-- デフォルトプロンプト設定モーダル --}}
     <template x-if="defaultPromptModalOpen">
@@ -798,6 +764,7 @@ function newSearchParams(obj) { return new URLSearchParams(obj); }
 function emailApp() {
     return {
         // UI Layout States
+        sidebarVisible: true, isComposing: false,
         navPanelOpen: false, tagPanelOpen: false, customerModalOpen: false, customerGroupModalOpen: false, fetching: false, 
         detailTab: 'thread', tagEditorOpen: false, assignDropdownOpen: false, loadingThread: false, 
         fullThreadMode: false, isListMaximizing: false, openGroupIds: [], expandedMemoMode: false,
@@ -807,6 +774,7 @@ function emailApp() {
         // Resizing State
         sidebarWidth: parseInt(localStorage.getItem('sidebarWidth')) || 64,
         navPanelWidth: parseInt(localStorage.getItem('navPanelWidth')) || 280,
+        threadWidth: parseInt(localStorage.getItem('threadWidth')) || 350,
 
         // Selection & Long Press
         selectionMode: false, selectedThreadIds: [], longPressTimer: null, isLongPressing: false,
@@ -902,6 +870,7 @@ function emailApp() {
 
         // AI panel opener — can be called from email list (pass thread only) or thread card (pass email)
         async openAiPanel(thread, email = null) {
+            this.sidebarVisible = false;
             if (thread && thread.id !== this.selectedThreadId) {
                 await this.loadThread(thread.id);
             }
@@ -1164,11 +1133,16 @@ function emailApp() {
             this.aiScrapeUrl = '';
             this.replyAiPanelOpen = false;
             this.replyOverlayOpen = true;
+            this.composeMode = true; // 返信モードをオンにする
+            this.$nextTick(() => {
+                const el = document.querySelector('textarea[x-model="replyBody"]');
+                if (el) el.focus();
+            });
         },
         closeReplyOverlay() {
             this.replyOverlayOpen = false;
             this.replyAiPanelOpen = false;
-            this.composeMode = false;
+            this.composeMode = false; // 返信モードをオフにする
             this.selectedFiles = [];
         },
         async quickCreateAndAssign() {

@@ -114,4 +114,12 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | SSO and Invitation Settings
+    |--------------------------------------------------------------------------
+    */
+    'sso_require_invitation' => env('SSO_REQUIRE_INVITATION', true),
+    'allowed_sso_providers' => ['google'],
+
 ];

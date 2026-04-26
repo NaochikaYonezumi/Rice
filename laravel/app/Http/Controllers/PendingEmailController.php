@@ -31,7 +31,7 @@ class PendingEmailController extends Controller
             });
         }
 
-        $pending = $query->with(['inReplyToEmail.thread'])
+        $pending = $query->with(['inReplyToEmail.thread', 'creator'])
             ->orderByDesc('created_at')
             ->get()
             ->map(fn($p) => [
@@ -45,7 +45,8 @@ class PendingEmailController extends Controller
                 'body'             => $p->body,
                 'body_preview'     => $p->body_preview,
                 'created_at'       => $p->created_at?->format('Y/m/d H:i'),
-                'created_by'       => $p->created_by,
+                'created_by'       => $p->creator?->name ?? $p->created_by,
+                'created_by_user_id' => $p->created_by_user_id,
                 'memo'             => $p->memo,
                 'attachments'      => collect($p->attachment_paths ?? [])->map(
                     fn($a) => [
@@ -154,8 +155,9 @@ class PendingEmailController extends Controller
                 }
 
                 $pending->update([
-                    'status'      => PendingEmail::STATUS_APPROVED,
-                    'approved_at' => now(),
+                    'status'               => PendingEmail::STATUS_APPROVED,
+                    'approved_at'          => now(),
+                    'approved_by_user_id' => auth()->id(),
                 ]);
             });
 
@@ -171,7 +173,10 @@ class PendingEmailController extends Controller
             return response()->json(['status' => 'error', 'message' => 'このメールは既に処理済みです'], 422);
         }
 
-        $pending->update(['status' => PendingEmail::STATUS_REJECTED]);
+        $pending->update([
+            'status' => PendingEmail::STATUS_REJECTED,
+            'rejected_by_user_id' => auth()->id(),
+        ]);
 
         return response()->json(['status' => 'ok']);
     }

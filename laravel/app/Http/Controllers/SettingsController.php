@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AiSetting;
 use App\Models\MailSetting;
+use App\Models\SsoSetting;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -98,5 +99,34 @@ class SettingsController extends Controller
         }
 
         return redirect()->route('settings.ai')->with('success', '設定を保存しました');
+    }
+
+    public function sso()
+    {
+        $settings = SsoSetting::getSettings();
+        return view('settings.sso', compact('settings'));
+    }
+
+    public function updateSso(Request $request)
+    {
+        $validated = $request->validate([
+            'is_enabled'           => 'nullable|boolean',
+            'google_client_id'     => 'nullable|string|max:255',
+            'google_client_secret' => 'nullable|string|max:255',
+            'google_redirect_uri'  => 'nullable|url|max:500',
+            'require_invitation'   => 'nullable|boolean',
+        ]);
+
+        $settings = SsoSetting::getSettings();
+        
+        $settings->update([
+            'is_enabled'           => $request->has('is_enabled'),
+            'google_client_id'     => $validated['google_client_id'],
+            'google_client_secret' => $validated['google_client_secret'],
+            'google_redirect_uri'  => $validated['google_redirect_uri'],
+            'require_invitation'   => $request->has('require_invitation'),
+        ]);
+
+        return redirect()->route('settings.sso')->with('success', 'SSO設定を保存しました');
     }
 }

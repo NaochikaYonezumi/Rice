@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Invitation;
 use App\Models\User;
+use App\Models\SsoSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
@@ -17,9 +18,16 @@ class SocialiteController extends Controller
      */
     public function redirect(string $provider): RedirectResponse
     {
+        $settings = SsoSetting::getSettings();
+        if (!$settings->is_enabled) {
+            return redirect()->route('login')->with('error', 'SSOログインは現在無効です。');
+        }
+
         if (! in_array($provider, config('auth.allowed_sso_providers', ['google']))) {
             abort(404);
         }
+
+        $this->configureProvider($provider, $settings);
 
         return Socialite::driver($provider)->redirect();
     }
@@ -29,9 +37,13 @@ class SocialiteController extends Controller
      */
     public function callback(string $provider): RedirectResponse
     {
+        $settings = SsoSetting::getSettings();
+        
         if (! in_array($provider, config('auth.allowed_sso_providers', ['google']))) {
             abort(404);
         }
+
+        $this->configureProvider($provider, $settings);
 
         try {
             $socialUser = Socialite::driver($provider)->user();
@@ -47,7 +59,7 @@ class SocialiteController extends Controller
         }
 
         // SSO Require Invitation logic
-        if (config('auth.sso_require_invitation', true)) {
+        if ($settings->require_invitation) {
             $invitation = Invitation::where('email', $socialUser->getEmail())
                 ->whereNull('accepted_at')
                 ->where('expires_at', '>', now())
@@ -72,7 +84,7 @@ class SocialiteController extends Controller
             return redirect()->intended(route('emails.index', absolute: false));
         }
 
-        // If signup is disabled and no invitation found (and not required, but let's be safe)
+        // If signup is disabled and no invitation found
         if (! config('app.signup_enabled', false)) {
             return redirect()->route('login')->with('error', '新規登録は現在停止されています。');
         }
@@ -88,5 +100,19 @@ class SocialiteController extends Controller
 
         Auth::login($user);
         return redirect()->intended(route('emails.index', absolute: false));
+    }
+
+    /**
+     * Configure Socialite provider at runtime.
+     */
+    private function configureProvider(string $provider, SsoSetting $settings): void
+    {
+        if ($provider === 'google') {
+            config([
+                'services.google.client_id' => $settings->google_client_id,
+                'services.google.client_secret' => $settings->google_client_secret,
+                'services.google.redirect' => $settings->google_redirect_uri,
+            ]);
+        }
     }
 }

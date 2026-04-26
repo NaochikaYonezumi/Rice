@@ -10,7 +10,7 @@ class Email extends Model
 {
     protected $fillable = [
         'thread_id', 'message_id', 'in_reply_to', 'subject',
-        'from_address', 'from_name', 'to_address', 'cc',
+        'from_address', 'from_name', 'to_address', 'cc', 'bcc',
         'body_text', 'body_html', 'is_read', 'received_at',
     ];
 

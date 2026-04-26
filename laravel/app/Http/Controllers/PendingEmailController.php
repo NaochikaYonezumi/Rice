@@ -31,7 +31,7 @@ class PendingEmailController extends Controller
             });
         }
 
-        $pending = $query->with('inReplyToEmail')
+        $pending = $query->with(['inReplyToEmail.thread'])
             ->orderByDesc('created_at')
             ->get()
             ->map(fn($p) => [
@@ -40,14 +40,18 @@ class PendingEmailController extends Controller
                 'reply_type_label' => $p->reply_type_label,
                 'to_address'       => $p->to_address,
                 'cc'               => $p->cc,
+                'bcc'              => $p->bcc,
                 'subject'          => $p->subject,
                 'body'             => $p->body,
                 'body_preview'     => $p->body_preview,
-                'created_at'       => $p->created_at?->diffForHumans(),
+                'created_at'       => $p->created_at?->format('Y/m/d H:i'),
                 'created_by'       => $p->created_by,
                 'memo'             => $p->memo,
                 'attachments'      => collect($p->attachment_paths ?? [])->map(
-                    fn($a) => ['filename' => $a['filename'], 'size' => round(($a['size'] ?? 0) / 1024, 1) . ' KB']
+                    fn($a) => [
+                        'filename' => basename($a), 
+                        'size' => round(Storage::disk('private')->exists($a) ? Storage::disk('private')->size($a) / 1024 : 0, 1) . ' KB'
+                    ]
                 )->values(),
                 'in_reply_to'      => $p->inReplyToEmail ? [
                     'id'           => $p->inReplyToEmail->id,
@@ -55,7 +59,7 @@ class PendingEmailController extends Controller
                     'subject'      => $p->inReplyToEmail->subject,
                     'from_label'   => $p->inReplyToEmail->from_label,
                     'from_address' => $p->inReplyToEmail->from_address,
-                    'plain_body'   => \Illuminate\Support\Str::limit($p->inReplyToEmail->plain_body, 400),
+                    'plain_body'   => \Illuminate\Support\Str::limit($p->inReplyToEmail->plain_body, 1000),
                     'received_at'  => $p->inReplyToEmail->received_at?->format('Y/m/d H:i'),
                 ] : null,
             ]);
@@ -83,6 +87,10 @@ class PendingEmailController extends Controller
 
                     if ($pending->cc) {
                         $message->cc(array_map('trim', explode(',', $pending->cc)));
+                    }
+
+                    if ($pending->bcc) {
+                        $message->bcc(array_map('trim', explode(',', $pending->bcc)));
                     }
 
                     if ($pending->reply_type !== PendingEmail::TYPE_COMPOSE && $pending->inReplyToEmail) {
@@ -118,6 +126,7 @@ class PendingEmailController extends Controller
                     'from_name'    => $settings->smtp_from_name,
                     'to_address'   => $pending->to_address,
                     'cc'           => $pending->cc,
+                    'bcc'          => $pending->bcc,
                     'body_text'    => $pending->body,
                     'received_at'  => now(),
                 ]);

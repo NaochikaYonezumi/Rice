@@ -122,17 +122,56 @@ class EmailController extends Controller
             'cc' => 'nullable|string',
             'bcc' => 'nullable|string',
             'body' => 'required|string',
+            'created_by' => 'nullable|string',
             'attachments.*' => 'file|max:20480', // 20MB
         ]);
 
         $pending = new PendingEmail();
         $pending->email_thread_id = $email->email_thread_id;
-        $pending->to = $validated['to'];
+        $pending->in_reply_to_email_id = $email->id;
+        $pending->reply_type = PendingEmail::TYPE_REPLY;
+        $pending->to_address = $validated['to'];
         $pending->cc = $validated['cc'] ?? null;
         $pending->bcc = $validated['bcc'] ?? null;
         $pending->subject = "Re: " . $email->subject;
         $pending->body = $validated['body'];
-        $pending->status = 'pending';
+        $pending->status = PendingEmail::STATUS_PENDING;
+        $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
+        
+        $paths = [];
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                $paths[] = $file->store('attachments/pending', 'private');
+            }
+        }
+        $pending->attachment_paths = $paths;
+        $pending->save();
+
+        return response()->json(['status' => 'ok', 'id' => $pending->id]);
+    }
+
+    // 新規作成予約 (承認待ち)
+    public function compose(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'to' => 'required|string',
+            'cc' => 'nullable|string',
+            'bcc' => 'nullable|string',
+            'body' => 'required|string',
+            'subject' => 'nullable|string',
+            'created_by' => 'nullable|string',
+            'attachments.*' => 'file|max:20480',
+        ]);
+
+        $pending = new PendingEmail();
+        $pending->reply_type = PendingEmail::TYPE_COMPOSE;
+        $pending->to_address = $validated['to'];
+        $pending->cc = $validated['cc'] ?? null;
+        $pending->bcc = $validated['bcc'] ?? null;
+        $pending->subject = $validated['subject'] ?? '(無題)';
+        $pending->body = $validated['body'];
+        $pending->status = PendingEmail::STATUS_PENDING;
+        $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         
         $paths = [];
         if ($request->hasFile('attachments')) {

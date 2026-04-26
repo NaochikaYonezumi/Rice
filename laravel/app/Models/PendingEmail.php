@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PendingEmail extends Model
 {
     protected $fillable = [
-        'in_reply_to_email_id', 'reply_type', 'to_address', 'cc', 'subject', 'body',
+        'in_reply_to_email_id', 'reply_type', 'to_address', 'cc', 'bcc', 'subject', 'body',
         'attachment_paths', 'status', 'approved_at', 'created_by', 'memo',
     ];
 

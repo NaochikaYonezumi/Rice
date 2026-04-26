@@ -10,6 +10,7 @@ class PendingEmail extends Model
     protected $fillable = [
         'in_reply_to_email_id', 'reply_type', 'to_address', 'cc', 'bcc', 'subject', 'body',
         'attachment_paths', 'status', 'approved_at', 'created_by', 'memo',
+        'created_by_user_id', 'approved_by_user_id', 'rejected_by_user_id',
     ];
 
     protected $casts = [
@@ -28,6 +29,21 @@ class PendingEmail extends Model
     public function inReplyToEmail(): BelongsTo
     {
         return $this->belongsTo(Email::class, 'in_reply_to_email_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by_user_id');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by_user_id');
+    }
+
+    public function rejecter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by_user_id');
     }
 
     public function getReplyTypeLabelAttribute(): string

@@ -43,7 +43,7 @@
                             <span class="text-[10px] font-black text-white bg-blue-600 px-2 py-0.5 rounded uppercase tracking-tighter shrink-0"
                                 x-text="p.reply_type_label"></span>
                             <span class="text-xs font-bold text-gray-600 truncate"
-                                x-text="(p.created_by || '不明') + ' からの依頼'"></span>
+                                x-text="p.created_by_user_id === {{ auth()->id() }} ? 'あなたの依頼' : (p.created_by || '不明') + ' からの依頼'"></span>
                         </div>
                         <span class="text-[10px] font-bold text-gray-400 shrink-0" x-text="p.created_at"></span>
                     </div>
@@ -95,17 +95,26 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-4 shrink-0 pt-2">
-                        <button @click="reject(selectedEmail)"
-                            :disabled="actionLoading"
-                            class="bg-white hover:bg-red-50 text-red-600 border-2 border-red-100 text-xs px-8 py-3 rounded-2xl font-black shadow-sm transition-all disabled:opacity-50">
-                            却下する
-                        </button>
-                        <button @click="approve(selectedEmail)"
-                            :disabled="actionLoading"
-                            class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-10 py-3 rounded-2xl font-black shadow-xl shadow-blue-100 transition-all flex items-center gap-2 disabled:opacity-50">
-                            <span x-text="actionLoading ? '処理中...' : '承認・送信実行'"></span>
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                        </button>
+                        <template x-if="selectedEmail.created_by_user_id === {{ auth()->id() }}">
+                            <span class="text-xs font-black text-amber-600 bg-amber-50 px-4 py-2 rounded-xl border border-amber-100">
+                                自身の依頼は承認・却下できません
+                            </span>
+                        </template>
+                        <template x-if="selectedEmail.created_by_user_id !== {{ auth()->id() }}">
+                            <div class="flex items-center gap-4">
+                                <button @click="reject(selectedEmail)"
+                                    :disabled="actionLoading"
+                                    class="bg-white hover:bg-red-50 text-red-600 border-2 border-red-100 text-xs px-8 py-3 rounded-2xl font-black shadow-sm transition-all disabled:opacity-50">
+                                    却下する
+                                </button>
+                                <button @click="approve(selectedEmail)"
+                                    :disabled="actionLoading"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white text-xs px-10 py-3 rounded-2xl font-black shadow-xl shadow-blue-100 transition-all flex items-center gap-2 disabled:opacity-50">
+                                    <span x-text="actionLoading ? '処理中...' : '承認・送信実行'"></span>
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                                </button>
+                            </div>
+                        </template>
                     </div>
                 </div>
 

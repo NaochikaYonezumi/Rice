@@ -6,9 +6,10 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['email', 'token', 'role', 'expires_at', 'accepted_at', 'invited_by'])]
 class Invitation extends Model
 {
+    protected $fillable = ['email', 'token', 'role', 'expires_at', 'accepted_at', 'invited_by'];
+
     protected $casts = [
         'expires_at' => 'datetime',
         'accepted_at' => 'datetime',

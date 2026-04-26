@@ -21,7 +21,7 @@
 </head>
 <body class="h-full bg-gray-50 text-gray-800 font-sans">
 
-<div class="flex min-h-screen">
+<div class="flex h-full">
     {{-- グローバルサイドナビ --}}
     <nav
         x-data="{
@@ -98,7 +98,7 @@
 
         {{-- 管理者専用セクション --}}
         @if(auth()->user()->isAdmin())
-            <div x-show="open" class="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mt-3 mb-1 whitespace-nowrap border-t border-gray-800 pt-3">管理者メニュー</div>
+            <div x-show="open" class="text-xs font-bold text-gray-500 uppercase tracking-wider px-3 mt-3 mb-1 whitespace-nowrap border-t border-gray-800 pt-3">Administration</div>
             <a href="{{ route('admin.invitations.index') }}"
                :title="!open ? '招待管理' : ''"
                class="flex items-center gap-2 mx-2 px-2 py-1.5 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('admin.invitations.*') ? 'bg-gray-700 text-white font-bold' : 'text-gray-400' }}">
@@ -112,12 +112,6 @@
                class="flex items-center gap-2 mx-2 px-2 py-1.5 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('settings.ai*') ? 'bg-gray-700 text-white font-bold' : 'text-gray-400' }}">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                 <span x-show="open" class="whitespace-nowrap">AI設定</span>
-            </a>
-            <a href="{{ route('settings.sso') }}"
-               :title="!open ? 'SSO設定' : ''"
-               class="flex items-center gap-2 mx-2 px-2 py-1.5 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('settings.sso*') ? 'bg-gray-700 text-white font-bold' : 'text-gray-400' }}">
-                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-                <span x-show="open" class="whitespace-nowrap">SSO設定</span>
             </a>
             <a href="{{ route('settings.mail') }}"
                :title="!open ? 'メール設定' : ''"
@@ -155,12 +149,12 @@
                 </button>
 
                 <div x-show="userOpen" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" class="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-2xl shadow-2xl z-[100] py-2 overflow-hidden">
-                    <a href="{{ route('profile.edit') }}" class="block px-5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">プロフィール設定</a>
+                    <a href="{{ route('profile.edit') }}" class="block px-5 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50">Profile Settings</a>
                     <div class="border-t border-gray-100 my-1"></div>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="w-full text-left px-5 py-2 text-xs font-bold text-red-500 hover:bg-red-50 transition-colors">
-                            ログアウト
+                            Log Out
                         </button>
                     </form>
                 </div>

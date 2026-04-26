@@ -141,6 +141,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/settings/mail', [SettingsController::class, 'updateMail'])->name('settings.mail.update');
         Route::get('/settings/ai', [SettingsController::class, 'ai'])->name('settings.ai');
         Route::post('/settings/ai', [SettingsController::class, 'updateAi'])->name('settings.ai.update');
+        Route::get('/settings/sso', [SettingsController::class, 'sso'])->name('settings.sso');
+        Route::post('/settings/sso', [SettingsController::class, 'updateSso'])->name('settings.sso.update');
 
         Route::get('/admin/invitations', [InvitationController::class, 'index'])->name('admin.invitations.index');
         Route::post('/admin/invitations', [InvitationController::class, 'store'])->name('admin.invitations.store');

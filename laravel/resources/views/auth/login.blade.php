@@ -1,66 +1,76 @@
-<x-guest-layout>
-    <h2 class="text-2xl font-black text-center text-gray-900 mb-8 tracking-tighter uppercase">ログイン</h2>
-
-    <!-- Session Status -->
-    <x-auth-session-status class="mb-4" :status="session('status')" />
-    @if(session('error'))
-        <div class="mb-4 font-bold text-sm text-red-600 text-center bg-red-50 p-3 rounded-xl border border-red-100">
-            {{ session('error') }}
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ログイン | Rice</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body class="hold-transition login-page bg-light">
+<div class="login-box">
+    <div class="login-logo">
+        <b>Rice</b>
+    </div>
+    <div class="card card-outline card-primary">
+        <div class="card-header text-center">
+            <h1 class="h4">ログイン</h1>
         </div>
-    @endif
-
-    <form method="POST" action="{{ route('login') }}" class="space-y-6">
-        @csrf
-
-        <!-- Email Address -->
-        <div class="space-y-1">
-            <label for="email" class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">メールアドレス</label>
-            <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus autocomplete="username"
-                class="block w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
-        </div>
-
-        <!-- Password -->
-        <div class="space-y-1">
-            <label for="password" class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">パスワード</label>
-            <input id="password" type="password" name="password" required autocomplete="current-password"
-                class="block w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner" />
-            <x-input-error :messages="$errors->get('password')" class="mt-2" />
-        </div>
-
-        <!-- Remember Me -->
-        <div class="flex items-center justify-between px-1">
-            <label for="remember_me" class="inline-flex items-center">
-                <input id="remember_me" type="checkbox" class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500" name="remember">
-                <span class="ms-2 text-sm font-bold text-gray-400">ログイン状態を保持する</span>
-            </label>
-            @if (Route::has('password.request'))
-                <a class="text-sm font-bold text-blue-600 hover:text-blue-700 transition-colors" href="{{ route('password.request') }}">
-                    パスワードを忘れた場合
-                </a>
+        <div class="card-body">
+            @if(session('error'))
+                <div class="alert alert-danger text-sm">
+                    {{ session('error') }}
+                </div>
             @endif
-        </div>
 
-        <div class="pt-4 flex flex-col gap-4">
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-[0.98]">
-                ログイン
-            </button>
+            <form action="{{ route('login') }}" method="post">
+                @csrf
+                <div class="input-group mb-3">
+                    <input type="email" name="email" class="form-control" placeholder="メールアドレス" required autofocus>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-envelope"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-group mb-3">
+                    <input type="password" name="password" class="form-control" placeholder="パスワード" required>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-lock"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-8">
+                        <div class="icheck-primary">
+                            <input type="checkbox" id="remember" name="remember">
+                            <label for="remember">ログイン状態を保持</label>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <button type="submit" class="btn btn-primary btn-block">ログイン</button>
+                    </div>
+                </div>
+            </form>
 
-            <div class="relative py-4 flex items-center justify-center">
-                <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-100"></div></div>
-                <span class="relative bg-white px-4 text-[10px] font-black text-gray-300 uppercase tracking-widest">または</span>
+            <div class="social-auth-links text-center mt-4 mb-3">
+                <p>- OR -</p>
+                <a href="{{ route('auth.redirect', ['provider' => 'azure']) }}" class="btn btn-block btn-outline-primary">
+                    <i class="fab fa-microsoft mr-2"></i> Microsoftアカウントでログイン
+                </a>
             </div>
 
-            <a href="{{ route('auth.redirect', 'google') }}" class="w-full bg-white border-2 border-gray-100 hover:border-gray-200 text-gray-700 font-bold py-4 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-3 active:scale-[0.98]">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5">
-                Googleでログイン
-            </a>
-            
-            @if (config('app.signup_enabled', false))
-                <a class="text-center text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors mt-2" href="{{ route('register') }}">
-                    新規アカウント作成
-                </a>
+            @if(Route::has('password.request'))
+                <p class="mb-1">
+                    <a href="{{ route('password.request') }}" class="text-sm">パスワードを忘れた場合</a>
+                </p>
             @endif
         </div>
-    </form>
-</x-guest-layout>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

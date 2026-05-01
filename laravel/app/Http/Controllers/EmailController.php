@@ -7,117 +7,102 @@ use App\Models\Email;
 use App\Models\EmailAttachment;
 use App\Models\EmailThread;
 use App\Models\PendingEmail;
-use App\Services\EmailFetchService;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Modules\MailClient\Services\EmailFetcher;
 
 class EmailController extends Controller
 {
     public function __construct(private RagApiService $ragApi) {}
 
-    public function index() { return view('emails.index'); }
+    public function index() { return view('emails.index', ['isPinnedView' => false]); }
 
-    // AIアシスタントによる返信案・分析生成
+    public function pinned() { return view('emails.index', ['isPinnedView' => true]); }
+
+    public function fetch(EmailFetcher $fetcher): JsonResponse
+    {
+        try {
+            $count = $fetcher->fetch();
+            return response()->json(['status' => 'ok', 'count' => $count]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'error' => $e->getMessage(),
+                'stack' => $e->getTraceAsString()
+            ], 500);
+        }
+    }
+
+    // AIアシスタントによる生成 (スキル選択・コンテキスト強化)
     public function askAi(Request $request, Email $email): JsonResponse
     {
         $userPrompt = trim($request->input('prompt', ''));
-        $scrapeUrl  = trim($request->input('url', ''));
-        
-        // 画面上の現在の入力値
-        $currentTo  = $request->input('current_to', []);
-        $currentCc  = $request->input('current_cc', []);
-        $currentBcc = $request->input('current_bcc', []);
+        $skillKey   = $request->input('skill', 'reply');
+        $skills     = config('ai_skills.skills');
+        $selectedSkill = $skills[$skillKey] ?? $skills['reply'];
 
-        // AI設定
-        $aiSettings = AiSetting::getSettings();
-        if (!$userPrompt) {
-            $userPrompt = $aiSettings->default_reply_prompt ?: '丁寧で的確な返信を日本語で作成してください。';
-        }
+        // 並列コンテキスト取得
+        $responses = Http::pool(fn ($pool) => [
+            $pool->as('kb')->get("http://rag-api:8000/query", ['query' => $email->subject . " " . Str::limit($email->body_text, 100)]),
+            $pool->as('reports')->get("http://rag-api:8000/reports", ['query' => $email->subject]),
+        ]);
 
-        // 元メール情報の構築
-        $originalEmail = [
-            'from'    => $email->from_address,
-            'to'      => $email->to_address_array ?? [$email->to_address],
-            'cc'      => $email->cc_address_array ?? [],
-            'subject' => $email->subject,
-            'body'    => mb_substr($email->body_text ?: strip_tags($email->body_html ?? ''), 0, 3000),
-        ];
+        $kbContent = $responses['kb']->ok() ? ($responses['kb']->json()['answer'] ?? '') : '';
+        $reportContent = $responses['reports']->ok() ? ($responses['reports']->json()['content'] ?? '') : '';
 
-        // スレッド履歴の要約 (コンテキスト用)
+        // スレッド履歴の構築
         $threadContext = "";
         if ($email->thread) {
-            $threadEmails = $email->thread->emails()->orderBy('received_at')->get();
+            $threadEmails = $email->thread->emails()->orderBy('received_at', 'desc')->limit(5)->get()->reverse();
             foreach ($threadEmails as $te) {
-                if ($te->id === $email->id) continue;
-                $threadContext .= "--- 過去のメール ({$te->received_at}) ---\n";
-                $threadContext .= "From: {$te->from_label}\n";
-                $threadContext .= "本文: " . Str::limit($te->body_text ?: strip_tags($te->body_html ?? ''), 500) . "\n\n";
+                $threadContext .= "From: {$te->from_label}\nDate: {$te->received_at}\nBody: " . Str::limit($te->body_text, 300) . "\n---\n";
             }
         }
 
-        // 参考URL内容
-        $scrapedContent = "";
-        if ($scrapeUrl) {
-            try {
-                $html = Http::timeout(10)->get($scrapeUrl)->body();
-                $scrapedContent = "=== 参考URL ({$scrapeUrl}) ===\n" . mb_substr(strip_tags($html), 0, 2000) . "\n\n";
-            } catch (\Throwable) {}
+        $aiSettings = AiSetting::getSettings();
+        $agentName = $aiSettings->agent_name ?: '米住 直親';
+        $signature = $aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n米住 直親";
+
+        $finalPrompt = "【システム指示】\n{$selectedSkill['system_prompt']}\n\n";
+        $finalPrompt .= "【コンテキスト: ナレッジベース】\n{$kbContent}\n\n";
+        $finalPrompt .= "【コンテキスト: 関連レポート】\n{$reportContent}\n\n";
+        $finalPrompt .= "【コンテキスト: スレッド履歴】\n{$threadContext}\n\n";
+        $finalPrompt .= "【ユーザーの追加指示】\n" . ($userPrompt ?: "特になし") . "\n\n";
+        $finalPrompt .= "【担当者情報】\n名前: {$agentName}\n署名:\n{$signature}\n\n";
+        $finalPrompt .= "【制約】必ず日本語で回答してください。";
+
+        // PIIマスキング処理
+        if ($request->boolean('mask_pii')) {
+            $patterns = [
+                '/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/' => '[EMAIL]',
+                '/(\d{2,4}-\d{2,4}-\d{4})/' => '[PHONE]',
+                '/(\d{3}-\d{4})/' => '[ZIP_CODE]',
+            ];
+            $finalPrompt = preg_replace(array_keys($patterns), array_values($patterns), $finalPrompt);
         }
 
-        // AIへの指示書 (システムプロンプト的な巨大な指示)
-        $prompt = "【役割】\nあなたは「PaperCutサポート窓口」担当者（米住 直親）のメール作成支援AIです。\n";
-        $prompt .= "以下の情報をもとに、指定されたJSON形式でのみ回答してください。\n\n";
-        $prompt .= "【入力情報】\n";
-        $prompt .= "- current_to: " . json_encode($currentTo) . "\n";
-        $prompt .= "- current_cc: " . json_encode($currentCc) . "\n";
-        $prompt .= "- current_bcc: " . json_encode($currentBcc) . "\n";
-        $prompt .= "- original_email: " . json_encode($originalEmail, JSON_UNESCAPED_UNICODE) . "\n";
-        $prompt .= "- user_email: zumin0512@gmail.com\n";
-        $prompt .= "- thread_history: \n{$threadContext}\n";
-        $prompt .= "- extra_context: \n{$scrapedContent}\n";
-        $prompt .= "- user_instruction: {$userPrompt}\n\n";
+        // RAG API経由で生成
+        $result = $this->ragApi->query($finalPrompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
         
-        $prompt .= "【出力形式・補完ロジック・各列の内容指示】\n";
-        $prompt .= "1. auto_fill: 元メールのCC/BCCから、現在の入力欄に不足しているものを抽出。自分(zumin0512@gmail.com)と送信元は除外。\n";
-        $prompt .= "2. columns.left (コンテキスト): 元メール要点、送信先属性(販売店/SIer/エンドユーザー)、やり取り傾向を日本語で記載。\n";
-        $prompt .= "3. columns.center (下書き): 返信文面。件名は具体的名に変更可。属性に応じた敬語。PaperCut MFに関する正確な記述。具体的指示があれば厳守。\n";
-        $prompt .= "4. columns.right (提案・確認): 送信前確認事項、次アクション、トーン変更理由を箇条書きで。\n\n";
-        
-        $prompt .= "【絶対制約】\n";
-        $prompt .= "- 出力は指定のJSONスキーマのみ。説明文や```jsonなどは一切不要。\n";
-        $prompt .= "- ソースにない技術情報は創作しない。不確かな場合は「こちらで確認が必要です」と明記。\n";
-        $prompt .= "- 日時・タイムゾーンは日本時間(JST)で考慮。\n\n";
-        
-        $prompt .= "JSONレスポンスを開始してください:";
-
-        // RAG API経由でLLMに問い合わせ (トップKは小さめで十分)
-        $result = $this->ragApi->query($prompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
-        
-        $answer = $result['answer'] ?? '';
-        
-        // AIがMarkdownブロックで返してきた場合のクレンジング
-        $json = preg_replace('/^```json\s*|```$/', '', trim($answer));
-        
-        try {
-            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-            return response()->json($decoded);
-        } catch (\JsonException $e) {
-            // パース失敗時は生のテキストを返す（フロントエンドでフォールバック）
-            return response()->json([
-                'error' => 'AIの回答がJSON形式ではありませんでした。',
-                'raw_text' => $answer
-            ], 500);
-        }
+        return response()->json([
+            'answer' => $result['answer'] ?? '',
+            'skill_used' => $selectedSkill['name'],
+            'sources' => [
+                'kb' => !empty($kbContent),
+                'reports' => !empty($reportContent)
+            ]
+        ]);
     }
 
     // 返信予約 (TO/CC/BCC/添付対応)
     public function reply(Request $request, Email $email): JsonResponse
     {
         $validated = $request->validate([
+            'from_address' => 'nullable|string|email',
             'to' => 'required|string',
             'cc' => 'nullable|string',
             'bcc' => 'nullable|string',
@@ -127,9 +112,9 @@ class EmailController extends Controller
         ]);
 
         $pending = new PendingEmail();
-        $pending->email_thread_id = $email->email_thread_id;
         $pending->in_reply_to_email_id = $email->id;
         $pending->reply_type = PendingEmail::TYPE_REPLY;
+        $pending->from_address = $validated['from_address'] ?? null;
         $pending->to_address = $validated['to'];
         $pending->cc = $validated['cc'] ?? null;
         $pending->bcc = $validated['bcc'] ?? null;
@@ -137,6 +122,7 @@ class EmailController extends Controller
         $pending->body = $validated['body'];
         $pending->status = PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
+        $pending->created_by_user_id = auth()->id();
         
         $paths = [];
         if ($request->hasFile('attachments')) {
@@ -154,6 +140,7 @@ class EmailController extends Controller
     public function compose(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'from_address' => 'nullable|string|email',
             'to' => 'required|string',
             'cc' => 'nullable|string',
             'bcc' => 'nullable|string',
@@ -165,6 +152,7 @@ class EmailController extends Controller
 
         $pending = new PendingEmail();
         $pending->reply_type = PendingEmail::TYPE_COMPOSE;
+        $pending->from_address = $validated['from_address'] ?? null;
         $pending->to_address = $validated['to'];
         $pending->cc = $validated['cc'] ?? null;
         $pending->bcc = $validated['bcc'] ?? null;
@@ -172,6 +160,7 @@ class EmailController extends Controller
         $pending->body = $validated['body'];
         $pending->status = PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
+        $pending->created_by_user_id = auth()->id();
         
         $paths = [];
         if ($request->hasFile('attachments')) {
@@ -192,10 +181,30 @@ class EmailController extends Controller
         $status = $request->query('status');
         $cid = $request->input('customer_id');
         $gid = $request->input('group_id');
+        $allStatus = $request->boolean('all_status');
+        $isPinned = $request->boolean('is_pinned');
+        $assigneeId = $request->input('assigned_user_id');
+        $sortKey = $request->input('sort_key', 'last_email_at');
+        $sortOrder = $request->input('sort_order', 'desc');
 
-        $threads = EmailThread::with('latestEmail', 'customer')->orderBy('last_email_at', 'desc');
+        $threads = EmailThread::with('latestEmail', 'customer', 'assignee')->withCount('threadMerges')
+            ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
+            ->orderBy($sortKey, $sortOrder);
 
-        if ($status) $threads->where('status', $status);
+        // 全表示トグルがOFFの場合のみステータスフィルタを適用
+        if (!$allStatus && $status) {
+            $threads->where('status', $status);
+        }
+
+        if ($isPinned) {
+            $threads->where('is_pinned', true);
+        }
+
+        if ($assigneeId) {
+            if ($assigneeId === 'none') $threads->whereNull('assigned_user_id');
+            else $threads->where('assigned_user_id', $assigneeId);
+        }
+
         if ($query) {
             $threads->where(function($q) use ($query) {
                 $q->where('subject', 'like', "%{$query}%")
@@ -217,11 +226,17 @@ class EmailController extends Controller
         $result = $threads->get()->map(fn($t) => [
             'id' => $t->id,
             'subject' => $t->subject,
+            'status' => $t->status,
+            'is_pinned' => $t->is_pinned,
+            'assigned_user_id' => $t->assigned_user_id,
+            'assignee' => $t->assignee ? ['id' => $t->assignee->id, 'name' => $t->assignee->name] : null,
             'last_email_at' => $t->last_email_at?->format('Y/m/d H:i'),
             'tags' => $t->tags ?? [],
             'customer_id' => $t->customer_id,
+            'customer' => $t->customer ? ['name' => $t->customer->name] : null,
             'latest_email' => $t->latestEmail ? [
                 'from_label' => $t->latestEmail->from_label,
+                'from_address' => $t->latestEmail->from_address,
                 'plain_body' => Str::limit($t->latestEmail->plain_body, 50),
             ] : null,
         ]);
@@ -229,11 +244,38 @@ class EmailController extends Controller
         return response()->json($result);
     }
 
+    public function togglePin(Request $request, EmailThread $thread): JsonResponse
+    {
+        $isPinned = $request->has('is_pinned') ? $request->boolean('is_pinned') : !$thread->is_pinned;
+        $thread->update(['is_pinned' => $isPinned]);
+        return response()->json(['status' => 'ok', 'is_pinned' => $thread->is_pinned]);
+    }
+
+    public function updateAssignee(Request $request, EmailThread $thread): JsonResponse
+    {
+        $thread->update(['assigned_user_id' => $request->input('assigned_user_id')]);
+        return response()->json(['status' => 'ok']);
+    }
+
+    public function users(): JsonResponse
+    {
+        $users = \App\Models\User::orderBy('name')->get(['id', 'name', 'email']);
+        return response()->json($users);
+    }
+
     public function thread(EmailThread $thread): JsonResponse
     {
-        $thread->load('customer');
-        $emails = $thread->emails()->with('attachments')->get()->map(fn($e) => [
+        $thread->load(['customer', 'assignee']);
+
+        $threadIds = [$thread->id];
+        $mergedSourceIds = \App\Models\ThreadMerge::where('target_thread_id', $thread->id)->pluck('source_thread_id_original')->toArray();
+        $threadIds = array_merge($threadIds, $mergedSourceIds);
+
+        $emails = \App\Models\Email::whereIn('thread_id', $threadIds)->with('attachments', 'thread')->orderBy('received_at', 'asc')->get()->map(fn($e) => [
             'id' => $e->id,
+            'thread_id' => $e->thread_id,
+            'thread_status' => $e->thread->status ?? 'inbox',
+            'thread_is_pinned' => $e->thread->is_pinned ?? false,
             'subject' => $e->subject,
             'from_label' => $e->from_label,
             'from_address' => $e->from_address,

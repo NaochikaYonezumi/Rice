@@ -8,7 +8,9 @@
         "laravel/breeze": "^2.0",
         "laravel/framework": "^11.0",
         "laravel/sanctum": "^4.0",
-        "laravel/socialite": "^5.0"
+        "laravel/socialite": "^5.0",
+        "socialiteproviders/microsoft-azure": "^5.2",
+        "webklex/laravel-imap": "*"
     },
     "require-dev": {
         "fakerphp/faker": "*",
@@ -22,6 +24,7 @@
     "autoload": {
         "psr-4": {
             "App\\": "app/",
+            "Modules\\": "Modules/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
         }

@@ -7,7 +7,15 @@ use Illuminate\Support\Facades\Crypt;
 
 class AiSetting extends Model
 {
-    protected $fillable = ['anthropic_api_key', 'gemini_api_key', 'default_provider', 'default_model', 'default_reply_prompt'];
+    protected $fillable = [
+        'anthropic_api_key', 
+        'gemini_api_key', 
+        'default_provider', 
+        'default_model', 
+        'default_reply_prompt',
+        'agent_name',
+        'agent_signature'
+    ];
 
     public static function getSettings(): self
     {

@@ -8,17 +8,28 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EmailThread extends Model
 {
-    protected $fillable = ['subject', 'last_email_at', 'tags', 'customer_id', 'status'];
+    public const STATUS_INBOX = 'inbox';
+    public const STATUS_HOLD = 'hold';
+    public const STATUS_DONE = 'completed';
+    public const STATUS_AWAITING_APPROVAL = 'pending';
+
+    protected $fillable = ['subject', 'last_email_at', 'tags', 'customer_id', 'status', 'is_pinned', 'assigned_user_id'];
 
     protected $casts = [
         'last_email_at' => 'datetime',
         'tags' => 'array',
         'status' => 'string',
+        'is_pinned' => 'boolean',
     ];
 
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function assignee(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_user_id');
     }
 
     public function emails(): HasMany

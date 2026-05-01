@@ -33,7 +33,8 @@ RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cac
  && chown -R www-data:www-data /var/lib/nginx/tmp
 
 RUN echo "upload_max_filesize=25M" > /usr/local/etc/php/conf.d/uploads.ini \
- && echo "post_max_size=25M" >> /usr/local/etc/php/conf.d/uploads.ini
+ && echo "post_max_size=25M" >> /usr/local/etc/php/conf.d/uploads.ini \
+ && echo "memory_limit=512M" >> /usr/local/etc/php/conf.d/uploads.ini
 
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf

@@ -114,5 +114,10 @@ class SocialiteController extends Controller
                 'services.google.redirect' => $settings->google_redirect_uri,
             ]);
         }
+
+        if ($provider === 'azure') {
+            // For now, it uses values from config/services.php which are backed by .env
+            // If we add azure columns to SsoSetting, we can override them here
+        }
     }
 }

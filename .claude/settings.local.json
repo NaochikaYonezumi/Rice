@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /home/nakaochi/projects/Rice/scripts/setup.sh)",
+      "Bash(curl *)",
+      "Bash(docker compose *)",
+      "Bash(grep -v \"Loading weights\\\\|Warning\\\\|BertModel\\\\|LOAD REPORT\\\\|UNEXPECTED\\\\|telemetry\\\\|HF Hub\\\\|position_ids\\\\|Notes\\\\|---\\\\| \\\\|^$\")",
+      "Bash(2>&1)",
+      "Bash(nvidia-smi)",
+      "Bash(nvidia-container-cli --version)",
+      "Bash(sudo gpg *)",
+      "Bash(sudo tee *)",
+      "Bash(sudo apt-get *)",
+      "Bash(docker exec *)",
+      "Bash(php artisan *)",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'{len\\(data\\)} results'\\); [print\\(f'  - {t[\\\\\"subject\\\\\"][:60]}'\\) for t in data[:3]]\")",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f'{len\\(data\\)} results'\\); [print\\(f'  - {t[\\\\\"subject\\\\\"][:50]}, tags={t[\\\\\"tags\\\\\"]}'\\) for t in data]\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import sys,json; lines=sys.stdin.read\\(\\); parts=lines.split\\('\\\\n'\\); [print\\(p\\) for p in parts if 'message' in p.lower\\(\\) and 'ERROR' in p]\")",
+      "Bash(grep -v \"^$\\\\|Xdebug\\\\|PHP Notice\")",
+      "Bash(docker-compose ps *)"
+    ]
+  }
+}

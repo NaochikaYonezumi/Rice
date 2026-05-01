@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Services\EmailFetchService;
+use Modules\MailClient\Services\EmailFetcher;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -15,7 +15,7 @@ class FetchEmailsJob implements ShouldQueue
 
     public int $timeout = 120;
 
-    public function handle(EmailFetchService $service): void
+    public function handle(EmailFetcher $service): void
     {
         $count = $service->fetch();
         Log::info("FetchEmailsJob: imported {$count} emails.");

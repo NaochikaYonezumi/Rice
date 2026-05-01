@@ -16,6 +16,14 @@ class MailSetting extends Model
 
     public static function getSettings(): self
     {
-        return static::firstOrCreate([]);
+        return static::firstOrCreate(['id' => 1], [
+            'smtp_port' => 587,
+            'smtp_encryption' => 'tls',
+            'inbox_protocol' => 'imap',
+            'imap_port' => 993,
+            'imap_encryption' => 'ssl',
+            'pop_port' => 995,
+            'pop_encryption' => 'ssl',
+        ]);
     }
 }

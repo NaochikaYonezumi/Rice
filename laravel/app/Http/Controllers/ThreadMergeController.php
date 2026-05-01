@@ -28,43 +28,33 @@ class ThreadMergeController extends Controller
             return response()->json(['status' => 'error', 'message' => 'マージ元にメールがありません'], 422);
         }
 
-        ThreadMerge::create([
+        // Virtual merge: only link them, do not modify or delete source thread's emails.
+        ThreadMerge::updateOrCreate([
             'target_thread_id'          => $thread->id,
             'source_thread_id_original' => $sourceThread->id,
+        ], [
             'source_subject'            => $sourceThread->subject,
             'source_tags'               => $sourceThread->tags,
             'merged_email_ids'          => $emailIds,
         ]);
-
-        Email::whereIn('id', $emailIds)->update(['thread_id' => $thread->id]);
-
-        $latestAt = Email::where('thread_id', $thread->id)->max('received_at');
-        $thread->update(['last_email_at' => $latestAt]);
-
-        $sourceThread->delete();
+        
+        // ベースメールの件名に統一 (要件)
+        $sourceThread->update(['subject' => $thread->subject]);
 
         return response()->json(['status' => 'ok']);
     }
 
     public function unmerge(ThreadMerge $threadMerge): JsonResponse
     {
-        $restoredThread = EmailThread::create([
-            'subject'       => $threadMerge->source_subject,
-            'tags'          => $threadMerge->source_tags,
-            'last_email_at' => Email::whereIn('id', $threadMerge->merged_email_ids)->max('received_at'),
-        ]);
-
-        Email::whereIn('id', $threadMerge->merged_email_ids)
-            ->update(['thread_id' => $restoredThread->id]);
-
-        $targetThread = $threadMerge->targetThread;
-        if ($targetThread) {
-            $latestAt = Email::where('thread_id', $targetThread->id)->max('received_at');
-            $targetThread->update(['last_email_at' => $latestAt]);
+        $sourceThread = EmailThread::find($threadMerge->source_thread_id_original);
+        if ($sourceThread) {
+            // Restore original subject if needed, or leave it. The requirement says:
+            // "マージ解除時、マージ中に行った個別操作の状態は各メールに保持したまま解除"
+            $sourceThread->update(['subject' => $threadMerge->source_subject]);
         }
 
         $threadMerge->delete();
 
-        return response()->json(['status' => 'ok', 'restored_thread_id' => $restoredThread->id]);
+        return response()->json(['status' => 'ok']);
     }
 }

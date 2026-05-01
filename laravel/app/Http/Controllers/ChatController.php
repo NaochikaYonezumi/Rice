@@ -23,12 +23,8 @@ class ChatController extends Controller
             $data = $this->ragApi->getModels();
             try {
                 $settings = \App\Models\AiSetting::getSettings();
-                if (!$data['has_claude_key']) {
-                    $data['has_claude_key'] = !empty($settings->anthropic_api_key);
-                }
-                if (!($data['has_gemini_key'] ?? false)) {
-                    $data['has_gemini_key'] = !empty($settings->gemini_api_key);
-                }
+                $data['has_claude_key'] = !empty($settings->anthropic_api_key);
+                $data['has_gemini_key'] = !empty($settings->gemini_api_key);
             } catch (\Throwable) {}
             return response()->json($data);
         } catch (\Exception $e) {

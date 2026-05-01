@@ -7,7 +7,7 @@ use App\Models\EmailAttachment;
 use App\Models\EmailThread;
 use App\Models\MailSetting;
 use App\Models\PendingEmail;
-use App\Services\EmailFetchService;
+use Modules\MailClient\Services\EmailFetcher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -68,10 +68,15 @@ class PendingEmailController extends Controller
         return response()->json($pending);
     }
 
-    public function approve(PendingEmail $pending, EmailFetchService $fetchService): JsonResponse
+    public function approve(PendingEmail $pending, EmailFetcher $fetchService): JsonResponse
     {
         if ($pending->status !== PendingEmail::STATUS_PENDING) {
             return response()->json(['status' => 'error', 'message' => 'このメールは既に処理済みです'], 422);
+        }
+
+        // 承認依頼をした場合に自分は承認できない制限
+        if ($pending->created_by_user_id === auth()->id()) {
+            return response()->json(['status' => 'error', 'message' => '自分が作成したメールを自分で承認することはできません。'], 403);
         }
 
         $settings = MailSetting::getSettings();
@@ -80,9 +85,10 @@ class PendingEmailController extends Controller
         try {
             DB::transaction(function () use ($pending, $settings, $fetchService) {
                 Mail::send([], [], function ($message) use ($pending, $settings) {
+                    $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
                     $message
                         ->to($pending->to_address)
-                        ->from($settings->smtp_from_address, $settings->smtp_from_name)
+                        ->from($fromAddress, $settings->smtp_from_name)
                         ->subject($pending->subject)
                         ->text($pending->body);
 
@@ -116,14 +122,15 @@ class PendingEmailController extends Controller
 
                 // 送信済みメールを記録
                 $inReplyToId = $pending->inReplyToEmail?->message_id;
-                $thread = $fetchService->resolveThread($pending->subject, $inReplyToId, $settings->smtp_from_address);
+                $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
+                $thread = $fetchService->resolveThread($pending->subject, $inReplyToId, $fromAddress);
 
                 $email = Email::create([
                     'thread_id'    => $thread->id,
                     'message_id'   => 'SENT_' . time() . '_' . uniqid(),
                     'in_reply_to'  => $inReplyToId,
                     'subject'      => $pending->subject,
-                    'from_address' => $settings->smtp_from_address,
+                    'from_address' => $fromAddress,
                     'from_name'    => $settings->smtp_from_name,
                     'to_address'   => $pending->to_address,
                     'cc'           => $pending->cc,

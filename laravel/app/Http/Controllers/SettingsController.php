@@ -79,6 +79,8 @@ class SettingsController extends Controller
             'default_provider'     => 'required|in:ollama,claude,gemini',
             'default_model'        => 'nullable|string|max:128',
             'default_reply_prompt' => 'nullable|string|max:5000',
+            'agent_name'           => 'nullable|string|max:255',
+            'agent_signature'      => 'nullable|string|max:5000',
         ]);
 
         $settings = AiSetting::getSettings();

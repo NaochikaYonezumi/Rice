@@ -120,6 +120,6 @@ return [
     |--------------------------------------------------------------------------
     */
     'sso_require_invitation' => env('SSO_REQUIRE_INVITATION', true),
-    'allowed_sso_providers' => ['google'],
+    'allowed_sso_providers' => ['google', 'azure'],
 
 ];

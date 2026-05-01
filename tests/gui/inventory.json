@@ -1,0 +1,1612 @@
+[
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "input",
+    "type": "checkbox",
+    "id": "all-status-toggle",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ピン留め",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "新規作成",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "select",
+    "type": "select",
+    "id": "",
+    "name": null,
+    "text": "全員を表示\n未設定\nAdministrator\nAdministrator",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "受信",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "保留",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "完了",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "承認待ち",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/reports",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/reports",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "input",
+    "type": "url",
+    "id": "url",
+    "name": "url",
+    "text": "",
+    "placeholder": "https://manual.example.com/",
+    "role": null
+  },
+  {
+    "route": "/knowledge",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "クローリング開始",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/chat",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "Ollama",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "Claude",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "Gemini",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "select",
+    "type": "select",
+    "id": "",
+    "name": null,
+    "text": "llama3.1\nmistral\nphi3",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": "質問を入力...",
+    "role": null
+  },
+  {
+    "route": "/chat",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "送信",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "input",
+    "type": "email",
+    "id": "",
+    "name": "email",
+    "text": "",
+    "placeholder": "user@example.com",
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "select",
+    "type": "select",
+    "id": "",
+    "name": "role",
+    "text": "Member\nAdministrator",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "招待を送信",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/admin/invitations",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "smtp_host",
+    "text": "",
+    "placeholder": "smtp.example.com",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "number",
+    "id": "",
+    "name": "smtp_port",
+    "text": "",
+    "placeholder": "587",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "select",
+    "type": "select",
+    "id": "",
+    "name": "smtp_encryption",
+    "text": "TLS\nSSL\nなし",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "smtp_username",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "password",
+    "id": "",
+    "name": "smtp_password",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "email",
+    "id": "",
+    "name": "smtp_from_address",
+    "text": "",
+    "placeholder": "no-reply@example.com",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "smtp_from_name",
+    "text": "",
+    "placeholder": "Rice Support",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "select",
+    "type": "select",
+    "id": "inbox_protocol",
+    "name": "inbox_protocol",
+    "text": "IMAP\nPOP3",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "imap_host",
+    "text": "",
+    "placeholder": "imap.example.com",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "number",
+    "id": "",
+    "name": "imap_port",
+    "text": "",
+    "placeholder": "993",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "select",
+    "type": "select",
+    "id": "",
+    "name": "imap_encryption",
+    "text": "SSL\nTLS\nなし",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "imap_username",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "password",
+    "id": "",
+    "name": "imap_password",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "imap_folder",
+    "text": "",
+    "placeholder": "INBOX",
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "設定を保存",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/mail",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "今すぐ取得",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "input",
+    "type": "password",
+    "id": "",
+    "name": "anthropic_api_key",
+    "text": "",
+    "placeholder": "変更する場合のみ入力（空欄で現在のキーを維持）",
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "表示",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "input",
+    "type": "password",
+    "id": "",
+    "name": "gemini_api_key",
+    "text": "",
+    "placeholder": "変更する場合のみ入力（空欄で現在のキーを維持）",
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "表示",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "input",
+    "type": "radio",
+    "id": "",
+    "name": "default_provider",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "input",
+    "type": "radio",
+    "id": "",
+    "name": "default_provider",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "input",
+    "type": "radio",
+    "id": "",
+    "name": "default_provider",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "select",
+    "type": "select",
+    "id": "",
+    "name": "default_model",
+    "text": "Claude 3.5 Sonnet\nClaude 3 Opus",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "textarea",
+    "type": "textarea",
+    "id": "",
+    "name": "default_reply_prompt",
+    "text": "",
+    "placeholder": "例: このスレッドの内容を把握した上で、丁寧で的確な返信を日本語で作成してください。",
+    "role": null
+  },
+  {
+    "route": "/settings/ai",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "保存",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": "button"
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "ログアウト",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール一覧",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "レポート",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ナレッジベース",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "Rice Chat",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "招待管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "メール設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "AI設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "SSO設定",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "ステータス管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "a",
+    "type": "a",
+    "id": "",
+    "name": null,
+    "text": "タグ管理",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "input",
+    "type": "checkbox",
+    "id": "",
+    "name": "is_enabled",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": "google_client_id",
+    "text": "",
+    "placeholder": "xxxxxxxxxxxx.apps.googleusercontent.com",
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "input",
+    "type": "password",
+    "id": "",
+    "name": "google_client_secret",
+    "text": "",
+    "placeholder": "••••••••••••••••••••",
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "input",
+    "type": "text",
+    "id": "",
+    "name": null,
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "input",
+    "type": "checkbox",
+    "id": "",
+    "name": "require_invitation",
+    "text": "",
+    "placeholder": null,
+    "role": null
+  },
+  {
+    "route": "/settings/sso",
+    "tagName": "button",
+    "type": "button",
+    "id": "",
+    "name": null,
+    "text": "設定を保存する",
+    "placeholder": null,
+    "role": null
+  }
+]

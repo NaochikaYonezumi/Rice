@@ -58,6 +58,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // メール
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
+    Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');
     Route::get('/emails/search', [EmailController::class, 'search'])->name('emails.search');
     Route::get('/emails/{email}', [EmailController::class, 'show'])->name('emails.show');
     Route::get('/threads/{thread}', [EmailController::class, 'thread'])->name('threads.show');
@@ -65,6 +66,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/emails/bulk-assign-customer', [EmailController::class, 'bulkAssignCustomer'])->name('emails.bulk-assign-customer');
     Route::put('/threads/{thread}/tags', [EmailController::class, 'updateTags'])->name('threads.tags');
     Route::put('/threads/{thread}/status', [EmailController::class, 'updateStatus'])->name('threads.status');
+    Route::post('/threads/{thread}/pin', [EmailController::class, 'togglePin'])->name('threads.pin');
+    Route::put('/threads/{thread}/assignee', [EmailController::class, 'updateAssignee'])->name('threads.assignee');
+    Route::get('/users', [EmailController::class, 'users'])->name('users.index');
     Route::delete('/threads/{thread}', [EmailController::class, 'deleteThread'])->name('threads.delete');
     Route::post('/threads/{thread}/merge', [ThreadMergeController::class, 'merge'])->name('threads.merge');
     Route::delete('/thread-merges/{threadMerge}', [ThreadMergeController::class, 'unmerge'])->name('thread-merges.unmerge');
@@ -114,6 +118,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/tag-notes/{tag}', [TagNoteController::class, 'update'])->name('tag-notes.update');
 
     // AI 関連
+    Route::get('/knowledge', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'index'])->name('knowledge.index');
+    Route::post('/knowledge/crawl', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'crawl'])->name('knowledge.crawl');
+    Route::get('/reports', [\Modules\Workflow\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+    Route::post('/threads/{thread}/ai-generate', [\Modules\AIReply\Http\Controllers\AIReplyController::class, 'generate'])->name('ai.generate');
+
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
     Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
     Route::delete('/documents/{document}', [DocumentController::class, 'destroy'])->name('documents.destroy');

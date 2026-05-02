@@ -22,6 +22,7 @@ class PendingEmail extends Model
     const TYPE_REPLY     = 'reply';
     const TYPE_REPLY_ALL = 'reply_all';
 
+    const STATUS_DRAFT    = 'draft';
     const STATUS_PENDING  = 'pending';
     const STATUS_APPROVED = 'approved';
     const STATUS_REJECTED = 'rejected';

@@ -7,10 +7,13 @@ use App\Models\Email;
 use App\Models\EmailAttachment;
 use App\Models\EmailThread;
 use App\Models\PendingEmail;
+use App\Models\User;
+use App\Notifications\ApprovalRequestedNotification;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Modules\MailClient\Services\EmailFetcher;
@@ -120,10 +123,11 @@ class EmailController extends Controller
         $pending->bcc = $validated['bcc'] ?? null;
         $pending->subject = "Re: " . $email->subject;
         $pending->body = $validated['body'];
-        $pending->status = PendingEmail::STATUS_PENDING;
+        $saveAsDraft = $request->boolean('save_as_draft');
+        $pending->status = $saveAsDraft ? PendingEmail::STATUS_DRAFT : PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
-        
+
         $paths = [];
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
@@ -132,6 +136,10 @@ class EmailController extends Controller
         }
         $pending->attachment_paths = $paths;
         $pending->save();
+
+        if (!$saveAsDraft) {
+            $this->notifyAdmins($pending);
+        }
 
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
     }
@@ -158,10 +166,11 @@ class EmailController extends Controller
         $pending->bcc = $validated['bcc'] ?? null;
         $pending->subject = $validated['subject'] ?? '(無題)';
         $pending->body = $validated['body'];
-        $pending->status = PendingEmail::STATUS_PENDING;
+        $saveAsDraft = $request->boolean('save_as_draft');
+        $pending->status = $saveAsDraft ? PendingEmail::STATUS_DRAFT : PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
-        
+
         $paths = [];
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
@@ -171,7 +180,20 @@ class EmailController extends Controller
         $pending->attachment_paths = $paths;
         $pending->save();
 
+        if (!$saveAsDraft) {
+            $this->notifyAdmins($pending);
+        }
+
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
+    }
+
+    private function notifyAdmins(PendingEmail $pending): void
+    {
+        $admins = User::where('role', 'admin')
+            ->where('id', '!=', auth()->id())
+            ->get();
+
+        Notification::send($admins, new ApprovalRequestedNotification($pending));
     }
 
     public function search(Request $request): JsonResponse
@@ -297,7 +319,13 @@ class EmailController extends Controller
             'created_at' => $m->created_at?->format('Y/m/d H:i'),
         ]);
 
-        return response()->json(['thread' => $thread, 'emails' => $emails, 'merges' => $merges]);
+        $emailIds = \App\Models\Email::whereIn('thread_id', $threadIds)->pluck('id');
+        $pendingApprovals = PendingEmail::whereIn('in_reply_to_email_id', $emailIds)
+            ->whereIn('status', [PendingEmail::STATUS_PENDING, PendingEmail::STATUS_APPROVED])
+            ->orderBy('created_at', 'desc')
+            ->get(['id', 'status', 'subject', 'created_at']);
+
+        return response()->json(['thread' => $thread, 'emails' => $emails, 'merges' => $merges, 'pending_approvals' => $pendingApprovals]);
     }
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse

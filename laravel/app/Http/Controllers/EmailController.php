@@ -6,6 +6,7 @@ use App\Models\AiSetting;
 use App\Models\Email;
 use App\Models\EmailAttachment;
 use App\Models\EmailThread;
+use App\Models\MailSetting;
 use App\Models\PendingEmail;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,129 @@ class EmailController extends Controller
     public function index() { return view('emails.index', ['isPinnedView' => false]); }
 
     public function pinned() { return view('emails.index', ['isPinnedView' => true]); }
+
+    /**
+     * 新規作成ウィンドウ (作成専用画面)
+     */
+    public function composeWindow()
+    {
+        $settings = MailSetting::getSettings();
+        $defaultFrom = $settings->smtp_from_address ?? '';
+
+        return view('emails.compose-window', [
+            'mode'         => 'compose',
+            'email'        => null,
+            'thread'       => null,
+            'emails'       => [],
+            'defaultFrom'  => $defaultFrom,
+            'replyTo'      => '',
+            'replyCc'      => '',
+            'replyBcc'     => '',
+            'replySubject' => '',
+        ]);
+    }
+
+    /**
+     * 返信 / 全員返信ウィンドウ (作成専用画面)
+     * ?all=1 で全員返信
+     */
+    public function replyWindow(Email $email, Request $request)
+    {
+        $email->load(['thread.customer', 'thread.assignee', 'attachments']);
+        $isReplyAll = $request->boolean('all');
+
+        $thread = $email->thread;
+        $threadIds = $thread ? [$thread->id] : [];
+        if ($thread) {
+            $merged = \App\Models\ThreadMerge::where('target_thread_id', $thread->id)
+                ->pluck('source_thread_id_original')->toArray();
+            $threadIds = array_merge($threadIds, $merged);
+        }
+
+        $threadEmails = !empty($threadIds)
+            ? Email::whereIn('thread_id', $threadIds)
+                ->with('attachments')
+                ->orderBy('received_at', 'desc')
+                ->get()
+                ->map(fn($e) => [
+                    'id'           => $e->id,
+                    'thread_id'    => $e->thread_id,
+                    'subject'      => $e->subject,
+                    'from_label'   => $e->from_label,
+                    'from_address' => $e->from_address,
+                    'to_address'   => $e->to_address,
+                    'cc'           => $e->cc,
+                    'plain_body'   => $e->plain_body,
+                    'received_at'  => $e->received_at?->format('Y/m/d H:i'),
+                    'attachments'  => $e->attachments->map(fn($a) => [
+                        'id'       => $a->id,
+                        'filename' => $a->filename,
+                        'url'      => route('attachments.download', $a->id),
+                    ])->values(),
+                ])->values()->all()
+            : [];
+
+        $settings = MailSetting::getSettings();
+        $defaultFrom = $settings->smtp_from_address ?? '';
+
+        // 返信フォームの初期値
+        $toAddresses = $email->to_address
+            ? array_values(array_filter(array_map('trim', explode(',', $email->to_address))))
+            : [];
+        $fromForReply = $toAddresses[0] ?? $defaultFrom;
+
+        $replyTo = $email->from_address ?? '';
+        $replyCc = '';
+        if ($isReplyAll) {
+            $ccAddresses = $email->cc
+                ? array_values(array_filter(array_map('trim', explode(',', $email->cc))))
+                : [];
+            // To に既に含まれているアドレスは Cc から除外
+            $ccAddresses = array_values(array_filter(
+                $ccAddresses,
+                fn($c) => !in_array($c, $toAddresses, true) && $c !== $replyTo
+            ));
+            $replyCc = implode(', ', $ccAddresses);
+        }
+
+        $subject = $email->subject ?? '';
+        $replySubject = (str_starts_with($subject, 'Re:') || str_starts_with($subject, 're:'))
+            ? $subject
+            : 'Re: ' . $subject;
+
+        return view('emails.compose-window', [
+            'mode'         => $isReplyAll ? 'reply_all' : 'reply',
+            'email'        => [
+                'id'           => $email->id,
+                'thread_id'    => $email->thread_id,
+                'subject'      => $email->subject,
+                'from_label'   => $email->from_label,
+                'from_address' => $email->from_address,
+                'to_address'   => $email->to_address,
+                'cc'           => $email->cc,
+                'plain_body'   => $email->plain_body,
+                'received_at'  => $email->received_at?->format('Y/m/d H:i'),
+                'attachments'  => $email->attachments->map(fn($a) => [
+                    'id'       => $a->id,
+                    'filename' => $a->filename,
+                    'url'      => route('attachments.download', $a->id),
+                ])->values(),
+            ],
+            'thread'       => $thread ? [
+                'id'       => $thread->id,
+                'subject'  => $thread->subject,
+                'status'   => $thread->status,
+                'customer' => $thread->customer ? ['id' => $thread->customer->id, 'name' => $thread->customer->name] : null,
+                'assignee' => $thread->assignee ? ['id' => $thread->assignee->id, 'name' => $thread->assignee->name] : null,
+            ] : null,
+            'emails'       => $threadEmails,
+            'defaultFrom'  => $fromForReply,
+            'replyTo'      => $replyTo,
+            'replyCc'      => $replyCc,
+            'replyBcc'     => '',
+            'replySubject' => $replySubject,
+        ]);
+    }
 
     public function fetch(EmailFetcher $fetcher): JsonResponse
     {
@@ -45,14 +169,20 @@ class EmailController extends Controller
         $skills     = config('ai_skills.skills');
         $selectedSkill = $skills[$skillKey] ?? $skills['reply'];
 
-        // 並列コンテキスト取得
-        $responses = Http::pool(fn ($pool) => [
-            $pool->as('kb')->get("http://rag-api:8000/query", ['query' => $email->subject . " " . Str::limit($email->body_text, 100)]),
-            $pool->as('reports')->get("http://rag-api:8000/reports", ['query' => $email->subject]),
-        ]);
-
-        $kbContent = $responses['kb']->ok() ? ($responses['kb']->json()['answer'] ?? '') : '';
-        $reportContent = $responses['reports']->ok() ? ($responses['reports']->json()['content'] ?? '') : '';
+        // 並列コンテキスト取得 (タイムアウトでハングを防ぐ)
+        try {
+            $responses = Http::pool(fn ($pool) => [
+                $pool->as('kb')->timeout(8)->connectTimeout(3)
+                    ->get("http://rag-api:8000/query", ['query' => $email->subject . " " . Str::limit($email->body_text, 100)]),
+                $pool->as('reports')->timeout(8)->connectTimeout(3)
+                    ->get("http://rag-api:8000/reports", ['query' => $email->subject]),
+            ]);
+            $kbContent     = ($responses['kb']     instanceof \Illuminate\Http\Client\Response && $responses['kb']->ok())     ? ($responses['kb']->json()['answer']      ?? '') : '';
+            $reportContent = ($responses['reports'] instanceof \Illuminate\Http\Client\Response && $responses['reports']->ok()) ? ($responses['reports']->json()['content'] ?? '') : '';
+        } catch (\Throwable $e) {
+            $kbContent = '';
+            $reportContent = '';
+        }
 
         // スレッド履歴の構築
         $threadContext = "";
@@ -124,13 +254,7 @@ class EmailController extends Controller
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
         
-        $paths = [];
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                $paths[] = $file->store('attachments/pending', 'private');
-            }
-        }
-        $pending->attachment_paths = $paths;
+        $pending->attachment_paths = $this->storePendingAttachments($request);
         $pending->save();
 
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
@@ -162,16 +286,34 @@ class EmailController extends Controller
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
         
-        $paths = [];
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $file) {
-                $paths[] = $file->store('attachments/pending', 'private');
-            }
-        }
-        $pending->attachment_paths = $paths;
+        $pending->attachment_paths = $this->storePendingAttachments($request);
         $pending->save();
 
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
+    }
+
+    /**
+     * 添付ファイルを保存し、{path, filename, mime_type, size} の配列で返す。
+     */
+    private function storePendingAttachments(Request $request): array
+    {
+        if (!$request->hasFile('attachments')) {
+            return [];
+        }
+        $records = [];
+        foreach ($request->file('attachments') as $file) {
+            $path = $file->store('attachments/pending', 'private');
+            if (!$path) {
+                continue;
+            }
+            $records[] = [
+                'path'      => $path,
+                'filename'  => $file->getClientOriginalName(),
+                'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
+                'size'      => (int) $file->getSize(),
+            ];
+        }
+        return $records;
     }
 
     public function search(Request $request): JsonResponse
@@ -302,7 +444,10 @@ class EmailController extends Controller
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
-        $thread->update(['status' => $request->status]);
+        $validated = $request->validate([
+            'status' => 'required|string|in:inbox,hold,completed,pending',
+        ]);
+        $thread->update(['status' => $validated['status']]);
         return response()->json(['status' => 'ok']);
     }
 
@@ -314,7 +459,12 @@ class EmailController extends Controller
 
     public function updateTags(Request $request, EmailThread $thread): JsonResponse
     {
-        $thread->update(['tags' => array_values(array_unique($request->tags))]);
+        $validated = $request->validate([
+            'tags'   => 'nullable|array|max:50',
+            'tags.*' => 'string|max:64',
+        ]);
+        $tags = array_values(array_unique($validated['tags'] ?? []));
+        $thread->update(['tags' => $tags]);
         return response()->json(['status' => 'ok']);
     }
 

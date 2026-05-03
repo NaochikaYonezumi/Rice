@@ -5,9 +5,22 @@ namespace App\Http\Controllers;
 use App\Models\EmailAttachment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AttachmentController extends Controller
 {
+    public function download(EmailAttachment $attachment): StreamedResponse
+    {
+        abort_unless(Storage::disk('local')->exists($attachment->disk_path), 404, '添付ファイルが見つかりません');
+
+        return Storage::disk('local')->download(
+            $attachment->disk_path,
+            $attachment->filename,
+            ['Content-Type' => $attachment->mime_type ?: 'application/octet-stream']
+        );
+    }
+
     public function index(Request $request)
     {
         if (!$request->expectsJson()) {

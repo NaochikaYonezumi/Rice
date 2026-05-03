@@ -60,7 +60,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
     Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');
     Route::get('/emails/search', [EmailController::class, 'search'])->name('emails.search');
-    Route::get('/emails/{email}', [EmailController::class, 'show'])->name('emails.show');
     Route::get('/threads/{thread}', [EmailController::class, 'thread'])->name('threads.show');
     Route::post('/threads/{thread}/assign-customer', [CustomerController::class, 'assign'])->name('threads.assign-customer');
     Route::post('/emails/bulk-assign-customer', [EmailController::class, 'bulkAssignCustomer'])->name('emails.bulk-assign-customer');
@@ -85,9 +84,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/emails/compose', [EmailController::class, 'compose'])->name('emails.compose');
     Route::post('/emails/fetch', [EmailController::class, 'fetch'])->name('emails.fetch');
 
+    // 作成専用ウィンドウ (返信・全員返信・新規)
+    Route::get('/emails/compose-window', [EmailController::class, 'composeWindow'])->name('emails.composeWindow');
+    Route::get('/emails/{email}/reply-window', [EmailController::class, 'replyWindow'])->name('emails.replyWindow');
+
     // 添付ファイル
     Route::get('/attachments', [AttachmentController::class, 'index'])->name('attachments.index');
-    Route::get('/attachments/{attachment}', [EmailController::class, 'downloadAttachment'])->name('attachments.download');
+    Route::get('/attachments/{attachment}', [AttachmentController::class, 'download'])->name('attachments.download');
 
     // 承認待ちメール (API)
     Route::get('/pending-emails', [PendingEmailController::class, 'index'])->name('pending.index');

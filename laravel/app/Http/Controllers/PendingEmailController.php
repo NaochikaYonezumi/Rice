@@ -48,12 +48,23 @@ class PendingEmailController extends Controller
                 'created_by'       => $p->creator?->name ?? $p->created_by,
                 'created_by_user_id' => $p->created_by_user_id,
                 'memo'             => $p->memo,
-                'attachments'      => collect($p->attachment_paths ?? [])->map(
-                    fn($a) => [
-                        'filename' => basename($a), 
-                        'size' => round(Storage::disk('private')->exists($a) ? Storage::disk('private')->size($a) / 1024 : 0, 1) . ' KB'
-                    ]
-                )->values(),
+                'attachments'      => collect($p->attachment_paths ?? [])->map(function ($a) {
+                    // 旧形式 (path文字列) と新形式 (連想配列) の両対応
+                    if (is_string($a)) {
+                        $path = $a;
+                        $filename = basename($a);
+                        $bytes = Storage::disk('private')->exists($path) ? Storage::disk('private')->size($path) : 0;
+                    } else {
+                        $path = $a['path'] ?? '';
+                        $filename = $a['filename'] ?? basename($path);
+                        $bytes = $a['size']
+                            ?? (Storage::disk('private')->exists($path) ? Storage::disk('private')->size($path) : 0);
+                    }
+                    return [
+                        'filename' => $filename,
+                        'size'     => $this->humanSize((int) $bytes),
+                    ];
+                })->values(),
                 'in_reply_to'      => $p->inReplyToEmail ? [
                     'id'           => $p->inReplyToEmail->id,
                     'thread_id'    => $p->inReplyToEmail->thread_id,
@@ -110,11 +121,11 @@ class PendingEmailController extends Controller
                     }
 
                     foreach ($pending->attachment_paths ?? [] as $att) {
-                        $fullPath = Storage::disk('local')->path($att['path']);
-                        if (file_exists($fullPath)) {
-                            $message->attach($fullPath, [
-                                'as'   => $att['filename'],
-                                'mime' => $att['mime_type'],
+                        $info = $this->normalizeAttachment($att);
+                        if ($info && Storage::disk('private')->exists($info['path'])) {
+                            $message->attach(Storage::disk('private')->path($info['path']), [
+                                'as'   => $info['filename'],
+                                'mime' => $info['mime_type'],
                             ]);
                         }
                     }
@@ -141,24 +152,24 @@ class PendingEmailController extends Controller
 
                 $thread->update(['last_email_at' => now()]);
 
-                // 添付ファイルを永久保存場所に移動して記録
+                // 添付ファイルを永久保存場所に移動して記録 (送信済みディレクトリ)
                 foreach ($pending->attachment_paths ?? [] as $att) {
-                    $oldPath = $att['path'];
-                    $safeName = preg_replace('/[^A-Za-z0-9._\-]/u', '_', $att['filename']);
-                    $newPath = "attachments/{$email->id}/{$safeName}";
-
-                    if (Storage::disk('local')->exists($oldPath)) {
-                        $content = Storage::disk('local')->get($oldPath);
-                        Storage::disk('local')->put($newPath, $content);
-                        
-                        EmailAttachment::create([
-                            'email_id'  => $email->id,
-                            'filename'  => $att['filename'],
-                            'mime_type' => $att['mime_type'],
-                            'size'      => $att['size'],
-                            'disk_path' => $newPath,
-                        ]);
+                    $info = $this->normalizeAttachment($att);
+                    if (!$info || !Storage::disk('private')->exists($info['path'])) {
+                        continue;
                     }
+                    $safeName = preg_replace('/[^A-Za-z0-9._\-]/u', '_', $info['filename']);
+                    $newPath  = "attachments/{$email->id}/{$safeName}";
+
+                    Storage::disk('local')->put($newPath, Storage::disk('private')->get($info['path']));
+
+                    EmailAttachment::create([
+                        'email_id'  => $email->id,
+                        'filename'  => $info['filename'],
+                        'mime_type' => $info['mime_type'],
+                        'size'      => $info['size'],
+                        'disk_path' => $newPath,
+                    ]);
                 }
 
                 $pending->update([
@@ -186,6 +197,40 @@ class PendingEmailController extends Controller
         ]);
 
         return response()->json(['status' => 'ok']);
+    }
+
+    /**
+     * 添付エントリを {path, filename, mime_type, size} 連想配列に正規化する。
+     * 旧データ (path 文字列) も読めるよう両対応。
+     */
+    private function normalizeAttachment($att): ?array
+    {
+        if (is_string($att)) {
+            if ($att === '') return null;
+            $size = Storage::disk('private')->exists($att) ? Storage::disk('private')->size($att) : 0;
+            return [
+                'path'      => $att,
+                'filename'  => basename($att),
+                'mime_type' => Storage::disk('private')->exists($att)
+                    ? (Storage::disk('private')->mimeType($att) ?: 'application/octet-stream')
+                    : 'application/octet-stream',
+                'size'      => $size,
+            ];
+        }
+        if (!is_array($att) || empty($att['path'])) return null;
+        return [
+            'path'      => $att['path'],
+            'filename'  => $att['filename']  ?? basename($att['path']),
+            'mime_type' => $att['mime_type'] ?? 'application/octet-stream',
+            'size'      => (int) ($att['size'] ?? 0),
+        ];
+    }
+
+    private function humanSize(int $bytes): string
+    {
+        if ($bytes < 1024) return "{$bytes} B";
+        if ($bytes < 1048576) return round($bytes / 1024, 1) . ' KB';
+        return round($bytes / 1048576, 1) . ' MB';
     }
 
     private function applySmtpConfig(MailSetting $settings): void

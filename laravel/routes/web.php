@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\InvitationController;
 use App\Http\Controllers\ApprovalController;
+use App\Http\Controllers\DraftController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\SocialiteController;
 use App\Http\Controllers\ChatController;
@@ -50,7 +51,7 @@ Route::post('/invitations/accept/{token}', [InvitationAcceptController::class, '
 */
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    
+
     // プロフィール
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -60,6 +61,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
     Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');
     Route::get('/emails/search', [EmailController::class, 'search'])->name('emails.search');
+
+    // 作成専用ウィンドウ (返信・全員返信・新規)
+    Route::get('/emails/compose-window', [EmailController::class, 'composeWindow'])->name('emails.composeWindow');
+    Route::get('/emails/{email}/reply-window', [EmailController::class, 'replyWindow'])->name('emails.replyWindow');
+
     Route::get('/threads/{thread}', [EmailController::class, 'thread'])->name('threads.show');
     Route::post('/threads/{thread}/assign-customer', [CustomerController::class, 'assign'])->name('threads.assign-customer');
     Route::post('/emails/bulk-assign-customer', [EmailController::class, 'bulkAssignCustomer'])->name('emails.bulk-assign-customer');
@@ -84,10 +90,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/emails/compose', [EmailController::class, 'compose'])->name('emails.compose');
     Route::post('/emails/fetch', [EmailController::class, 'fetch'])->name('emails.fetch');
 
-    // 作成専用ウィンドウ (返信・全員返信・新規)
-    Route::get('/emails/compose-window', [EmailController::class, 'composeWindow'])->name('emails.composeWindow');
-    Route::get('/emails/{email}/reply-window', [EmailController::class, 'replyWindow'])->name('emails.replyWindow');
-
     // 添付ファイル
     Route::get('/attachments', [AttachmentController::class, 'index'])->name('attachments.index');
     Route::get('/attachments/{attachment}', [AttachmentController::class, 'download'])->name('attachments.download');
@@ -97,8 +99,29 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/pending-emails/{pending}/approve', [PendingEmailController::class, 'approve'])->name('pending.approve');
     Route::post('/pending-emails/{pending}/reject', [PendingEmailController::class, 'reject'])->name('pending.reject');
 
+    // 通知
+    Route::get('/notifications', function () {
+        $notifications = auth()->user()->unreadNotifications()->latest()->take(20)->get();
+        return response()->json($notifications);
+    })->name('notifications.index');
+    Route::post('/notifications/{id}/read', function (string $id) {
+        auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()]);
+        return response()->json(['status' => 'ok']);
+    })->name('notifications.read');
+    Route::post('/notifications/read-all', function () {
+        auth()->user()->unreadNotifications->markAsRead();
+        return response()->json(['status' => 'ok']);
+    })->name('notifications.read-all');
+
     // 承認ページ
     Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals.index');
+
+    // 下書き
+    Route::get('/drafts', [DraftController::class, 'index'])->name('drafts.index');
+    Route::get('/drafts/list', [DraftController::class, 'list'])->name('drafts.list');
+    Route::get('/drafts/{draft}/edit', [DraftController::class, 'edit'])->name('drafts.edit');
+    Route::post('/drafts/{draft}/submit', [DraftController::class, 'submit'])->name('drafts.submit');
+    Route::delete('/drafts/{draft}', [DraftController::class, 'destroy'])->name('drafts.destroy');
 
     // 顧客・タグ
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');

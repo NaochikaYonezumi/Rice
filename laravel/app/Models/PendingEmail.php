@@ -11,10 +11,13 @@ class PendingEmail extends Model
         'in_reply_to_email_id', 'reply_type', 'from_address', 'to_address', 'cc', 'bcc', 'subject', 'body',
         'attachment_paths', 'status', 'approved_at', 'created_by', 'memo',
         'created_by_user_id', 'approved_by_user_id', 'rejected_by_user_id',
+        'target_approver_user_id',
+        'rejection_reason', 'rejected_at',
     ];
 
     protected $casts = [
         'approved_at'      => 'datetime',
+        'rejected_at'      => 'datetime',
         'attachment_paths' => 'array',
     ];
 
@@ -22,6 +25,7 @@ class PendingEmail extends Model
     const TYPE_REPLY     = 'reply';
     const TYPE_REPLY_ALL = 'reply_all';
 
+    const STATUS_DRAFT    = 'draft';
     const STATUS_PENDING  = 'pending';
     const STATUS_APPROVED = 'approved';
     const STATUS_REJECTED = 'rejected';
@@ -44,6 +48,11 @@ class PendingEmail extends Model
     public function rejecter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejected_by_user_id');
+    }
+
+    public function targetApprover(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'target_approver_user_id');
     }
 
     public function getReplyTypeLabelAttribute(): string

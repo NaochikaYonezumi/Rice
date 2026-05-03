@@ -5,15 +5,40 @@
 <div class="flex h-screen w-screen overflow-hidden bg-white text-gray-800 font-sans"
      x-data="composeWindowApp()" x-init="init()" x-cloak>
 
-    {{-- 左ペイン: スレッド表示 / 空状態 --}}
-    <aside class="w-[45%] min-w-[420px] max-w-[680px] h-full overflow-y-auto bg-gray-50 border-r border-gray-200 custom-scrollbar">
-        <template x-if="mode === 'compose'">
+    {{-- 左ペイン: スレッド表示 / 空状態 (リサイズ可能) --}}
+    <aside class="h-full overflow-y-auto bg-gray-50 custom-scrollbar shrink-0"
+           :style="`width:${leftPaneWidth}px`">
+
+        {{-- 却下情報バナー (下書き編集モードで以前却下されたものの場合) --}}
+        <template x-if="rejectionInfo">
+            <div class="m-4 p-4 bg-red-50 border-l-4 border-red-400 rounded-lg shadow-sm">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-times-circle text-red-600"></i>
+                    <p class="text-xs font-bold text-red-800">この下書きは過去に却下されました</p>
+                </div>
+                <div class="text-xs text-red-700 space-y-1">
+                    <p><span class="font-bold">却下者:</span> <span x-text="rejectionInfo.rejected_by || '不明'"></span></p>
+                    <p><span class="font-bold">日時:</span> <span x-text="rejectionInfo.rejected_at"></span></p>
+                </div>
+                <div class="mt-2 p-2 bg-white border border-red-100 rounded text-xs text-red-900 whitespace-pre-wrap leading-relaxed"
+                     x-text="rejectionInfo.reason"></div>
+                <p class="text-[10px] text-red-600 mt-2"><i class="fas fa-info-circle mr-1"></i>修正後、再度承認依頼を送信すると元の下書きは削除されます。</p>
+            </div>
+        </template>
+
+        <template x-if="mode === 'compose' && !rejectionInfo">
             <div class="flex flex-col items-center justify-center h-full px-8 text-center">
                 <div class="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center text-gray-300 mb-6">
                     <i class="fas fa-pen-fancy fa-2x"></i>
                 </div>
                 <h1 class="text-xl font-bold text-gray-800">新規メッセージ作成</h1>
                 <p class="text-sm text-gray-500 mt-3 max-w-sm leading-relaxed">右側で宛先・件名・本文を入力してください。送信すると承認待ちとして登録されます。</p>
+            </div>
+        </template>
+        <template x-if="mode === 'compose' && rejectionInfo">
+            <div class="px-6 pb-6">
+                <h1 class="text-lg font-bold text-gray-800 mb-2">新規メッセージ (下書き再編集)</h1>
+                <p class="text-xs text-gray-500">却下理由を踏まえて本文を修正してから、再度承認依頼を送信してください。</p>
             </div>
         </template>
 
@@ -69,6 +94,13 @@
         </template>
     </aside>
 
+    {{-- リサイズハンドル (スレッドとドラフトの境界) --}}
+    <div class="resize-handle shrink-0"
+         @mousedown.prevent="startResizeLeftPane($event)"
+         @dblclick="resetLeftPane()"
+         title="ドラッグで幅を変更／ダブルクリックでリセット">
+    </div>
+
     {{-- 右ペイン: ドラフトフォーム --}}
     <main class="flex-1 min-w-0 h-full flex flex-col bg-white">
         <header class="shrink-0 px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
@@ -100,11 +132,11 @@
                     <div class="grid grid-cols-2 gap-3">
                         <div class="relative">
                             <label data-test-id="compose-from-label" class="text-[10px] font-bold text-gray-500 uppercase absolute left-3 top-2 tracking-wider">差出人 (From)</label>
-                            <input type="text" x-model="form.from" data-test-id="compose-from-input" class="w-full pt-7 pb-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all font-semibold">
+                            <input type="text" x-model="form.from" class="w-full pt-7 pb-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all font-semibold">
                         </div>
                         <div class="relative">
                             <label data-test-id="compose-to-label" class="text-[10px] font-bold text-gray-500 uppercase absolute left-3 top-2 tracking-wider">宛先 (To)</label>
-                            <input type="text" x-model="form.to" data-test-id="compose-to-input" required class="w-full pt-7 pb-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all font-semibold">
+                            <input type="text" x-model="form.to" required class="w-full pt-7 pb-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all font-semibold">
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
@@ -125,6 +157,45 @@
                         <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">本文</label>
                         <textarea x-model="form.body" rows="14" placeholder="返信内容を入力してください..."
                                   class="w-full text-sm border border-gray-200 bg-white rounded-xl p-4 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 outline-none leading-relaxed resize-y text-gray-700 min-h-[280px]"></textarea>
+                    </div>
+
+                    {{-- 承認者の指定 (カード型UI) --}}
+                    <div class="bg-amber-50/40 border border-amber-200 rounded-xl p-4">
+                        <label class="text-xs font-bold text-amber-800 mb-2 flex items-center gap-1.5">
+                            <i class="fas fa-user-check"></i> 承認依頼を送る相手
+                        </label>
+                        <div class="flex items-center gap-2">
+                            {{-- 選択済みカード --}}
+                            <button type="button" @click="approverPickerOpen = true"
+                                    class="flex-1 inline-flex items-center justify-between gap-3 bg-white border border-amber-200 rounded-lg px-4 py-2.5 text-left hover:bg-amber-50 transition-all">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <template x-if="selectedApprover">
+                                        <div class="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0 font-bold text-sm"
+                                             x-text="(selectedApprover.name || '?').charAt(0)"></div>
+                                    </template>
+                                    <template x-if="!selectedApprover">
+                                        <div class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+                                            <i class="fas fa-user-plus text-sm"></i>
+                                        </div>
+                                    </template>
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-bold text-gray-800 truncate"
+                                           x-text="selectedApprover ? selectedApprover.name : '承認者を選択してください'"></p>
+                                        <p class="text-[11px] text-gray-500 truncate"
+                                           x-text="selectedApprover ? (selectedApprover.email + (selectedApprover.role === 'admin' ? ' (管理者)' : '')) : '指定なし = 誰でも承認可能'"></p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-right text-amber-500 shrink-0"></i>
+                            </button>
+                            <button type="button" x-show="selectedApprover" @click="form.approver_id = ''"
+                                    class="w-9 h-9 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 border border-gray-200"
+                                    title="承認者をクリア">
+                                <i class="fas fa-times text-sm"></i>
+                            </button>
+                        </div>
+                        <p class="text-[11px] text-amber-700/80 mt-2 leading-relaxed">
+                            <i class="fas fa-info-circle mr-1"></i>承認者を指定すると、その人の「承認待ち一覧」のみに表示されます。未指定の場合は誰でも承認可能。
+                        </p>
                     </div>
 
                     {{-- 添付ファイル --}}
@@ -212,7 +283,11 @@
         <footer class="shrink-0 px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
             <div class="text-xs text-gray-500 flex items-center gap-3">
                 <span x-show="lastSavedLabel"><i class="fas fa-save text-gray-400 mr-1"></i><span x-text="lastSavedLabel"></span></span>
-                <button type="button" @click="saveDraft(true)" class="text-blue-600 hover:text-blue-800 font-bold underline-offset-2 hover:underline">下書き保存</button>
+                <button type="button" @click="saveDraftToServer()" :disabled="savingDraft"
+                        class="text-blue-600 hover:text-blue-800 font-bold underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
+                    <span x-show="!savingDraft">下書き保存</span>
+                    <span x-show="savingDraft">保存中...</span>
+                </button>
             </div>
             <div class="flex items-center gap-2">
                 <button type="button" @click="attemptClose()" class="bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all">閉じる</button>
@@ -250,6 +325,135 @@
         </div>
     </template>
 
+    {{-- 承認者選択モーダル --}}
+    <template x-if="approverPickerOpen">
+        <div class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4" @click.self="approverPickerOpen = false">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col" style="max-height: 80vh;">
+                <div class="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-amber-50 to-white">
+                    <div class="flex items-center gap-2 mb-2">
+                        <div class="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-white">
+                            <i class="fas fa-user-check"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-gray-900">承認者を選択</h3>
+                            <p class="text-xs text-gray-500">この人の「承認待ち一覧」に表示されます</p>
+                        </div>
+                    </div>
+                    <input type="text" x-model="approverSearch" placeholder="名前またはメールアドレスで検索..."
+                           class="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-100 focus:border-amber-300">
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scrollbar">
+                    {{-- 「承認者を指定しない」選択肢 --}}
+                    <button type="button" @click="form.approver_id = ''; approverPickerOpen = false;"
+                            :class="!form.approver_id ? 'bg-amber-50 border-l-4 border-l-amber-500' : ''"
+                            class="w-full px-5 py-3 text-left hover:bg-gray-50 border-b border-gray-100 flex items-center gap-3 transition-all">
+                        <div class="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-gray-500">
+                            <i class="fas fa-globe"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-bold text-gray-800">承認者を指定しない</p>
+                            <p class="text-[11px] text-gray-500">誰でも承認可能 (全員のキューに入る)</p>
+                        </div>
+                        <i x-show="!form.approver_id" class="fas fa-check text-amber-500"></i>
+                    </button>
+
+                    <template x-for="u in filteredApprovers" :key="u.id">
+                        <button type="button" @click="form.approver_id = u.id; approverPickerOpen = false;"
+                                :class="String(form.approver_id) === String(u.id) ? 'bg-amber-50 border-l-4 border-l-amber-500' : ''"
+                                class="w-full px-5 py-3 text-left hover:bg-gray-50 border-b border-gray-100 flex items-center gap-3 transition-all">
+                            <div class="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0"
+                                 x-text="(u.name || '?').charAt(0)"></div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-gray-800 truncate" x-text="u.name"></p>
+                                <p class="text-[11px] text-gray-500 truncate" x-text="u.email"></p>
+                            </div>
+                            <template x-if="u.role === 'admin'">
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    <i class="fas fa-shield-alt mr-1"></i>管理者
+                                </span>
+                            </template>
+                            <i x-show="String(form.approver_id) === String(u.id)" class="fas fa-check text-amber-500 shrink-0"></i>
+                        </button>
+                    </template>
+                    <template x-if="filteredApprovers.length === 0 && approverSearch">
+                        <div class="px-5 py-8 text-center text-gray-400 text-sm">
+                            <i class="fas fa-search text-2xl text-gray-300 mb-2 block"></i>
+                            該当ユーザーが見つかりません
+                        </div>
+                    </template>
+                </div>
+                <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+                    <button @click="approverPickerOpen = false"
+                            class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all">
+                        閉じる
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    {{-- 送信前確認モーダル --}}
+    <template x-if="sendConfirmOpen">
+        <div class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4" @click.self="sendConfirmOpen = false">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div class="px-5 py-4 border-b border-gray-100 bg-gradient-to-b from-blue-50 to-white">
+                    <div class="flex items-center gap-2">
+                        <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center text-white">
+                            <i class="fas fa-paper-plane"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-gray-900">承認依頼の送信確認</h3>
+                            <p class="text-xs text-gray-500">送信先と承認者を確認してください</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="px-5 py-4 space-y-3">
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p class="text-[10px] font-bold text-gray-500 uppercase mb-1">宛先</p>
+                        <p class="text-sm font-semibold text-gray-800 break-all" x-text="form.to || '(未入力)'"></p>
+                        <p class="text-[10px] font-bold text-gray-500 uppercase mt-2 mb-1">件名</p>
+                        <p class="text-sm font-semibold text-gray-800 break-all" x-text="form.subject || '(無題)'"></p>
+                    </div>
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p class="text-[10px] font-bold text-amber-700 uppercase mb-2">承認依頼を送る相手</p>
+                        <template x-if="selectedApprover">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold"
+                                     x-text="(selectedApprover.name || '?').charAt(0)"></div>
+                                <div class="min-w-0">
+                                    <p class="text-sm font-bold text-gray-900" x-text="selectedApprover.name"></p>
+                                    <p class="text-[11px] text-gray-500" x-text="selectedApprover.email"></p>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="!selectedApprover">
+                            <div class="flex items-center gap-2 text-gray-600 text-xs">
+                                <i class="fas fa-globe text-gray-400"></i>
+                                <span>承認者を指定しない (誰でも承認可能)</span>
+                            </div>
+                        </template>
+                        <button type="button" @click="sendConfirmOpen = false; approverPickerOpen = true;"
+                                class="mt-2 text-xs text-amber-700 hover:text-amber-900 font-bold underline">
+                            <i class="fas fa-edit mr-1"></i>承認者を変更
+                        </button>
+                    </div>
+                </div>
+                <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+                    <button @click="sendConfirmOpen = false"
+                            class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all">
+                        キャンセル
+                    </button>
+                    <button @click="sendConfirmOpen = false; submitDraftConfirmed();" :disabled="sending"
+                            class="text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center gap-2 disabled:opacity-50"
+                            style="background-color:#2563eb;">
+                        <i class="fas fa-paper-plane"></i>
+                        <span x-text="sending ? '送信中...' : '承認依頼を送信'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
     {{-- 閉じる確認モーダル --}}
     <template x-if="closeConfirmOpen">
         <div class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4" @click.self="closeConfirmOpen = false">
@@ -259,9 +463,11 @@
                     <p class="text-xs text-gray-500 mt-1">どうしますか？</p>
                 </div>
                 <div class="px-6 py-5 space-y-2">
-                    <button @click="saveDraft(true); closeConfirmOpen = false; window.close();"
-                            class="w-full bg-blue-600 text-white py-3 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                        <i class="fas fa-save"></i> 下書き保存して閉じる
+                    <button @click="saveDraftAndClose()" :disabled="savingDraft"
+                            class="w-full bg-blue-600 text-white py-3 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                        <i class="fas fa-save"></i>
+                        <span x-show="!savingDraft">下書き保存して閉じる</span>
+                        <span x-show="savingDraft">保存中...</span>
                     </button>
                     <button @click="discardAndClose()"
                             class="w-full bg-white border border-red-200 text-red-600 py-3 rounded-lg text-sm font-bold hover:bg-red-50 transition-all flex items-center justify-center gap-2">
@@ -317,26 +523,43 @@ function composeWindowApp() {
         email:   @json($email),
         thread:  @json($thread),
         emails:  @json($emails),
+        approvers: @json($approvers ?? []),
         aiSkills: @json(config('ai_skills.skills', [])),
+        // 下書き編集モード用
+        draftId: @json($draftId ?? null),
+        draftMemo: @json($draftMemo ?? null),
+        rejectionInfo: @json($rejectionInfo ?? null),
         form: {
             from:    @json($defaultFrom),
             to:      @json($replyTo),
             cc:      @json($replyCc),
             bcc:     @json($replyBcc),
             subject: @json($replySubject),
-            body:    '',
+            body:    @json($draftBody ?? ''),
+            approver_id: '',
         },
         selectedFiles: [],
         attachmentError: null,
         sending: false,
+        savingDraft: false,
         sentCompleted: false,
         closeConfirmOpen: false,
+        approverPickerOpen: false,
+        approverSearch: '',
+        sendConfirmOpen: false,
         aiPanelOpen: false,
         aiSkill: 'reply',
         aiUserPrompt: '',
         aiAnalysis: null,
         aiLoading: false,
         maskPii: true,
+
+        // 左ペイン (スレッド) の幅。localStorage に保存。
+        leftPaneWidth: (() => {
+            const saved = parseInt(localStorage.getItem('composeWindowLeftPaneWidth'), 10);
+            if (!isNaN(saved) && saved > 0) return saved;
+            return Math.max(420, Math.min(680, Math.floor(window.innerWidth * 0.45)));
+        })(),
         toasts: [],
         lastSavedAt: null,
         initialBody: '',
@@ -373,15 +596,27 @@ function composeWindowApp() {
             if (!this.lastSavedAt) return '';
             return `下書き保存: ${this.lastSavedAt}`;
         },
+        get selectedApprover() {
+            if (!this.form.approver_id) return null;
+            return this.approvers.find(u => String(u.id) === String(this.form.approver_id)) || null;
+        },
+        get filteredApprovers() {
+            const q = (this.approverSearch || '').trim().toLowerCase();
+            if (!q) return this.approvers;
+            return this.approvers.filter(u =>
+                (u.name || '').toLowerCase().includes(q) ||
+                (u.email || '').toLowerCase().includes(q)
+            );
+        },
 
         init() {
             this.draftKey = this.buildDraftKey();
-            this.loadDraft();
+            this.loadLocalDraft();
             this.initialBody = this.form.body;
 
-            // 30秒ごとに自動保存
+            // 30秒ごとに localStorage 自動保存
             setInterval(() => {
-                if (this.form.body || this.selectedFiles.length > 0) this.saveDraft(false);
+                if (this.form.body || this.selectedFiles.length > 0) this.saveLocalDraft();
             }, 30000);
 
             // 未保存確認 (タブ閉じる/リロード)
@@ -398,7 +633,7 @@ function composeWindowApp() {
             if (this.email && this.email.id) return `compose_draft__${this.mode}__${this.email.id}`;
             return 'compose_draft__unknown';
         },
-        saveDraft(showToast = false) {
+        saveLocalDraft() {
             try {
                 const data = {
                     from: this.form.from, to: this.form.to, cc: this.form.cc, bcc: this.form.bcc,
@@ -406,12 +641,9 @@ function composeWindowApp() {
                 };
                 localStorage.setItem(this.draftKey, JSON.stringify(data));
                 this.lastSavedAt = new Date().toLocaleTimeString();
-                if (showToast) this.toast('下書きを保存しました', 'success');
-            } catch (_) {
-                if (showToast) this.toast('下書き保存に失敗しました', 'error');
-            }
+            } catch (_) {}
         },
-        loadDraft() {
+        loadLocalDraft() {
             try {
                 const raw = localStorage.getItem(this.draftKey);
                 if (!raw) return;
@@ -425,7 +657,7 @@ function composeWindowApp() {
                 if (d.body)    this.form.body    = d.body;
             } catch (_) {}
         },
-        clearDraft() {
+        clearLocalDraft() {
             try { localStorage.removeItem(this.draftKey); } catch(_) {}
         },
 
@@ -510,40 +742,64 @@ function composeWindowApp() {
             this.toast('本文に反映しました', 'success');
         },
 
-        async submitDraft() {
-            if (!this.form.body || this.sending) return;
-            this.sending = true;
+        // FormDataを構築
+        buildFormData(asDraft = false) {
             const fd = new FormData();
-            fd.append('body', this.form.body);
-            fd.append('to', this.form.to);
+            fd.append('body', this.form.body || (asDraft ? '(下書き)' : ''));
+            fd.append('to', this.form.to || '');
             fd.append('from_address', this.form.from || '');
             fd.append('cc', this.form.cc || '');
             fd.append('bcc', this.form.bcc || '');
-            fd.append('subject', this.form.subject || '');
+            fd.append('subject', this.form.subject || (asDraft ? '(下書き)' : ''));
+            if (this.form.approver_id) fd.append('approver_id', this.form.approver_id);
+            if (this.draftId) fd.append('draft_id', this.draftId);
+            if (asDraft) fd.append('save_as_draft', '1');
             this.selectedFiles.forEach(f => fd.append('attachments[]', f));
+            return fd;
+        },
 
-            const url = (this.mode === 'compose' || !this.email)
+        getSubmitUrl() {
+            return (this.mode === 'compose' || !this.email)
                 ? '/emails/compose'
                 : `/emails/${this.email.id}/reply`;
+        },
 
+        // 通常送信 (承認依頼)
+        // 「承認を依頼する」ボタン押下 → 送信確認モーダルを開く
+        async submitDraft() {
+            if (!this.form.body || this.sending) return;
+            // 必須項目の最低限チェック
+            if (!this.form.to) {
+                this.toast('宛先 (To) を入力してください', 'error');
+                return;
+            }
+            this.sendConfirmOpen = true;
+        },
+
+        // モーダルで「承認依頼を送信」を押下 → 実際に送信
+        async submitDraftConfirmed() {
+            if (!this.form.body || this.sending) return;
+            this.sending = true;
             try {
-                const res = await fetch(url, {
+                const res = await fetch(this.getSubmitUrl(), {
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
-                    body: fd,
+                    body: this.buildFormData(false),
                 });
                 let data = {};
                 try { data = await res.json(); } catch(_) {}
 
                 if (res.ok) {
-                    this.clearDraft();
+                    this.clearLocalDraft();
                     this.notifyOpener();
-                    // window.close() はユーザー操作で開いたタブのみ機能。失敗時は完了画面に切替。
+                    const approverName = this.selectedApprover ? this.selectedApprover.name : null;
+                    this.toast(approverName
+                        ? `${approverName} さんに承認依頼を送信しました`
+                        : '承認待ちとして送信しました', 'success');
                     setTimeout(() => {
                         try { window.close(); } catch(_) {}
                         this.sentCompleted = true;
                     }, 200);
-                    this.toast('承認待ちとして送信しました', 'success');
                 } else if (res.status === 422) {
                     const errs = data.errors ? Object.values(data.errors).flat().join('\n') : (data.message || '入力内容に誤りがあります');
                     this.toast('入力エラー: ' + errs, 'error');
@@ -554,6 +810,30 @@ function composeWindowApp() {
                 this.toast('通信エラー: ' + (e.message || ''), 'error');
             } finally {
                 this.sending = false;
+            }
+        },
+
+        // 下書き保存（サーバー）
+        async saveDraftToServer() {
+            if (this.savingDraft) return;
+            this.savingDraft = true;
+            try {
+                const res = await fetch(this.getSubmitUrl(), {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    body: this.buildFormData(true),
+                });
+                let data = {};
+                try { data = await res.json(); } catch(_) {}
+                if (!res.ok) throw new Error(data.message || data.error || `HTTP ${res.status}`);
+                this.lastSavedAt = new Date().toLocaleTimeString();
+                this.toast('下書きを保存しました', 'success');
+                return data;
+            } catch (e) {
+                this.toast('下書き保存に失敗: ' + (e.message || ''), 'error');
+                throw e;
+            } finally {
+                this.savingDraft = false;
             }
         },
 
@@ -572,12 +852,52 @@ function composeWindowApp() {
             }
             try { window.close(); } catch(_) {}
         },
+        async saveDraftAndClose() {
+            try {
+                await this.saveDraftToServer();
+                this.clearLocalDraft();
+                this.form.body = '';
+                this.selectedFiles = [];
+                this.closeConfirmOpen = false;
+                try { window.close(); } catch(_) {}
+            } catch (_) {
+                // エラー時は閉じない
+            }
+        },
         discardAndClose() {
-            this.clearDraft();
+            this.clearLocalDraft();
             this.form.body = '';
             this.selectedFiles = [];
             this.closeConfirmOpen = false;
             try { window.close(); } catch(_) {}
+        },
+
+        // 左ペイン (スレッド) のドラッグリサイズ
+        startResizeLeftPane(e) {
+            const startX = e.clientX;
+            const startW = this.leftPaneWidth;
+            const minW = 280;
+            const maxW = Math.max(minW + 1, window.innerWidth - 360); // 右側に最低 360px 残す
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            const onMove = (me) => {
+                const next = startW + (me.clientX - startX);
+                this.leftPaneWidth = Math.max(minW, Math.min(maxW, next));
+            };
+            const onUp = () => {
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                try { localStorage.setItem('composeWindowLeftPaneWidth', this.leftPaneWidth); } catch(_) {}
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+        // ダブルクリックでデフォルトに戻す
+        resetLeftPane() {
+            this.leftPaneWidth = Math.max(420, Math.min(680, Math.floor(window.innerWidth * 0.45)));
+            try { localStorage.setItem('composeWindowLeftPaneWidth', this.leftPaneWidth); } catch(_) {}
         },
     };
 }
@@ -588,5 +908,33 @@ function composeWindowApp() {
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* スレッド ↔ ドラフト の境界リサイズハンドル */
+.resize-handle {
+    width: 6px;
+    height: 100%;
+    background-color: #e5e7eb;
+    cursor: col-resize;
+    transition: background-color 0.15s;
+    position: relative;
+    user-select: none;
+}
+.resize-handle:hover,
+.resize-handle:active {
+    background-color: #2563eb;
+}
+.resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 32px;
+    background: #9ca3af;
+    border-radius: 1px;
+    opacity: .6;
+}
+.resize-handle:hover::after { background: #ffffff; opacity: 1; }
 </style>
 @endsection

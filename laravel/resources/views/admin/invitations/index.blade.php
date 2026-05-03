@@ -1,92 +1,161 @@
 @extends('layouts.app')
 @section('title', '招待管理')
 
+@section('css')
+<style>
+    .content-header { display: none !important; }
+    .content, .content > .container-fluid {
+        padding: 0 !important;
+        max-width: 100% !important;
+        height: calc(100vh - 3.5rem);
+        overflow-y: auto;
+        background: #f9fafb;
+    }
+</style>
+@endsection
+
 @section('content')
-<div class="flex flex-col h-full bg-gray-50 overflow-hidden">
+<div class="px-6 py-5 max-w-5xl mx-auto space-y-5">
+
     {{-- ヘッダー --}}
-    <div class="shrink-0 px-10 py-8 bg-white border-b border-gray-200">
-        <h1 class="text-3xl font-black text-gray-900 tracking-tighter uppercase mb-2">招待管理</h1>
-        <p class="text-sm text-gray-400 font-bold uppercase tracking-widest">Manage User Invitations</p>
+    <div class="flex items-center justify-between flex-wrap gap-3">
+        <div>
+            <h1 class="text-xl font-extrabold text-gray-900">招待管理</h1>
+            <p class="text-xs text-gray-500 mt-0.5">ユーザーをメールで招待し、ロールを設定できます</p>
+        </div>
+        <div class="text-xs text-gray-500">
+            登録済み: <span class="font-bold text-gray-700">{{ count($invitations) }}</span> 件
+        </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
-        {{-- 新規招待フォーム --}}
-        <div class="max-w-4xl bg-white rounded-3xl shadow-xl p-8 border border-gray-100">
-            <h3 class="text-lg font-black text-gray-800 mb-6 uppercase tracking-tighter">新しいユーザーを招待</h3>
-            
-            <form action="{{ route('admin.invitations.store') }}" method="POST" class="flex flex-wrap items-end gap-6">
-                @csrf
-                <div class="flex-1 min-w-[300px] space-y-1">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Email Address</label>
-                    <input type="email" name="email" required placeholder="user@example.com"
-                        class="w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner">
-                    @error('email') <p class="text-red-600 text-xs mt-1 font-bold">{{ $message }}</p> @enderror
-                </div>
-
-                <div class="w-48 space-y-1">
-                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Role</label>
-                    <select name="role" class="w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner">
-                        <option value="member">Member</option>
-                        <option value="admin">Administrator</option>
-                    </select>
-                </div>
-
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-black px-10 py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-[0.98]">
-                    招待を送信
-                </button>
-            </form>
+    {{-- フラッシュメッセージ --}}
+    @if(session('success'))
+        <div class="bg-green-50 text-green-700 border border-green-200 rounded-lg px-4 py-3 text-sm font-semibold flex items-center gap-2">
+            <i class="fas fa-check-circle"></i>
+            <span>{{ session('success') }}</span>
         </div>
+    @endif
+    @if(session('error'))
+        <div class="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm font-semibold flex items-center gap-2">
+            <i class="fas fa-exclamation-circle"></i>
+            <span>{{ session('error') }}</span>
+        </div>
+    @endif
 
-        {{-- 招待一覧 --}}
-        <div class="max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-            <div class="px-8 py-6 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
-                <h3 class="text-sm font-black text-gray-500 uppercase tracking-widest">Active Invitations</h3>
-                <span class="text-[10px] font-black bg-gray-200 text-gray-600 px-3 py-1 rounded-full">{{ count($invitations) }} TOTAL</span>
+    {{-- 新規招待フォーム --}}
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-center gap-2 mb-3">
+            <i class="fas fa-user-plus text-blue-500 text-sm"></i>
+            <h2 class="text-sm font-bold text-gray-800">新しいユーザーを招待</h2>
+        </div>
+        <form action="{{ route('admin.invitations.store') }}" method="POST" class="flex flex-wrap items-end gap-3">
+            @csrf
+            <div class="flex-1 min-w-[240px]">
+                <label class="block text-xs font-bold text-gray-500 mb-1">メールアドレス</label>
+                <input type="email" name="email" required
+                       placeholder="user@example.com"
+                       value="{{ old('email') }}"
+                       class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300">
+                @error('email') <p class="text-xs text-red-600 mt-1">{{ $message }}</p> @enderror
             </div>
+            <div class="w-40">
+                <label class="block text-xs font-bold text-gray-500 mb-1">ロール</label>
+                <select name="role" class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300">
+                    <option value="member" {{ old('role') === 'member' ? 'selected' : '' }}>メンバー</option>
+                    <option value="admin"  {{ old('role') === 'admin'  ? 'selected' : '' }}>管理者</option>
+                </select>
+            </div>
+            <button type="submit"
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold inline-flex items-center gap-2 transition-all"
+                    style="background-color:#2563eb;color:#ffffff;">
+                <i class="fas fa-paper-plane"></i>
+                招待を送信
+            </button>
+        </form>
+    </div>
 
-            <table class="w-full">
+    {{-- 招待一覧 --}}
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/60 flex items-center gap-2">
+            <i class="fas fa-list text-blue-500 text-sm"></i>
+            <h2 class="text-sm font-bold text-gray-800">招待一覧</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
                 <thead>
-                    <tr class="text-left border-b border-gray-50">
-                        <th class="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Email</th>
-                        <th class="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Role</th>
-                        <th class="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Expires At</th>
-                        <th class="px-8 py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Actions</th>
+                    <tr class="bg-gray-50/60 border-b border-gray-100">
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:34%;">メール</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:14%;">ロール</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:18%;">招待者</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:18%;">有効期限</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:8%;">状態</th>
+                        <th class="text-right px-4 py-2.5 text-xs font-bold text-gray-500" style="width:8%;">操作</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-50">
+                <tbody>
                     @forelse($invitations as $invitation)
-                        <tr class="group hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-5">
-                                <div class="font-bold text-gray-900">{{ $invitation->email }}</div>
-                                @if($invitation->accepted_at)
-                                    <span class="text-[9px] font-black text-green-500 uppercase">Accepted at {{ $invitation->accepted_at->format('Y/m/d') }}</span>
-                                @elseif(!$invitation->isValid())
-                                    <span class="text-[9px] font-black text-red-500 uppercase">Expired</span>
+                        <tr class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+                            <td class="px-4 py-3">
+                                <div class="font-semibold text-gray-900">{{ $invitation->email }}</div>
+                                <div class="text-xs text-gray-400 mt-0.5">{{ $invitation->created_at?->format('Y/m/d H:i') }} 招待</div>
+                            </td>
+                            <td class="px-4 py-3">
+                                @if($invitation->role === 'admin')
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        <i class="fas fa-shield-alt"></i> 管理者
+                                    </span>
                                 @else
-                                    <span class="text-[9px] font-black text-blue-500 uppercase tracking-tighter">Waiting...</span>
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                                        <i class="fas fa-user"></i> メンバー
+                                    </span>
                                 @endif
                             </td>
-                            <td class="px-8 py-5">
-                                <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase {{ $invitation->role === 'admin' ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-600' }}">
-                                    {{ $invitation->role }}
-                                </span>
+                            <td class="px-4 py-3 text-gray-700">
+                                @if($invitation->inviter)
+                                    {{ $invitation->inviter->name }}
+                                @else
+                                    <span class="text-gray-400">—</span>
+                                @endif
                             </td>
-                            <td class="px-8 py-5 text-sm text-gray-500 font-bold">
-                                {{ $invitation->expires_at->diffForHumans() }}
+                            <td class="px-4 py-3 text-gray-600 text-xs">
+                                {{ $invitation->expires_at?->format('Y/m/d') }}
+                                <span class="text-gray-400">({{ $invitation->expires_at?->diffForHumans() }})</span>
                             </td>
-                            <td class="px-8 py-5 text-right">
-                                <form action="{{ route('admin.invitations.destroy', $invitation) }}" method="POST" onsubmit="return confirm('本当にこの招待を取り消しますか？')">
+                            <td class="px-4 py-3">
+                                @if($invitation->accepted_at)
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-200">
+                                        <i class="fas fa-check"></i> 受諾済
+                                    </span>
+                                @elseif(!$invitation->isValid())
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-red-50 text-red-700 border border-red-200">
+                                        <i class="fas fa-times"></i> 期限切れ
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                        <i class="fas fa-clock"></i> 承認待ち
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                <form action="{{ route('admin.invitations.destroy', $invitation) }}" method="POST"
+                                      onsubmit="return confirm('この招待を取り消します。よろしいですか？')"
+                                      class="inline">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="text-red-400 hover:text-red-600 transition-colors p-2">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                    <button type="submit"
+                                            class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 border border-transparent transition-all"
+                                            title="招待を取り消す">
+                                        <i class="fas fa-trash text-xs"></i>
                                     </button>
                                 </form>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="px-8 py-20 text-center text-gray-400 font-bold uppercase tracking-widest">No active invitations found</td>
+                            <td colspan="6" class="text-center text-gray-400 py-12 text-sm">
+                                <i class="fas fa-inbox text-3xl text-gray-300 mb-2 block"></i>
+                                招待はまだありません
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>

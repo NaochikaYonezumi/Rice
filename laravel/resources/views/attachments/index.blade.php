@@ -113,19 +113,40 @@
                         </button>
                     </div>
                 </div>
-                <div class="flex items-center gap-1.5 bg-gray-100 p-1 rounded-2xl w-fit shadow-inner">
-                    <button @click="setTypeFilter('')"
-                        :class="typeFilter === '' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                        class="text-[10px] px-4 py-1.5 rounded-xl transition-all font-black uppercase tracking-tighter">すべて</button>
-                    <button @click="setTypeFilter('image')"
-                        :class="typeFilter === 'image' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                        class="text-[10px] px-4 py-1.5 rounded-xl transition-all font-black uppercase tracking-tighter">🖼 画像</button>
-                    <button @click="setTypeFilter('document')"
-                        :class="typeFilter === 'document' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                        class="text-[10px] px-4 py-1.5 rounded-xl transition-all font-black uppercase tracking-tighter">📄 文書</button>
-                    <button @click="setTypeFilter('other')"
-                        :class="typeFilter === 'other' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                        class="text-[10px] px-4 py-1.5 rounded-xl transition-all font-black uppercase tracking-tighter">📦 その他</button>
+                <div class="flex items-center gap-3 flex-wrap">
+                    {{-- 受信/送信タブ --}}
+                    <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shadow-inner">
+                        <button @click="setDirection('')"
+                            :class="direction === '' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-xs px-3 py-1.5 rounded-lg transition-all font-bold inline-flex items-center gap-1.5">
+                            <i class="fas fa-globe"></i> すべて
+                        </button>
+                        <button @click="setDirection('received')"
+                            :class="direction === 'received' ? 'bg-white shadow text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-xs px-3 py-1.5 rounded-lg transition-all font-bold inline-flex items-center gap-1.5">
+                            <i class="fas fa-inbox"></i> 受信
+                        </button>
+                        <button @click="setDirection('sent')"
+                            :class="direction === 'sent' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-xs px-3 py-1.5 rounded-lg transition-all font-bold inline-flex items-center gap-1.5">
+                            <i class="fas fa-paper-plane"></i> 送信
+                        </button>
+                    </div>
+                    {{-- 種別フィルタ --}}
+                    <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shadow-inner">
+                        <button @click="setTypeFilter('')"
+                            :class="typeFilter === '' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">種別: すべて</button>
+                        <button @click="setTypeFilter('image')"
+                            :class="typeFilter === 'image' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">🖼 画像</button>
+                        <button @click="setTypeFilter('document')"
+                            :class="typeFilter === 'document' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">📄 文書</button>
+                        <button @click="setTypeFilter('other')"
+                            :class="typeFilter === 'other' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
+                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">📦 その他</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -171,10 +192,18 @@
                                 </a>
                             </div>
                             <div class="p-5">
+                                <div class="flex items-center gap-1 mb-1.5">
+                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border"
+                                          :class="att.direction === 'sent' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+                                        <i class="fas" :class="att.direction === 'sent' ? 'fa-paper-plane' : 'fa-inbox'"></i>
+                                        <span x-text="att.direction === 'sent' ? '送信' : '受信'"></span>
+                                    </span>
+                                </div>
                                 <p class="text-xs font-black text-gray-900 truncate mb-1" x-text="att.filename" :title="att.filename"></p>
                                 <div class="flex items-center justify-between">
                                     <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter" x-text="att.size"></span>
-                                    <span class="text-[10px] text-blue-600 font-black truncate max-w-[60px]" x-text="att.from_label"></span>
+                                    <span class="text-[10px] text-blue-600 font-black truncate max-w-[80px]"
+                                          x-text="att.direction === 'sent' ? att.to_address : att.from_label"></span>
                                 </div>
                             </div>
                         </div>
@@ -209,14 +238,28 @@
                                         </template>
                                     </td>
                                     <td class="px-4 py-5">
-                                        <button @click="openPreview(att)" class="text-sm font-black text-gray-800 hover:text-blue-600 truncate block text-left transition-colors mb-1" x-text="att.filename"></button>
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border shrink-0"
+                                                  :class="att.direction === 'sent' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+                                                <i class="fas" :class="att.direction === 'sent' ? 'fa-paper-plane' : 'fa-inbox'"></i>
+                                                <span x-text="att.direction === 'sent' ? '送信' : '受信'"></span>
+                                            </span>
+                                            <button @click="openPreview(att)" class="text-sm font-black text-gray-800 hover:text-blue-600 truncate text-left transition-colors" x-text="att.filename"></button>
+                                        </div>
                                         <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter" x-text="mimeLabel(att.mime_type)"></span>
                                     </td>
                                     <td class="px-4 py-5">
                                         <template x-if="att.thread_id">
                                             <a :href="'/?thread=' + att.thread_id" class="text-xs text-blue-600 hover:underline font-black block truncate max-w-[300px] mb-1" x-text="att.email_subject"></a>
                                         </template>
-                                        <span class="text-[10px] text-gray-500 font-bold" x-text="att.from_label"></span>
+                                        <span class="text-[10px] text-gray-500 font-bold">
+                                            <template x-if="att.direction === 'sent'">
+                                                <span><span class="text-gray-400">To:</span> <span x-text="att.to_address"></span></span>
+                                            </template>
+                                            <template x-if="att.direction !== 'sent'">
+                                                <span><span class="text-gray-400">From:</span> <span x-text="att.from_label"></span></span>
+                                            </template>
+                                        </span>
                                     </td>
                                     <td class="px-4 py-5">
                                         <span class="text-xs text-gray-900 block font-bold mb-1" x-text="att.received_at"></span>
@@ -285,6 +328,7 @@ function attachmentApp() {
         total: 0,
         searchQuery: '',
         typeFilter: '',
+        direction: '',
         dateFrom: '',
         dateTo: '',
         sortOrder: 'desc',
@@ -307,6 +351,7 @@ function attachmentApp() {
                 const params = new URLSearchParams();
                 if (this.searchQuery) params.set('q', this.searchQuery);
                 if (this.typeFilter)  params.set('type', this.typeFilter);
+                if (this.direction)   params.set('direction', this.direction);
                 if (this.dateFrom)    params.set('date_from', this.dateFrom);
                 if (this.dateTo)      params.set('date_to', this.dateTo);
                 if (this.activeCustomerId) params.set('customer_id', this.activeCustomerId);
@@ -346,6 +391,11 @@ function attachmentApp() {
 
         setTypeFilter(type) {
             this.typeFilter = type;
+            this.load();
+        },
+
+        setDirection(dir) {
+            this.direction = dir;
             this.load();
         },
 

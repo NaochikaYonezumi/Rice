@@ -8,10 +8,13 @@ use App\Models\EmailAttachment;
 use App\Models\EmailThread;
 use App\Models\MailSetting;
 use App\Models\PendingEmail;
+use App\Models\User;
+use App\Notifications\ApprovalRequestedNotification;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Modules\MailClient\Services\EmailFetcher;
@@ -42,7 +45,24 @@ class EmailController extends Controller
             'replyCc'      => '',
             'replyBcc'     => '',
             'replySubject' => '',
+            'approvers'    => $this->getApproverCandidates(),
         ]);
+    }
+
+    /**
+     * 承認者候補のユーザー一覧 (自分以外)
+     */
+    private function getApproverCandidates(): array
+    {
+        return User::where('id', '!=', auth()->id())
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role'])
+            ->map(fn($u) => [
+                'id'    => $u->id,
+                'name'  => $u->name,
+                'email' => $u->email,
+                'role'  => $u->role,
+            ])->all();
     }
 
     /**
@@ -100,7 +120,6 @@ class EmailController extends Controller
             $ccAddresses = $email->cc
                 ? array_values(array_filter(array_map('trim', explode(',', $email->cc))))
                 : [];
-            // To に既に含まれているアドレスは Cc から除外
             $ccAddresses = array_values(array_filter(
                 $ccAddresses,
                 fn($c) => !in_array($c, $toAddresses, true) && $c !== $replyTo
@@ -144,6 +163,7 @@ class EmailController extends Controller
             'replyCc'      => $replyCc,
             'replyBcc'     => '',
             'replySubject' => $replySubject,
+            'approvers'    => $this->getApproverCandidates(),
         ]);
     }
 
@@ -217,7 +237,7 @@ class EmailController extends Controller
 
         // RAG API経由で生成
         $result = $this->ragApi->query($finalPrompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
-        
+
         return response()->json([
             'answer' => $result['answer'] ?? '',
             'skill_used' => $selectedSkill['name'],
@@ -238,6 +258,8 @@ class EmailController extends Controller
             'bcc' => 'nullable|string',
             'body' => 'required|string',
             'created_by' => 'nullable|string',
+            'approver_id' => 'nullable|integer|exists:users,id',
+            'draft_id' => 'nullable|integer|exists:pending_emails,id',
             'attachments.*' => 'file|max:20480', // 20MB
         ]);
 
@@ -250,12 +272,21 @@ class EmailController extends Controller
         $pending->bcc = $validated['bcc'] ?? null;
         $pending->subject = "Re: " . $email->subject;
         $pending->body = $validated['body'];
-        $pending->status = PendingEmail::STATUS_PENDING;
+        $saveAsDraft = $request->boolean('save_as_draft');
+        $pending->status = $saveAsDraft ? PendingEmail::STATUS_DRAFT : PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
-        
+        $pending->target_approver_user_id = $validated['approver_id'] ?? null;
+
         $pending->attachment_paths = $this->storePendingAttachments($request);
         $pending->save();
+
+        if (!$saveAsDraft) {
+            $this->notifyAdmins($pending);
+        }
+
+        // 編集元の下書きが指定されている場合は削除
+        $this->deleteSourceDraftIfAny($validated['draft_id'] ?? null);
 
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
     }
@@ -271,6 +302,8 @@ class EmailController extends Controller
             'body' => 'required|string',
             'subject' => 'nullable|string',
             'created_by' => 'nullable|string',
+            'approver_id' => 'nullable|integer|exists:users,id',
+            'draft_id' => 'nullable|integer|exists:pending_emails,id',
             'attachments.*' => 'file|max:20480',
         ]);
 
@@ -282,14 +315,36 @@ class EmailController extends Controller
         $pending->bcc = $validated['bcc'] ?? null;
         $pending->subject = $validated['subject'] ?? '(無題)';
         $pending->body = $validated['body'];
-        $pending->status = PendingEmail::STATUS_PENDING;
+        $saveAsDraft = $request->boolean('save_as_draft');
+        $pending->status = $saveAsDraft ? PendingEmail::STATUS_DRAFT : PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
-        
+        $pending->target_approver_user_id = $validated['approver_id'] ?? null;
+
         $pending->attachment_paths = $this->storePendingAttachments($request);
         $pending->save();
 
+        if (!$saveAsDraft) {
+            $this->notifyAdmins($pending);
+        }
+
+        // 編集元の下書きが指定されている場合は削除
+        $this->deleteSourceDraftIfAny($validated['draft_id'] ?? null);
+
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
+    }
+
+    /**
+     * compose/reply の draft_id 指定で元の下書きを削除する (本人 + draft 状態のみ)
+     */
+    private function deleteSourceDraftIfAny(?int $draftId): void
+    {
+        if (!$draftId) return;
+        $draft = PendingEmail::find($draftId);
+        if (!$draft) return;
+        if ($draft->status !== PendingEmail::STATUS_DRAFT) return;
+        if ($draft->created_by_user_id !== auth()->id()) return;
+        $draft->delete();
     }
 
     /**
@@ -314,6 +369,15 @@ class EmailController extends Controller
             ];
         }
         return $records;
+    }
+
+    private function notifyAdmins(PendingEmail $pending): void
+    {
+        $admins = User::where('role', 'admin')
+            ->where('id', '!=', auth()->id())
+            ->get();
+
+        Notification::send($admins, new ApprovalRequestedNotification($pending));
     }
 
     public function search(Request $request): JsonResponse
@@ -432,14 +496,20 @@ class EmailController extends Controller
                 'url' => route('attachments.download', $a->id),
             ])->values(),
         ]);
-        
+
         $merges = $thread->threadMerges()->get()->map(fn($m) => [
             'id' => $m->id,
             'source_subject' => $m->source_subject,
             'created_at' => $m->created_at?->format('Y/m/d H:i'),
         ]);
 
-        return response()->json(['thread' => $thread, 'emails' => $emails, 'merges' => $merges]);
+        $emailIds = \App\Models\Email::whereIn('thread_id', $threadIds)->pluck('id');
+        $pendingApprovals = PendingEmail::whereIn('in_reply_to_email_id', $emailIds)
+            ->whereIn('status', [PendingEmail::STATUS_PENDING, PendingEmail::STATUS_APPROVED])
+            ->orderBy('created_at', 'desc')
+            ->get(['id', 'status', 'subject', 'created_at']);
+
+        return response()->json(['thread' => $thread, 'emails' => $emails, 'merges' => $merges, 'pending_approvals' => $pendingApprovals]);
     }
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
@@ -476,7 +546,7 @@ class EmailController extends Controller
         ]);
 
         $customerId = $request->customer_id === 'none' ? null : $request->customer_id;
-        
+
         EmailThread::whereIn('id', $request->thread_ids)->update(['customer_id' => $customerId]);
 
         return response()->json([

@@ -28,7 +28,8 @@ class AttachmentController extends Controller
         }
 
         $q          = trim($request->input('q', ''));
-        $typeFilter = $request->input('type', ''); // '' | 'image' | 'document' | 'other'
+        $typeFilter = $request->input('type', '');      // '' | 'image' | 'document' | 'other'
+        $direction  = $request->input('direction', ''); // '' | 'received' | 'sent'
         $customerId = $request->input('customer_id');
         $dateFrom   = $request->input('date_from');
         $dateTo     = $request->input('date_to');
@@ -47,6 +48,14 @@ class AttachmentController extends Controller
                         ->orWhereHas('email', fn($e) => $e->where('subject', 'like', "%{$q}%"));
                 });
             })
+            // 受信/送信フィルタ (Email::message_id が SENT_ で始まるものは送信)
+            ->when($direction === 'sent', fn($query) =>
+                $query->whereHas('email', fn($e) => $e->where('message_id', 'like', 'SENT\_%')))
+            ->when($direction === 'received', fn($query) =>
+                $query->whereHas('email', fn($e) => $e->where(function ($q) {
+                    $q->whereNull('message_id')
+                      ->orWhere('message_id', 'not like', 'SENT\_%');
+                })))
             ->when($dateFrom, fn($query) => $query->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo,   fn($query) => $query->whereDate('created_at', '<=', $dateTo))
             ->when($typeFilter === 'image',    fn($q) => $q->where('mime_type', 'like', 'image/%'))
@@ -66,20 +75,25 @@ class AttachmentController extends Controller
             ->orderBy('created_at', $sort === 'asc' ? 'asc' : 'desc');
 
         $total       = $query->count();
-        $attachments = $query->get()->map(fn($a) => [
-            'id'            => $a->id,
-            'filename'      => $a->filename,
-            'mime_type'     => $a->mime_type,
-            'size'          => $a->humanSize(),
-            'size_bytes'    => $a->size,
-            'is_image'      => $a->isImage(),
-            'url'           => route('attachments.download', $a->id),
-            'email_id'      => $a->email_id,
-            'email_subject' => $a->email?->subject ?? '(削除済み)',
-            'from_label'    => $a->email?->from_label ?? '—',
-            'received_at'   => $a->email?->received_at?->format('Y/m/d H:i') ?? '—',
-            'thread_id'     => $a->email?->thread_id,
-        ]);
+        $attachments = $query->get()->map(function ($a) {
+            $isSent = $a->email && is_string($a->email->message_id) && str_starts_with($a->email->message_id, 'SENT_');
+            return [
+                'id'            => $a->id,
+                'filename'      => $a->filename,
+                'mime_type'     => $a->mime_type,
+                'size'          => $a->humanSize(),
+                'size_bytes'    => $a->size,
+                'is_image'      => $a->isImage(),
+                'url'           => route('attachments.download', $a->id),
+                'email_id'      => $a->email_id,
+                'email_subject' => $a->email?->subject ?? '(削除済み)',
+                'from_label'    => $a->email?->from_label ?? '—',
+                'to_address'    => $a->email?->to_address ?? '—',
+                'received_at'   => $a->email?->received_at?->format('Y/m/d H:i') ?? '—',
+                'thread_id'     => $a->email?->thread_id,
+                'direction'     => $isSent ? 'sent' : 'received',
+            ];
+        });
 
         return response()->json([
             'total'       => $total,

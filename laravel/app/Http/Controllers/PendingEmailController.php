@@ -21,6 +21,11 @@ class PendingEmailController extends Controller
         $status = $request->query('status', PendingEmail::STATUS_PENDING);
         $query = PendingEmail::where('status', $status);
 
+        // 自分が承認者として指定された案件のみ表示するフィルタ
+        if ($request->boolean('for_me')) {
+            $query->where('target_approver_user_id', auth()->id());
+        }
+
         if ($request->has('customer_id')) {
             $query->whereHas('inReplyToEmail.thread', function($q) use ($request) {
                 if ($request->customer_id === 'none') {
@@ -31,7 +36,7 @@ class PendingEmailController extends Controller
             });
         }
 
-        $pending = $query->with(['inReplyToEmail.thread', 'creator'])
+        $pending = $query->with(['inReplyToEmail.thread', 'creator', 'targetApprover', 'rejecter', 'approver'])
             ->orderByDesc('created_at')
             ->get()
             ->map(fn($p) => [
@@ -47,6 +52,13 @@ class PendingEmailController extends Controller
                 'created_at'       => $p->created_at?->format('Y/m/d H:i'),
                 'created_by'       => $p->creator?->name ?? $p->created_by,
                 'created_by_user_id' => $p->created_by_user_id,
+                'target_approver_user_id' => $p->target_approver_user_id,
+                'target_approver_name'    => $p->targetApprover?->name,
+                'rejection_reason'        => $p->rejection_reason,
+                'rejected_at'             => $p->rejected_at?->format('Y/m/d H:i'),
+                'rejected_by_name'        => $p->rejecter?->name,
+                'approved_at'             => $p->approved_at?->format('Y/m/d H:i'),
+                'approved_by_name'        => $p->approver?->name,
                 'memo'             => $p->memo,
                 'attachments'      => collect($p->attachment_paths ?? [])->map(function ($a) {
                     // 旧形式 (path文字列) と新形式 (連想配列) の両対応
@@ -83,6 +95,14 @@ class PendingEmailController extends Controller
     {
         if ($pending->status !== PendingEmail::STATUS_PENDING) {
             return response()->json(['status' => 'error', 'message' => 'このメールは既に処理済みです'], 422);
+        }
+
+        // 承認者が指定されている場合、その人以外は承認不可
+        if ($pending->target_approver_user_id && $pending->target_approver_user_id !== auth()->id()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'この承認依頼は他のユーザーが承認者として指定されています。',
+            ], 403);
         }
 
         // 承認依頼をした場合に自分は承認できない制限
@@ -185,18 +205,87 @@ class PendingEmailController extends Controller
         }
     }
 
-    public function reject(PendingEmail $pending): JsonResponse
+    public function reject(Request $request, PendingEmail $pending): JsonResponse
     {
         if ($pending->status !== PendingEmail::STATUS_PENDING) {
             return response()->json(['status' => 'error', 'message' => 'このメールは既に処理済みです'], 422);
         }
 
-        $pending->update([
-            'status' => PendingEmail::STATUS_REJECTED,
-            'rejected_by_user_id' => auth()->id(),
-        ]);
+        // 承認者が指定されている場合、その人以外は却下不可 (D)
+        if ($pending->target_approver_user_id && $pending->target_approver_user_id !== auth()->id()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'この承認依頼は他のユーザーが承認者として指定されています。',
+            ], 403);
+        }
 
-        return response()->json(['status' => 'ok']);
+        // 自身の依頼は却下できない
+        if ($pending->created_by_user_id === auth()->id()) {
+            return response()->json(['status' => 'error', 'message' => '自分が作成したメールを自分で却下することはできません。'], 403);
+        }
+
+        $validated = $request->validate([
+            'rejection_reason' => 'required|string|min:1|max:2000',
+        ], [
+            'rejection_reason.required' => '却下理由を入力してください。',
+            'rejection_reason.min'      => '却下理由を入力してください。',
+            'rejection_reason.max'      => '却下理由は 2000 文字以内で入力してください。',
+        ]);
+        $reason = trim($validated['rejection_reason']);
+        if ($reason === '') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => '却下理由を入力してください。',
+                'errors'  => ['rejection_reason' => ['却下理由を入力してください。']],
+            ], 422);
+        }
+        $rejecterName = auth()->user()->name ?? '承認者';
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($pending, $reason, $rejecterName) {
+            // (A) 却下情報を保存・(D) 承認者制限・履歴保持
+            $pending->update([
+                'status'              => PendingEmail::STATUS_REJECTED,
+                'rejected_by_user_id' => auth()->id(),
+                'rejected_at'         => now(),
+                'rejection_reason'    => $reason !== '' ? $reason : null,
+            ]);
+
+            // (B) 却下された内容を「下書き」として再生成 → 依頼者が再編集できる
+            $memoLines = [];
+            $memoLines[] = '【却下されました】 by ' . $rejecterName . ' (' . now()->format('Y/m/d H:i') . ')';
+            if ($reason !== '') {
+                $memoLines[] = '理由: ' . $reason;
+            }
+            if ($pending->memo) {
+                $memoLines[] = '— 元のメモ —';
+                $memoLines[] = $pending->memo;
+            }
+
+            $newDraft = $pending->replicate(['status', 'approved_at', 'approved_by_user_id']);
+            $newDraft->status                   = PendingEmail::STATUS_DRAFT;
+            $newDraft->memo                     = implode("\n", $memoLines);
+            $newDraft->target_approver_user_id  = null;   // 再選択させる
+            $newDraft->approved_at              = null;
+            $newDraft->approved_by_user_id      = null;
+            // 却下情報は構造化して新ドラフトにも保持 (UI 表示用)
+            $newDraft->rejected_by_user_id      = auth()->id();
+            $newDraft->rejected_at              = now();
+            $newDraft->rejection_reason         = $reason !== '' ? $reason : null;
+            $newDraft->save();
+        });
+
+        // (C) 依頼者へ通知
+        if ($pending->created_by_user_id) {
+            $creator = \App\Models\User::find($pending->created_by_user_id);
+            if ($creator) {
+                $creator->notify(new \App\Notifications\RejectedNotification($pending, $reason !== '' ? $reason : null, $rejecterName));
+            }
+        }
+
+        return response()->json([
+            'status'  => 'ok',
+            'message' => '却下しました。下書きとして再編集可能になっています。',
+        ]);
     }
 
     /**

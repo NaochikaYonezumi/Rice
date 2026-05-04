@@ -319,7 +319,7 @@
                             </button>
                         </div>
                     </div>
-                    {{-- 2行目: 件名 + 承認状態バッジ --}}
+                    {{-- 2行目: 件名 + 承認状態バッジ + AI要約ボタン --}}
                     <div class="px-6 py-2.5 flex items-center gap-2.5 min-w-0">
                         <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
                             <i class="fas fa-envelope text-[11px]"></i>
@@ -329,7 +329,6 @@
                                 style="word-break:break-word;overflow-wrap:anywhere;line-height:1.35;"
                                 x-text="selectedThread?.subject"></h2>
                             <div class="mt-0.5 flex flex-wrap items-center gap-2">
-                                {{-- 担当者は上部のトグルボタンに表示 (重複削除) --}}
                                 <template x-if="pendingApprovals.some(p => p.status === 'pending')">
                                     <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 border border-amber-200">
                                         <i class="fas fa-clock"></i> 承認依頼中
@@ -342,6 +341,17 @@
                                 </template>
                             </div>
                         </div>
+                        {{-- AI要約ボタン (右端) --}}
+                        <button type="button" @click="openThreadSummary()"
+                                :disabled="!threadEmails.length"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                style="background-color:#4f46e5;color:#ffffff;box-shadow:0 2px 6px rgba(79,70,229,0.25);"
+                                onmouseover="if(!this.disabled)this.style.backgroundColor='#4338ca';"
+                                onmouseout="if(!this.disabled)this.style.backgroundColor='#4f46e5';"
+                                title="このスレッドの全メールを AI で要約">
+                            <i class="fas fa-magic text-[10px]"></i>
+                            AI要約
+                        </button>
                     </div>
                 </div>
 
@@ -570,6 +580,111 @@
         </div>
     </div>
 
+    {{-- AI要約モーダル --}}
+    <div x-show="threadSummaryOpen" x-cloak
+         class="fixed inset-0 z-[2000] flex items-center justify-center p-4"
+         style="background-color:rgba(15,23,42,0.55);"
+         @click.self="threadSummaryOpen = false"
+         @keydown.escape.window="threadSummaryOpen = false">
+        <div class="w-full max-w-2xl rounded-2xl overflow-hidden flex flex-col"
+             style="background-color:#ffffff;max-height:85vh;box-shadow:0 25px 50px -12px rgba(0,0,0,0.4);">
+            {{-- ヘッダー --}}
+            <div class="shrink-0 px-5 py-3 flex items-center justify-between gap-3 border-b border-indigo-100"
+                 style="background:linear-gradient(135deg,#eef2ff 0%,#ede9fe 100%);">
+                <div class="flex items-center gap-2 min-w-0">
+                    <div class="w-9 h-9 rounded-lg inline-flex items-center justify-center shrink-0"
+                         style="background-color:#4f46e5;color:#ffffff;">
+                        <i class="fas fa-magic"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-extrabold" style="color:#312e81;">AI要約</h3>
+                        <p class="text-[10px] truncate" style="color:#6366f1;"
+                           x-text="selectedThread?.subject || ''"></p>
+                    </div>
+                </div>
+                <button @click="threadSummaryOpen = false"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg transition-colors"
+                        style="color:#6b7280;"
+                        onmouseover="this.style.backgroundColor='#ffffff';this.style.color='#374151';"
+                        onmouseout="this.style.backgroundColor='';this.style.color='#6b7280';"
+                        title="閉じる">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            {{-- 本文 --}}
+            <div class="flex-1 overflow-y-auto custom-scrollbar p-5"
+                 style="min-height:0;background-color:#ffffff;">
+                {{-- ローディング --}}
+                <div x-show="threadSummaryLoading" class="flex flex-col items-center justify-center py-10">
+                    <i class="fas fa-circle-notch fa-spin fa-2x mb-3" style="color:#818cf8;"></i>
+                    <p class="text-sm font-bold" style="color:#4f46e5;">スレッドを分析中...</p>
+                    <p class="text-[11px] mt-1" style="color:#9ca3af;"
+                       x-text="threadEmails.length + ' 通のメールを読み込み中'"></p>
+                </div>
+
+                {{-- エラー --}}
+                <div x-show="!threadSummaryLoading && threadSummaryError"
+                     class="rounded-lg p-4 text-sm"
+                     style="background-color:#fef2f2;color:#b91c1c;border:1px solid #fecaca;"
+                     x-text="threadSummaryError"></div>
+
+                {{-- 結果 --}}
+                <div x-show="!threadSummaryLoading && threadSummary && !threadSummaryError" class="space-y-3">
+                    <div class="flex items-center gap-2 text-[10px] font-bold flex-wrap">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
+                              style="background-color:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;">
+                            <i class="fas fa-envelope"></i>
+                            <span x-text="(threadSummary?.email_count || 0) + ' 通'"></span>
+                        </span>
+                        <template x-if="threadSummary?.ticket">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
+                                  style="background-color:#fef3c7;color:#92400e;border:1px solid #fde68a;">
+                                <i class="fas fa-hashtag"></i>
+                                <span x-text="threadSummary.ticket"></span>
+                            </span>
+                        </template>
+                    </div>
+                    <div class="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap"
+                         style="background-color:#f9fafb;color:#111827;border:1px solid #e5e7eb;word-break:break-word;"
+                         x-text="threadSummary.summary"></div>
+                </div>
+            </div>
+
+            {{-- フッター --}}
+            <div class="shrink-0 px-5 py-3 flex items-center justify-between gap-2 border-t border-gray-100"
+                 style="background-color:#f9fafb;">
+                <button type="button" @click="copyThreadSummary()"
+                        x-show="!threadSummaryLoading && threadSummary && !threadSummaryError"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                        style="background-color:#ffffff;color:#374151;border:1px solid #d1d5db;"
+                        onmouseover="this.style.backgroundColor='#f3f4f6';"
+                        onmouseout="this.style.backgroundColor='#ffffff';">
+                    <i class="fas" :class="threadSummaryCopied ? 'fa-check' : 'fa-copy'"></i>
+                    <span x-text="threadSummaryCopied ? 'コピーしました' : '要約をコピー'"></span>
+                </button>
+                <div class="flex items-center gap-2 ml-auto">
+                    <button type="button" @click="loadThreadSummary(true)"
+                            :disabled="threadSummaryLoading"
+                            x-show="threadSummary && !threadSummaryError"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                            style="background-color:#ffffff;color:#374151;border:1px solid #d1d5db;"
+                            onmouseover="if(!this.disabled)this.style.backgroundColor='#f3f4f6';"
+                            onmouseout="if(!this.disabled)this.style.backgroundColor='#ffffff';">
+                        <i class="fas fa-redo text-[10px]"></i> 再生成
+                    </button>
+                    <button type="button" @click="threadSummaryOpen = false"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-colors"
+                            style="background-color:#4f46e5;"
+                            onmouseover="this.style.backgroundColor='#4338ca';"
+                            onmouseout="this.style.backgroundColor='#4f46e5';">
+                        閉じる
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- 同期エラーモーダル --}}
     <template x-if="syncError">
         <div class="fixed inset-0 z-[2000] flex items-center justify-center p-4"
@@ -688,6 +803,9 @@ function emailApp() {
         sortOrder: 'desc',
         statusLabels: { inbox: '受信', hold: '保留', completed: '完了', pending: '承認待ち' },
         threadEmails: [], threadMerges: [], expandedEmailIds: [],
+        // AI要約 (スレッド全体)
+        threadSummaryOpen: false, threadSummaryLoading: false, threadSummary: null,
+        threadSummaryError: '', threadSummaryCopied: false,
         // チャット関連 (スレッド毎)
         chatOpen: false, chatComments: [], chatLoading: false, chatInput: '', chatSending: false,
         chatPollIntervalId: null,
@@ -1096,6 +1214,57 @@ function emailApp() {
             this.chatInput = '';
             this.stopChatPolling();
             this.closeMention();
+        },
+
+        // ============= AI要約 (スレッド全体) =============
+        openThreadSummary() {
+            if (!this.selectedThreadId) {
+                this.toast('スレッドを選択してください', 'error');
+                return;
+            }
+            this.threadSummaryOpen = true;
+            this.threadSummaryCopied = false;
+            // 既に生成済みなら再利用、未生成なら生成
+            if (!this.threadSummary || this.threadSummary?.thread_id !== this.selectedThreadId) {
+                this.loadThreadSummary(false);
+            }
+        },
+        async loadThreadSummary(force = false) {
+            if (!this.selectedThreadId) return;
+            if (this.threadSummaryLoading) return;
+            if (!force && this.threadSummary && this.threadSummary.thread_id === this.selectedThreadId) return;
+            this.threadSummaryLoading = true;
+            this.threadSummaryError = '';
+            this.threadSummary = null;
+            try {
+                const res = await fetch(`/threads/${this.selectedThreadId}/ai-summary`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.status === 'error') {
+                    this.threadSummaryError = data.message || `AI要約に失敗しました (HTTP ${res.status})`;
+                    return;
+                }
+                this.threadSummary = { ...data, thread_id: this.selectedThreadId };
+            } catch (e) {
+                this.threadSummaryError = '通信エラー: ' + (e.message || '');
+            } finally {
+                this.threadSummaryLoading = false;
+            }
+        },
+        async copyThreadSummary() {
+            if (!this.threadSummary?.summary) return;
+            try {
+                await navigator.clipboard.writeText(this.threadSummary.summary);
+                this.threadSummaryCopied = true;
+                setTimeout(() => { this.threadSummaryCopied = false; }, 1500);
+            } catch (e) {
+                this.toast('コピーに失敗しました', 'error');
+            }
         },
 
         // チャットパネルの開閉

@@ -316,6 +316,65 @@ class EmailController extends Controller
         ]);
     }
 
+    /**
+     * スレッド要約: 指定スレッドの全メールを参照して要約を生成
+     */
+    public function summarizeThread(EmailThread $thread): JsonResponse
+    {
+        $emails = $thread->emails()->with('attachments')->orderBy('received_at', 'asc')->get();
+        if ($emails->isEmpty()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'このスレッドにはメールがありません。',
+            ], 422);
+        }
+
+        // メール本文を時系列で連結 (各メール 800 文字まで)
+        $threadContext = '';
+        foreach ($emails as $i => $e) {
+            $threadContext .= "[#" . ($i + 1) . "] ";
+            $threadContext .= "From: " . ($e->from_label ?: $e->from_address ?: '不明') . "\n";
+            $threadContext .= "To: "   . ($e->to_address ?: '—') . "\n";
+            if ($e->cc) {
+                $threadContext .= "Cc: " . $e->cc . "\n";
+            }
+            $threadContext .= "Date: " . ($e->received_at?->format('Y/m/d H:i') ?: '—') . "\n";
+            $threadContext .= "Subject: " . ($e->subject ?: '(件名なし)') . "\n";
+            $threadContext .= "Body:\n" . Str::limit((string) $e->plain_body, 800, '...(省略)') . "\n";
+            if ($e->attachments && $e->attachments->count() > 0) {
+                $names = $e->attachments->pluck('filename')->implode(', ');
+                $threadContext .= "Attachments: " . $names . "\n";
+            }
+            $threadContext .= "----\n";
+        }
+
+        $aiSettings = AiSetting::getSettings();
+        $prompt  = "【システム指示】\n";
+        $prompt .= "あなたはサポート窓口担当者です。以下のメールスレッドを日本語で要約してください。\n";
+        $prompt .= "出力フォーマット:\n";
+        $prompt .= "1. 概要 (3〜5行で何のスレッドか)\n";
+        $prompt .= "2. 経緯 (時系列で 5〜8 行の箇条書き)\n";
+        $prompt .= "3. 未解決事項 / ネクストアクション (箇条書き、なければ「なし」)\n";
+        $prompt .= "4. 重要な日付・金額・人物・固有名詞 (列挙)\n";
+        $prompt .= "返信案や挨拶文は不要、要約のみ。\n\n";
+        $prompt .= "【スレッド件名】\n" . ($thread->subject ?: '(件名なし)') . "\n";
+        if ($thread->ticket_number) {
+            $prompt .= "【チケット番号】\n[#" . $thread->ticket_number . "]\n";
+        }
+        $prompt .= "【メール総数】" . $emails->count() . " 通\n\n";
+        $prompt .= "【スレッド本文】\n" . $threadContext;
+
+        $result = $this->ragApi->query($prompt, 1, $aiSettings->default_provider, $aiSettings->default_model);
+
+        return response()->json([
+            'status'      => 'ok',
+            'summary'     => $result['answer'] ?? '',
+            'email_count' => $emails->count(),
+            'subject'     => $thread->subject,
+            'ticket'      => $thread->ticket_number,
+        ]);
+    }
+
     // 返信予約 (TO/CC/BCC/添付対応)
     public function reply(Request $request, Email $email): JsonResponse
     {

@@ -91,6 +91,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/chats/threads', [ThreadChatController::class, 'listThreads'])->name('chats.threads');
 
     Route::post('/emails/ai-compose', [EmailController::class, 'askAiCompose'])->name('emails.ai_compose');
+    Route::post('/threads/{thread}/ai-summary', [EmailController::class, 'summarizeThread'])->name('threads.ai_summary');
     Route::post('/emails/{email}/ai', [EmailController::class, 'askAi'])->name('emails.ai');
     Route::post('/emails/{email}/reply', [EmailController::class, 'reply'])->name('emails.reply');
     Route::post('/emails/compose', [EmailController::class, 'compose'])->name('emails.compose');

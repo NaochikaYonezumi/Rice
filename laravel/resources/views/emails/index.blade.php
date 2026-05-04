@@ -140,18 +140,15 @@
                                 </button>
 
                                 <div class="px-5 py-2 flex flex-col justify-center h-full gap-1">
-                                    {{-- 1段目: 送信者 + 日付 --}}
-                                    <div class="flex justify-between items-center gap-2">
-                                        <div class="flex items-center gap-2 min-w-0">
-                                            <template x-if="selectionMode">
-                                                <input type="checkbox" class="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 shrink-0"
-                                                       :checked="selectedThreadIds.includes(thread.id)" @click.stop="toggleSelection(thread)">
-                                            </template>
-                                            <i x-show="thread.is_pinned" class="fas fa-thumbtack text-amber-500 text-[10px] shrink-0"></i>
-                                            <i x-show="thread.thread_merges_count > 0" class="fas fa-object-group text-blue-500 text-[10px] shrink-0" title="マージ済み"></i>
-                                            <span class="text-[12px] font-bold text-gray-900 truncate" x-text="thread.latest_email?.from_label || '不明な送信者'"></span>
-                                        </div>
-                                        <span class="text-[10px] text-gray-400 font-medium shrink-0" x-text="thread.last_email_at"></span>
+                                    {{-- 1段目: 送信者 (日付は別行に分離) --}}
+                                    <div class="flex items-center gap-2 min-w-0">
+                                        <template x-if="selectionMode">
+                                            <input type="checkbox" class="w-3.5 h-3.5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 shrink-0"
+                                                   :checked="selectedThreadIds.includes(thread.id)" @click.stop="toggleSelection(thread)">
+                                        </template>
+                                        <i x-show="thread.is_pinned" class="fas fa-thumbtack text-amber-500 text-[10px] shrink-0"></i>
+                                        <i x-show="thread.thread_merges_count > 0" class="fas fa-object-group text-blue-500 text-[10px] shrink-0" title="マージ済み"></i>
+                                        <span class="text-[12px] font-bold text-gray-900 truncate" x-text="thread.latest_email?.from_label || '不明な送信者'"></span>
                                     </div>
 
                                     {{-- 2段目: 件名 (フル幅・最大2行) --}}
@@ -159,9 +156,12 @@
                                          style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
                                          x-text="thread.subject"></div>
 
-                                    {{-- 3段目: メタデータ (ステータス / 担当者 / タグ) --}}
-                                    <div class="flex items-center gap-1.5 flex-wrap min-h-[18px]"
-                                         x-show="allStatusMode || thread.assignee || (thread.tags && thread.tags.length > 0)">
+                                    {{-- 3段目: 日付 + メタデータ (ステータス / 担当者 / タグ) --}}
+                                    <div class="flex items-center gap-1.5 flex-wrap min-h-[18px]">
+                                        <span class="text-[10px] text-gray-400 font-medium shrink-0 inline-flex items-center gap-1">
+                                            <i class="fas fa-clock text-[8px]"></i>
+                                            <span x-text="thread.last_email_at"></span>
+                                        </span>
 
                                         {{-- ステータスバッジ (全表示モード時) --}}
                                         <template x-if="allStatusMode">

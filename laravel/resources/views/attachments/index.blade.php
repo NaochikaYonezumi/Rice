@@ -1,273 +1,319 @@
 @extends('layouts.app')
 @section('title', '添付ファイル')
 
+@section('css')
+<style>
+    body.attachments-page { overflow: hidden !important; }
+    body.attachments-page .content-header { display: none !important; }
+    body.attachments-page .main-footer { display: none !important; }
+    body.attachments-page .content-wrapper { padding: 0 !important; overflow: hidden !important; }
+    body.attachments-page .content,
+    body.attachments-page .content > .container-fluid {
+        padding: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+        height: calc(100vh - 3.5rem) !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        background: #f9fafb;
+    }
+    body.attachments-page .content > .container-fluid { height: 100% !important; }
+
+    .att-root {
+        height: 100% !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        display: flex !important;
+    }
+    .att-root .clamp-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+    .att-root input[type="date"] { color: #111827; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+    [x-cloak] { display: none !important; }
+</style>
+@endsection
+
 @section('content')
-<div class="flex h-full bg-gray-50" x-data="attachmentApp()" x-init="init()" x-cloak>
+<script>
+    document.body.classList.add('attachments-page');
+    window.addEventListener('beforeunload', function() {
+        document.body.classList.remove('attachments-page');
+    });
+</script>
 
-    {{-- 左パネル: 顧客一覧 --}}
-    <div class="w-64 shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden shadow-sm z-10">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white">
-            <h2 class="text-xs font-black text-gray-900 uppercase tracking-widest">顧客リスト</h2>
+<div class="att-root flex bg-gray-50" x-data="attachmentApp()" x-init="init()" x-cloak>
+
+    {{-- ===== メイン (顧客リストは廃止し、ツールバーのドロップダウンで絞込む) ===== --}}
+    <main class="flex-1 min-w-0"
+          style="width:100%;height:100%;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
+
+        {{-- ヘッダー (1行コンパクト: タイトル + 件数 + フィルタバッジ + 更新) --}}
+        <div class="px-5 py-2 bg-white border-b border-gray-200 flex items-center justify-between gap-3"
+             style="flex-shrink:0;">
+            <div class="min-w-0 flex-1 inline-flex items-center gap-2">
+                <i class="fas fa-paperclip text-blue-500 text-xs shrink-0"></i>
+                <h1 class="text-sm font-extrabold text-gray-900 truncate"
+                    x-text="activeCustomerId ? (customerData.find(c=>c.id===activeCustomerId)?.name || '未設定') : 'すべての添付ファイル'"></h1>
+                <span class="text-[11px] font-bold text-gray-500 shrink-0" x-text="'(' + total + ')'"></span>
+                <template x-if="hasActiveFilter">
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0"
+                          style="background-color:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">
+                        <i class="fas fa-filter"></i> フィルタ適用中
+                    </span>
+                </template>
+            </div>
+            <button @click="load()"
+                class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors shrink-0"
+                style="background-color:#111827;color:#ffffff;"
+                onmouseover="this.style.backgroundColor='#000000';"
+                onmouseout="this.style.backgroundColor='#111827';"
+                :class="{ 'opacity-50 cursor-wait': loading }">
+                <i class="fas text-[10px]" :class="loading ? 'fa-circle-notch fa-spin' : 'fa-sync-alt'"></i>
+                更新
+            </button>
         </div>
 
-        <div class="flex-1 overflow-y-auto py-2">
-            <div class="space-y-0.5 px-2">
-                {{-- すべてのファイル --}}
-                <button @click="activeCustomerId = null; load()"
-                    :class="activeCustomerId === null ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-blue-50'"
-                    class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between mb-4 group">
-                    <span>すべてのファイル</span>
-                    <span class="text-[10px] opacity-60 group-hover:opacity-100">ALL</span>
-                </button>
-
-                <div class="flex items-center justify-between px-2 mb-2">
-                    <span class="text-[9px] font-bold text-gray-300 uppercase tracking-widest">顧客別</span>
+        {{-- ツールバー: 検索 + 顧客 + 期間 + 並び順 + 受信/送信 + 種別 --}}
+        <div class="px-6 py-3 bg-white border-b border-gray-100 space-y-2"
+             style="flex-shrink:0;">
+            <div class="flex items-center gap-2 flex-wrap">
+                <div class="relative flex-1" style="min-width:240px;">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                    <input type="text" x-model="searchQuery" @input="onSearchInput()"
+                           placeholder="ファイル名・メール件名で検索..."
+                           class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300">
                 </div>
 
-                <template x-if="customersLoading">
-                    <div class="p-4 text-center text-xs text-gray-400 animate-pulse">読み込み中...</div>
-                </template>
-
-                <template x-if="!customersLoading">
-                    <div class="space-y-0.5">
-                        <template x-for="c in filteredCustomers" :key="c.id">
-                            <button @click="activeCustomerId = c.id; load()"
-                                :class="activeCustomerId === c.id ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-blue-50 hover:text-blue-700'"
-                                class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between group">
-                                <span class="truncate pr-2" x-text="c.name"></span>
-                                <span class="text-[10px] opacity-60" x-text="c.emails?.length || 0"></span>
+                {{-- 顧客フィルタ (ドロップダウン) --}}
+                <div class="relative shrink-0" @click.outside="customerDropdownOpen = false">
+                    <button type="button" @click="customerDropdownOpen = !customerDropdownOpen"
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+                        :style="activeCustomerId
+                            ? 'background-color:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;'
+                            : 'background-color:#f9fafb;color:#4b5563;border:1px solid #e5e7eb;'">
+                        <i class="fas fa-user"></i>
+                        <span class="max-w-[160px] truncate"
+                              x-text="activeCustomerId ? (customerData.find(c=>c.id===activeCustomerId)?.name || '未設定') : '顧客: すべて'"></span>
+                        <i class="fas fa-chevron-down text-[9px]"></i>
+                    </button>
+                    <div x-show="customerDropdownOpen" x-cloak x-transition.duration.150ms
+                         class="absolute right-0 mt-1 w-72 rounded-xl shadow-xl z-30 overflow-hidden flex flex-col"
+                         style="background-color:#ffffff;border:1px solid #e5e7eb;max-height:380px;">
+                        <div class="shrink-0 p-2 border-b border-gray-100">
+                            <div class="relative">
+                                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                                <input type="text" x-model="customerSearchQuery" placeholder="顧客を絞り込み..."
+                                       class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-300">
+                            </div>
+                        </div>
+                        <div class="flex-1 overflow-y-auto custom-scrollbar p-1 min-h-0">
+                            <button type="button"
+                                @click="activeCustomerId = null; customerDropdownOpen = false; load()"
+                                class="w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-between"
+                                :style="activeCustomerId === null
+                                    ? 'background-color:#dbeafe;color:#1e40af;'
+                                    : 'background-color:transparent;color:#4b5563;'"
+                                onmouseover="if(this.dataset.active!=='1')this.style.backgroundColor='#f3f4f6';"
+                                onmouseout="if(this.dataset.active!=='1')this.style.backgroundColor='transparent';"
+                                :data-active="activeCustomerId === null ? '1' : '0'">
+                                <span class="inline-flex items-center gap-2"><i class="fas fa-globe-asia text-[10px]"></i> すべての顧客</span>
+                                <span class="text-[10px] opacity-70" x-text="totalAcrossCustomers"></span>
                             </button>
-                        </template>
+                            <template x-if="customersLoading">
+                                <p class="text-center text-[11px] text-gray-400 py-3">読み込み中...</p>
+                            </template>
+                            <template x-if="!customersLoading && filteredCustomers.length === 0">
+                                <p class="text-center text-[11px] text-gray-400 py-3">顧客がありません</p>
+                            </template>
+                            <template x-for="c in filteredCustomers" :key="c.id">
+                                <button type="button"
+                                    @click="activeCustomerId = c.id; customerDropdownOpen = false; load()"
+                                    class="w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors flex items-center justify-between"
+                                    :style="activeCustomerId === c.id
+                                        ? 'background-color:#dbeafe;color:#1e40af;'
+                                        : 'background-color:transparent;color:#4b5563;'"
+                                    onmouseover="if(this.dataset.active!=='1')this.style.backgroundColor='#f3f4f6';"
+                                    onmouseout="if(this.dataset.active!=='1')this.style.backgroundColor='transparent';"
+                                    :data-active="activeCustomerId === c.id ? '1' : '0'">
+                                    <span class="truncate pr-2" x-text="c.name"></span>
+                                    <span class="text-[10px] opacity-70 shrink-0" x-text="c.emails?.length || 0"></span>
+                                </button>
+                            </template>
+                        </div>
                     </div>
-                </template>
-            </div>
-        </div>
-
-        {{-- 顧客検索 --}}
-        <div class="px-3 py-3 border-t border-gray-100 bg-white">
-            <div class="relative">
-                <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                <input type="text" x-model="customerSearchQuery" placeholder="顧客を絞り込み..." 
-                    class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border-none rounded-lg text-[10px] focus:ring-2 focus:ring-blue-400 outline-none transition-all">
-            </div>
-        </div>
-    </div>
-
-    {{-- メインエリア --}}
-    <div class="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {{-- ヘッダー --}}
-        <div class="bg-white border-b border-gray-200 px-8 py-4 shrink-0 shadow-sm z-10">
-            <div class="flex items-center justify-between mb-4">
-                <div class="min-w-0">
-                    <h1 class="text-xl font-black text-gray-900 truncate">
-                        <span x-text="activeCustomerId ? (customerData.find(c=>c.id===activeCustomerId)?.name || '未設定') : 'すべての添付ファイル'"></span>
-                    </h1>
-                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                        Total: <span class="text-gray-900" x-text="total"></span> files
-                        <template x-if="searchQuery || typeFilter || dateFrom || dateTo">
-                            <span class="ml-2 text-blue-600">Filtering active</span>
-                        </template>
-                    </p>
                 </div>
-                <div class="flex items-center gap-3">
-                    <div class="flex items-center bg-gray-100 p-0.5 rounded-xl overflow-hidden shadow-inner">
-                        <button @click="viewMode = 'list'"
-                            :class="viewMode === 'list' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="px-3 py-1.5 rounded-lg transition-all" title="リスト表示">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-                        </button>
-                        <button @click="viewMode = 'grid'"
-                            :class="viewMode === 'grid' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="px-3 py-1.5 rounded-lg transition-all" title="グリッド表示">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-                        </button>
-                    </div>
-                    <button @click="load()"
-                        class="text-xs bg-gray-900 hover:bg-black text-white px-5 py-2 rounded-xl transition-all font-black shadow-lg shadow-gray-200"
-                        :class="{ 'opacity-50 cursor-wait': loading }">
-                        更新
+                <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg shrink-0"
+                     style="background-color:#f9fafb;border:1px solid #e5e7eb;">
+                    <i class="fas fa-calendar text-gray-400 text-[10px]"></i>
+                    <input type="date" x-model="dateFrom" @change="load()"
+                           class="bg-transparent border-none text-[11px] p-0 focus:ring-0 font-semibold text-gray-700 w-[120px]">
+                    <span class="text-gray-300 text-xs">〜</span>
+                    <input type="date" x-model="dateTo" @change="load()"
+                           class="bg-transparent border-none text-[11px] p-0 focus:ring-0 font-semibold text-gray-700 w-[120px]">
+                </div>
+                <button @click="sortOrder = (sortOrder === 'desc' ? 'asc' : 'desc'); load()"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors shrink-0"
+                    style="background-color:#f9fafb;color:#4b5563;border:1px solid #e5e7eb;"
+                    onmouseover="this.style.backgroundColor='#ffffff';"
+                    onmouseout="this.style.backgroundColor='#f9fafb';">
+                    <i class="fas" :class="sortOrder === 'desc' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-short-wide'"></i>
+                    <span x-text="sortOrder === 'desc' ? '新しい順' : '古い順'"></span>
+                </button>
+                <button @click="resetFilters()" x-show="hasActiveFilter"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors shrink-0"
+                    style="background-color:#fef2f2;color:#b91c1c;border:1px solid #fecaca;"
+                    onmouseover="this.style.backgroundColor='#fee2e2';"
+                    onmouseout="this.style.backgroundColor='#fef2f2';">
+                    <i class="fas fa-times-circle"></i> 条件リセット
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2 flex-wrap">
+                {{-- 受信/送信 --}}
+                <div class="inline-flex items-center gap-0.5 p-0.5 rounded-lg" style="background-color:#f3f4f6;">
+                    <button @click="setDirection('')"
+                        class="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center gap-1"
+                        :style="direction === ''
+                            ? 'background-color:#ffffff;color:#111827;box-shadow:0 1px 2px rgba(0,0,0,0.06);'
+                            : 'background-color:transparent;color:#6b7280;'">
+                        <i class="fas fa-globe text-[10px]"></i> すべて
+                    </button>
+                    <button @click="setDirection('received')"
+                        class="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center gap-1"
+                        :style="direction === 'received'
+                            ? 'background-color:#ffffff;color:#047857;box-shadow:0 1px 2px rgba(0,0,0,0.06);'
+                            : 'background-color:transparent;color:#6b7280;'">
+                        <i class="fas fa-inbox text-[10px]"></i> 受信
+                    </button>
+                    <button @click="setDirection('sent')"
+                        class="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center gap-1"
+                        :style="direction === 'sent'
+                            ? 'background-color:#ffffff;color:#1d4ed8;box-shadow:0 1px 2px rgba(0,0,0,0.06);'
+                            : 'background-color:transparent;color:#6b7280;'">
+                        <i class="fas fa-paper-plane text-[10px]"></i> 送信
                     </button>
                 </div>
-            </div>
 
-            {{-- 検索 + フィルター --}}
-            <div class="flex flex-col gap-4">
-                <div class="flex items-center gap-4 flex-wrap">
-                    <div class="relative flex-1 min-w-md">
-                        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                        <input type="text" x-model="searchQuery" @input="onSearchInput()"
-                            placeholder="ファイル名、またはメールの件名で検索..."
-                            class="w-full text-xs bg-gray-50 border-none rounded-xl pl-10 pr-4 py-2 focus:ring-2 focus:ring-blue-400 transition-all font-medium">
-                    </div>
-                    <div class="flex items-center gap-2 shrink-0">
-                        <div class="flex items-center bg-gray-50 border border-gray-100 rounded-xl px-3 py-1 gap-2">
-                            <span class="text-[9px] font-black text-gray-400 uppercase tracking-tighter">期間</span>
-                            <input type="date" x-model="dateFrom" @change="load()" class="bg-transparent border-none text-[10px] p-0 focus:ring-0 font-bold text-gray-700">
-                            <span class="text-gray-300">~</span>
-                            <input type="date" x-model="dateTo" @change="load()" class="bg-transparent border-none text-[10px] p-0 focus:ring-0 font-bold text-gray-700">
-                        </div>
-                        <button @click="sortOrder = (sortOrder === 'desc' ? 'asc' : 'desc'); load()" 
-                            class="bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-xl text-[10px] font-black text-gray-600 hover:bg-white transition-all flex items-center gap-1.5 shadow-sm">
-                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
-                            <span x-text="sortOrder === 'desc' ? '新しい順' : '古い順'"></span>
+                {{-- 種別 --}}
+                <div class="inline-flex items-center gap-0.5 p-0.5 rounded-lg" style="background-color:#f3f4f6;">
+                    <template x-for="t in typeTabs" :key="t.key">
+                        <button @click="setTypeFilter(t.key)"
+                            class="px-2.5 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center gap-1"
+                            :style="typeFilter === t.key
+                                ? 'background-color:#ffffff;color:#1d4ed8;box-shadow:0 1px 2px rgba(0,0,0,0.06);'
+                                : 'background-color:transparent;color:#6b7280;'">
+                            <i class="fas text-[10px]" :class="t.icon"></i>
+                            <span x-text="t.label"></span>
                         </button>
-                    </div>
-                </div>
-                <div class="flex items-center gap-3 flex-wrap">
-                    {{-- 受信/送信タブ --}}
-                    <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shadow-inner">
-                        <button @click="setDirection('')"
-                            :class="direction === '' ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-xs px-3 py-1.5 rounded-lg transition-all font-bold inline-flex items-center gap-1.5">
-                            <i class="fas fa-globe"></i> すべて
-                        </button>
-                        <button @click="setDirection('received')"
-                            :class="direction === 'received' ? 'bg-white shadow text-emerald-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-xs px-3 py-1.5 rounded-lg transition-all font-bold inline-flex items-center gap-1.5">
-                            <i class="fas fa-inbox"></i> 受信
-                        </button>
-                        <button @click="setDirection('sent')"
-                            :class="direction === 'sent' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-xs px-3 py-1.5 rounded-lg transition-all font-bold inline-flex items-center gap-1.5">
-                            <i class="fas fa-paper-plane"></i> 送信
-                        </button>
-                    </div>
-                    {{-- 種別フィルタ --}}
-                    <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-xl shadow-inner">
-                        <button @click="setTypeFilter('')"
-                            :class="typeFilter === '' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">種別: すべて</button>
-                        <button @click="setTypeFilter('image')"
-                            :class="typeFilter === 'image' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">🖼 画像</button>
-                        <button @click="setTypeFilter('document')"
-                            :class="typeFilter === 'document' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">📄 文書</button>
-                        <button @click="setTypeFilter('other')"
-                            :class="typeFilter === 'other' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'"
-                            class="text-[10px] px-3 py-1.5 rounded-lg transition-all font-bold">📦 その他</button>
-                    </div>
+                    </template>
                 </div>
             </div>
         </div>
 
-        {{-- コンテンツ --}}
-        <div class="flex-1 overflow-y-auto px-8 py-8">
+        {{-- 結果エリア --}}
+        <div class="custom-scrollbar"
+             style="flex:1 1 0%;min-height:0;height:0;overflow-y:auto;overflow-x:hidden;padding:20px 24px;">
             {{-- ローディング --}}
             <template x-if="loading">
-                <div class="flex items-center justify-center py-40 text-gray-400 animate-pulse font-black text-sm uppercase tracking-widest">
-                    Loading Data...
+                <div class="flex flex-col items-center justify-center py-20 text-gray-400">
+                    <i class="fas fa-circle-notch fa-spin fa-2x mb-3"></i>
+                    <p class="text-xs font-bold">読み込み中...</p>
                 </div>
             </template>
 
             {{-- 空 --}}
             <template x-if="!loading && attachments.length === 0">
-                <div class="flex flex-col items-center justify-center py-40 text-gray-400 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm">
-                    <div class="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6 text-gray-200">
-                        <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                <div class="flex flex-col items-center justify-center py-20 px-6 text-center bg-white border border-gray-200 rounded-2xl">
+                    <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3"
+                         style="background-color:#f3f4f6;color:#9ca3af;">
+                        <i class="fas fa-paperclip fa-lg"></i>
                     </div>
-                    <p class="text-xl font-black text-gray-400">No attachments found</p>
-                    <p class="text-xs mt-2 font-bold opacity-60">
-                        <span x-text="searchQuery || typeFilter || dateFrom || dateTo ? 'Try adjusting your filters' : 'Files from emails will appear here'"></span>
-                    </p>
+                    <p class="text-sm font-bold text-gray-700">添付ファイルが見つかりません</p>
+                    <p class="text-[11px] text-gray-400 mt-1" x-text="hasActiveFilter ? '検索条件を見直してください' : 'メールの送受信時に添付されたファイルがここに表示されます'"></p>
                 </div>
             </template>
 
-            {{-- グリッド表示 --}}
-            <template x-if="!loading && attachments.length > 0 && viewMode === 'grid'">
-                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-8">
-                    <template x-for="att in attachments" :key="att.id">
-                        <div class="group bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm hover:shadow-2xl hover:border-blue-200 transition-all cursor-pointer"
-                            @click="openPreview(att)">
-                            <div class="aspect-square bg-gray-50/50 flex items-center justify-center overflow-hidden relative">
-                                <template x-if="att.is_image">
-                                    <img :src="att.url" :alt="att.filename" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110">
-                                </template>
-                                <template x-if="!att.is_image">
-                                    <div class="text-6xl filter drop-shadow-md" x-text="mimeIcon(att.mime_type)"></div>
-                                </template>
-                                <a :href="att.url" :download="att.filename" @click.stop
-                                    class="absolute top-3 right-3 bg-white/95 hover:bg-blue-600 hover:text-white text-gray-800 rounded-full p-2.5 opacity-0 group-hover:opacity-100 transition-all shadow-xl">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                                </a>
-                            </div>
-                            <div class="p-5">
-                                <div class="flex items-center gap-1 mb-1.5">
-                                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border"
-                                          :class="att.direction === 'sent' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
-                                        <i class="fas" :class="att.direction === 'sent' ? 'fa-paper-plane' : 'fa-inbox'"></i>
-                                        <span x-text="att.direction === 'sent' ? '送信' : '受信'"></span>
-                                    </span>
-                                </div>
-                                <p class="text-xs font-black text-gray-900 truncate mb-1" x-text="att.filename" :title="att.filename"></p>
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter" x-text="att.size"></span>
-                                    <span class="text-[10px] text-blue-600 font-black truncate max-w-[80px]"
-                                          x-text="att.direction === 'sent' ? att.to_address : att.from_label"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </template>
-
-            {{-- リスト表示 --}}
-            <template x-if="!loading && attachments.length > 0 && viewMode === 'list'">
-                <div class="bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden shadow-sm">
+            {{-- リスト表示 (グリッド表示は廃止) --}}
+            <template x-if="!loading && attachments.length > 0">
+                <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <table class="w-full text-sm">
-                        <thead>
-                            <tr class="border-b border-gray-50 bg-gray-50/50">
-                                <th class="px-6 py-5 w-16"></th>
-                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Filename</th>
-                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Subject / From</th>
-                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date / Size</th>
-                                <th class="px-6 py-5 w-20"></th>
+                        <thead style="background-color:#f9fafb;">
+                            <tr class="border-b border-gray-100">
+                                <th class="px-3 py-2.5 w-14"></th>
+                                <th class="text-left px-3 py-2.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">ファイル名</th>
+                                <th class="text-left px-3 py-2.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider">件名 / 相手</th>
+                                <th class="text-left px-3 py-2.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider w-[160px]">日時 / サイズ</th>
+                                <th class="px-3 py-2.5 w-16"></th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-50">
+                        <tbody class="divide-y divide-gray-100">
                             <template x-for="att in attachments" :key="att.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors group">
-                                    <td class="px-6 py-5 text-center">
+                                <tr class="transition-colors"
+                                    onmouseover="this.style.backgroundColor='#f9fafb';"
+                                    onmouseout="this.style.backgroundColor='';">
+                                    <td class="px-3 py-2.5 text-center">
                                         <template x-if="att.is_image">
-                                            <div class="w-12 h-12 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 inline-block shadow-sm">
-                                                <img :src="att.url" :alt="att.filename" class="w-full h-full object-cover cursor-pointer" @click="openPreview(att)">
+                                            <div class="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 bg-gray-50 inline-block cursor-pointer"
+                                                 @click="openPreview(att)">
+                                                <img :src="att.url" :alt="att.filename" class="w-full h-full object-cover">
                                             </div>
                                         </template>
                                         <template x-if="!att.is_image">
-                                            <span class="text-3xl" x-text="mimeIcon(att.mime_type)"></span>
+                                            <span class="text-2xl" x-text="mimeIcon(att.mime_type)"></span>
                                         </template>
                                     </td>
-                                    <td class="px-4 py-5">
-                                        <div class="flex items-center gap-2 mb-1">
-                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold border shrink-0"
-                                                  :class="att.direction === 'sent' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'">
+                                    <td class="px-3 py-2.5 max-w-0">
+                                        <div class="flex items-center gap-2 mb-1 min-w-0">
+                                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0"
+                                                  :style="att.direction === 'sent'
+                                                    ? 'background-color:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;'
+                                                    : 'background-color:#d1fae5;color:#047857;border:1px solid #a7f3d0;'">
                                                 <i class="fas" :class="att.direction === 'sent' ? 'fa-paper-plane' : 'fa-inbox'"></i>
                                                 <span x-text="att.direction === 'sent' ? '送信' : '受信'"></span>
                                             </span>
-                                            <button @click="openPreview(att)" class="text-sm font-black text-gray-800 hover:text-blue-600 truncate text-left transition-colors" x-text="att.filename"></button>
+                                            <button @click="openPreview(att)"
+                                                    class="text-xs font-bold text-gray-800 hover:text-blue-600 truncate text-left transition-colors min-w-0"
+                                                    x-text="att.filename" :title="att.filename"></button>
                                         </div>
-                                        <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter" x-text="mimeLabel(att.mime_type)"></span>
+                                        <span class="text-[10px] text-gray-400 font-semibold" x-text="mimeLabel(att.mime_type)"></span>
                                     </td>
-                                    <td class="px-4 py-5">
+                                    <td class="px-3 py-2.5 max-w-0">
                                         <template x-if="att.thread_id">
-                                            <a :href="'/?thread=' + att.thread_id" class="text-xs text-blue-600 hover:underline font-black block truncate max-w-[300px] mb-1" x-text="att.email_subject"></a>
+                                            <a :href="'/?thread=' + att.thread_id"
+                                               class="text-[12px] text-blue-600 hover:underline font-bold block mb-0.5 leading-snug"
+                                               style="word-break:break-word;overflow-wrap:anywhere;white-space:normal;"
+                                               x-text="att.email_subject" :title="att.email_subject"></a>
                                         </template>
-                                        <span class="text-[10px] text-gray-500 font-bold">
+                                        <p class="text-[10px] text-gray-500 truncate">
                                             <template x-if="att.direction === 'sent'">
                                                 <span><span class="text-gray-400">To:</span> <span x-text="att.to_address"></span></span>
                                             </template>
                                             <template x-if="att.direction !== 'sent'">
                                                 <span><span class="text-gray-400">From:</span> <span x-text="att.from_label"></span></span>
                                             </template>
-                                        </span>
+                                        </p>
                                     </td>
-                                    <td class="px-4 py-5">
-                                        <span class="text-xs text-gray-900 block font-bold mb-1" x-text="att.received_at"></span>
-                                        <span class="text-[10px] text-gray-400 font-black uppercase tracking-tighter" x-text="att.size"></span>
+                                    <td class="px-3 py-2.5 whitespace-nowrap">
+                                        <p class="text-[11px] text-gray-700 font-semibold" x-text="att.received_at"></p>
+                                        <p class="text-[10px] text-gray-400 font-semibold" x-text="att.size"></p>
                                     </td>
-                                    <td class="px-6 py-5 text-right">
-                                        <a :href="att.url" :download="att.filename" class="inline-flex p-3 bg-gray-50 text-gray-400 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm">
-                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                                    <td class="px-3 py-2.5 text-right">
+                                        <a :href="att.url" :download="att.filename"
+                                            class="inline-flex items-center justify-center w-9 h-9 rounded-lg transition-colors"
+                                            style="background-color:#f3f4f6;color:#6b7280;"
+                                            onmouseover="this.style.backgroundColor='#2563eb';this.style.color='#ffffff';"
+                                            onmouseout="this.style.backgroundColor='#f3f4f6';this.style.color='#6b7280';"
+                                            title="ダウンロード">
+                                            <i class="fas fa-download text-xs"></i>
                                         </a>
                                     </td>
                                 </tr>
@@ -277,43 +323,169 @@
                 </div>
             </template>
         </div>
-    </div>
 
-    {{-- プレビューモーダル --}}
-    <div x-show="previewOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" @click.self="previewOpen = false" style="display: none;">
-        <div class="bg-white rounded-[3rem] shadow-2xl max-w-5xl w-full overflow-hidden flex flex-col max-h-[95vh] animate-in zoom-in duration-300">
-            <div class="px-10 py-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                <div class="min-w-0">
-                    <p class="text-lg font-black text-gray-900 truncate" x-text="previewFile?.filename"></p>
-                    <p class="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1" x-text="previewFile?.size + ' • ' + mimeLabel(previewFile?.mime_type) + ' • ' + previewFile?.received_at"></p>
-                </div>
-                <div class="flex items-center gap-4 shrink-0 ml-8">
-                    <a :href="previewFile?.url" :download="previewFile?.filename" class="flex items-center gap-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-2xl transition-all font-black shadow-xl shadow-blue-100 uppercase tracking-widest">
-                        Download
-                    </a>
-                    <button @click="previewOpen = false" class="text-gray-400 hover:text-red-500 transition-colors p-2"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        {{-- ページャー (件数 + 前へ/次へ + ページ番号 + 1ページあたりの件数) --}}
+        <div class="px-6 py-2 bg-white border-t border-gray-200 flex items-center justify-between gap-3 flex-wrap"
+             style="flex-shrink:0;"
+             x-show="!loading && total > 0">
+            <div class="text-[11px] text-gray-500">
+                <span class="font-bold text-gray-700"
+                      x-text="((page - 1) * perPage + 1) + '〜' + Math.min(page * perPage, total)"></span>
+                <span class="mx-1 text-gray-300">/</span>
+                <span class="font-bold text-gray-700" x-text="total + ' 件'"></span>
+            </div>
+
+            <div class="flex items-center gap-2">
+                {{-- 1ページあたり --}}
+                <label class="text-[11px] text-gray-500 inline-flex items-center gap-1.5">
+                    表示
+                    <select @change="changePerPage($event.target.value)"
+                            class="text-[11px] font-bold rounded-lg outline-none focus:ring-2 focus:ring-blue-100"
+                            style="background-color:#f9fafb;color:#111827;border:1px solid #e5e7eb;padding:4px 8px;">
+                        <option :value="20" :selected="perPage === 20">20</option>
+                        <option :value="30" :selected="perPage === 30">30</option>
+                        <option :value="50" :selected="perPage === 50">50</option>
+                        <option :value="100" :selected="perPage === 100">100</option>
+                    </select>
+                    件
+                </label>
+
+                {{-- ページャー本体 --}}
+                <div class="inline-flex items-center gap-0.5">
+                    <button type="button" @click="goToPage(1)"
+                            :disabled="page <= 1"
+                            class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[11px] font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            style="background-color:#f9fafb;color:#4b5563;border:1px solid #e5e7eb;"
+                            onmouseover="if(!this.disabled)this.style.backgroundColor='#ffffff';"
+                            onmouseout="if(!this.disabled)this.style.backgroundColor='#f9fafb';"
+                            title="先頭へ">
+                        <i class="fas fa-angle-double-left"></i>
+                    </button>
+                    <button type="button" @click="prevPage()"
+                            :disabled="page <= 1"
+                            class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[11px] font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            style="background-color:#f9fafb;color:#4b5563;border:1px solid #e5e7eb;"
+                            onmouseover="if(!this.disabled)this.style.backgroundColor='#ffffff';"
+                            onmouseout="if(!this.disabled)this.style.backgroundColor='#f9fafb';"
+                            title="前のページ">
+                        <i class="fas fa-angle-left"></i>
+                    </button>
+                    <span class="px-3 py-1 text-[11px] font-bold rounded-lg"
+                          style="background-color:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">
+                        <span x-text="page"></span>
+                        <span class="text-blue-400 mx-0.5">/</span>
+                        <span x-text="totalPages"></span>
+                    </span>
+                    <button type="button" @click="nextPage()"
+                            :disabled="page >= totalPages"
+                            class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[11px] font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            style="background-color:#f9fafb;color:#4b5563;border:1px solid #e5e7eb;"
+                            onmouseover="if(!this.disabled)this.style.backgroundColor='#ffffff';"
+                            onmouseout="if(!this.disabled)this.style.backgroundColor='#f9fafb';"
+                            title="次のページ">
+                        <i class="fas fa-angle-right"></i>
+                    </button>
+                    <button type="button" @click="goToPage(totalPages)"
+                            :disabled="page >= totalPages"
+                            class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-[11px] font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            style="background-color:#f9fafb;color:#4b5563;border:1px solid #e5e7eb;"
+                            onmouseover="if(!this.disabled)this.style.backgroundColor='#ffffff';"
+                            onmouseout="if(!this.disabled)this.style.backgroundColor='#f9fafb';"
+                            title="末尾へ">
+                        <i class="fas fa-angle-double-right"></i>
+                    </button>
                 </div>
             </div>
-            <div class="flex-1 overflow-auto p-12 flex items-center justify-center bg-white min-h-[400px]">
-                <template x-if="previewFile?.is_image"><img :src="previewFile?.url" class="max-w-full max-h-[70vh] rounded-[2rem] shadow-2xl border border-gray-50 transition-all"></template>
+        </div>
+    </main>
+
+    {{-- ===== プレビューモーダル ===== --}}
+    <div x-show="previewOpen" x-cloak
+         class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+         style="background-color:rgba(15,23,42,0.7);"
+         @click.self="previewOpen = false"
+         @keydown.escape.window="previewOpen = false">
+        <div class="w-full max-w-4xl rounded-2xl overflow-hidden flex flex-col"
+             style="background-color:#ffffff;max-height:90vh;box-shadow:0 25px 50px -12px rgba(0,0,0,0.4);">
+            {{-- ヘッダー --}}
+            <div class="shrink-0 px-5 py-3 flex items-center justify-between gap-4 border-b border-gray-100"
+                 style="background-color:#f9fafb;">
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm font-extrabold text-gray-900 truncate" x-text="previewFile?.filename"></p>
+                    <p class="text-[10px] text-gray-500 mt-0.5 truncate">
+                        <span x-text="previewFile?.size"></span>
+                        <span class="text-gray-300 mx-1">•</span>
+                        <span x-text="mimeLabel(previewFile?.mime_type)"></span>
+                        <span class="text-gray-300 mx-1">•</span>
+                        <span x-text="previewFile?.received_at"></span>
+                    </p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <a :href="previewFile?.url" :download="previewFile?.filename"
+                       class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors"
+                       style="background-color:#2563eb;color:#ffffff;"
+                       onmouseover="this.style.backgroundColor='#1d4ed8';"
+                       onmouseout="this.style.backgroundColor='#2563eb';">
+                        <i class="fas fa-download"></i> ダウンロード
+                    </a>
+                    <button @click="previewOpen = false"
+                            class="w-9 h-9 inline-flex items-center justify-center rounded-lg transition-colors"
+                            style="color:#9ca3af;"
+                            onmouseover="this.style.backgroundColor='#f3f4f6';this.style.color='#374151';"
+                            onmouseout="this.style.backgroundColor='';this.style.color='#9ca3af';"
+                            title="閉じる">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            {{-- 本文 --}}
+            <div class="flex-1 overflow-auto p-6 flex items-center justify-center"
+                 style="background-color:#ffffff;min-height:300px;">
+                <template x-if="previewFile?.is_image">
+                    <img :src="previewFile?.url" class="max-w-full max-h-[65vh] rounded-xl border border-gray-200">
+                </template>
                 <template x-if="previewFile && !previewFile.is_image">
-                    <div class="text-center">
-                        <div class="text-9xl mb-8 filter drop-shadow-xl" x-text="mimeIcon(previewFile?.mime_type)"></div>
-                        <p class="text-2xl font-black text-gray-900 mb-10 tracking-tight" x-text="previewFile?.filename"></p>
-                        <a :href="previewFile?.url" :download="previewFile?.filename" class="inline-flex items-center gap-3 bg-gray-900 hover:bg-black text-white px-12 py-5 rounded-[2rem] transition-all text-sm font-black shadow-2xl hover:-translate-y-1 active:translate-y-0">
-                            DOWNLOAD FILE
+                    <div class="text-center py-8">
+                        <div class="text-7xl mb-5" x-text="mimeIcon(previewFile?.mime_type)"></div>
+                        <p class="text-base font-bold text-gray-900 mb-1 truncate max-w-[400px] mx-auto" x-text="previewFile?.filename"></p>
+                        <p class="text-[11px] text-gray-500 mb-5">
+                            <span x-text="mimeLabel(previewFile?.mime_type)"></span>
+                            <span class="text-gray-300 mx-1">•</span>
+                            <span x-text="previewFile?.size"></span>
+                        </p>
+                        <a :href="previewFile?.url" :download="previewFile?.filename"
+                            class="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                            style="background-color:#111827;color:#ffffff;"
+                            onmouseover="this.style.backgroundColor='#000000';"
+                            onmouseout="this.style.backgroundColor='#111827';">
+                            <i class="fas fa-download"></i> ダウンロード
                         </a>
                     </div>
                 </template>
             </div>
+
+            {{-- フッター: 関連メール --}}
             <template x-if="previewFile?.email_subject">
-                <div class="px-10 py-6 border-t border-gray-50 bg-gray-50/30 flex items-center gap-4 text-xs font-bold text-gray-500">
-                    <div class="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-blue-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2v10a2 2 0 002 2z"/></svg></div>
-                    <span class="truncate">
-                        From: <span class="text-gray-900" x-text="previewFile?.from_label"></span>
-                        <span class="text-gray-300 mx-2">|</span>
-                        Subject: <a :href="'/?thread=' + previewFile?.thread_id" class="text-blue-600 hover:underline" x-text="previewFile?.email_subject"></a>
+                <div class="shrink-0 px-5 py-3 border-t border-gray-100 text-[11px] text-gray-600 flex items-center gap-2 flex-wrap"
+                     style="background-color:#f9fafb;">
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                          :style="previewFile?.direction === 'sent'
+                            ? 'background-color:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;'
+                            : 'background-color:#d1fae5;color:#047857;border:1px solid #a7f3d0;'">
+                        <i class="fas" :class="previewFile?.direction === 'sent' ? 'fa-paper-plane' : 'fa-inbox'"></i>
+                        <span x-text="previewFile?.direction === 'sent' ? '送信' : '受信'"></span>
                     </span>
+                    <span class="text-gray-500">
+                        <span class="text-gray-400" x-text="previewFile?.direction === 'sent' ? 'To:' : 'From:'"></span>
+                        <span class="font-bold text-gray-800" x-text="previewFile?.direction === 'sent' ? previewFile?.to_address : previewFile?.from_label"></span>
+                    </span>
+                    <span class="text-gray-300">|</span>
+                    <span class="text-gray-500">件名:</span>
+                    <a :href="'/?thread=' + previewFile?.thread_id" target="_blank"
+                       class="text-blue-600 hover:underline font-bold"
+                       style="word-break:break-word;overflow-wrap:anywhere;white-space:normal;"
+                       x-text="previewFile?.email_subject"></a>
                 </div>
             </template>
         </div>
@@ -336,16 +508,37 @@ function attachmentApp() {
         customerData: [],
         customersLoading: false,
         customerSearchQuery: '',
-        viewMode: 'list',
         searchDebounce: null,
         previewOpen: false,
         previewFile: null,
+        customerDropdownOpen: false,
+        // ページング
+        page: 1,
+        perPage: 30,
+        totalPages: 1,
+
+        typeTabs: [
+            { key: '',         label: 'すべて',  icon: 'fa-layer-group' },
+            { key: 'image',    label: '画像',    icon: 'fa-image' },
+            { key: 'document', label: '文書',    icon: 'fa-file-lines' },
+            { key: 'other',    label: 'その他',  icon: 'fa-box' },
+        ],
 
         async init() {
             await Promise.all([this.load(), this.loadCustomers()]);
         },
 
-        async load() {
+        get hasActiveFilter() {
+            return !!(this.searchQuery || this.typeFilter || this.direction || this.dateFrom || this.dateTo || this.activeCustomerId);
+        },
+
+        get totalAcrossCustomers() {
+            return this.customerData.reduce((sum, c) => sum + (c.emails?.length || 0), 0);
+        },
+
+        async load(opts = {}) {
+            // フィルタ変更系の呼び出しは1ページ目に戻す
+            if (opts.resetPage !== false) this.page = 1;
             this.loading = true;
             try {
                 const params = new URLSearchParams();
@@ -356,16 +549,38 @@ function attachmentApp() {
                 if (this.dateTo)      params.set('date_to', this.dateTo);
                 if (this.activeCustomerId) params.set('customer_id', this.activeCustomerId);
                 params.set('sort', this.sortOrder);
+                params.set('page',     String(this.page));
+                params.set('per_page', String(this.perPage));
 
                 const res = await fetch('/attachments?' + params.toString(), {
                     headers: { 'Accept': 'application/json' }
                 });
                 const data = await res.json();
                 this.attachments = data.attachments ?? [];
-                this.total = data.total ?? 0;
+                this.total       = data.total ?? 0;
+                this.page        = data.page ?? 1;
+                this.totalPages  = data.total_pages ?? 1;
+                this.perPage     = data.per_page ?? this.perPage;
             } finally {
                 this.loading = false;
             }
+        },
+
+        goToPage(p) {
+            const target = Math.max(1, Math.min(this.totalPages, p));
+            if (target === this.page) return;
+            this.page = target;
+            this.load({ resetPage: false });
+            // スクロール位置を先頭へ
+            const el = document.querySelector('.att-root [style*="overflow-y:auto"]');
+            if (el) el.scrollTop = 0;
+        },
+        nextPage() { this.goToPage(this.page + 1); },
+        prevPage() { this.goToPage(this.page - 1); },
+        changePerPage(n) {
+            this.perPage = parseInt(n, 10) || 30;
+            this.page = 1;
+            this.load({ resetPage: false });
         },
 
         async loadCustomers() {
@@ -381,7 +596,7 @@ function attachmentApp() {
         get filteredCustomers() {
             if (!this.customerSearchQuery.trim()) return this.customerData;
             const q = this.customerSearchQuery.toLowerCase();
-            return this.customerData.filter(c => c.name.toLowerCase().includes(q));
+            return this.customerData.filter(c => (c.name || '').toLowerCase().includes(q));
         },
 
         onSearchInput() {
@@ -389,13 +604,16 @@ function attachmentApp() {
             this.searchDebounce = setTimeout(() => this.load(), 300);
         },
 
-        setTypeFilter(type) {
-            this.typeFilter = type;
-            this.load();
-        },
+        setTypeFilter(type) { this.typeFilter = type; this.load(); },
+        setDirection(dir)   { this.direction  = dir;  this.load(); },
 
-        setDirection(dir) {
-            this.direction = dir;
+        resetFilters() {
+            this.searchQuery      = '';
+            this.typeFilter       = '';
+            this.direction        = '';
+            this.dateFrom         = '';
+            this.dateTo           = '';
+            this.activeCustomerId = null;
             this.load();
         },
 
@@ -416,16 +634,16 @@ function attachmentApp() {
         },
 
         mimeLabel(mime) {
-            if (!mime) return 'Unknown';
+            if (!mime) return '不明';
             const map = {
                 'application/pdf': 'PDF',
                 'application/msword': 'Word',
                 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'Word',
                 'application/vnd.ms-excel': 'Excel',
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel',
-                'text/plain': 'Text',
+                'text/plain': 'テキスト',
             };
-            return map[mime] || mime.split('/').pop().toUpperCase();
+            return map[mime] || (mime.split('/').pop() || '').toUpperCase();
         },
     };
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Email;
 use App\Models\EmailAttachment;
 use App\Models\EmailThread;
+// EmailThread は ticket helper のために明示参照 (重複 use 防止)
 use App\Models\MailSetting;
 use App\Models\PendingEmail;
 use Modules\MailClient\Services\EmailFetcher;
@@ -24,6 +25,11 @@ class PendingEmailController extends Controller
         // 自分が承認者として指定された案件のみ表示するフィルタ
         if ($request->boolean('for_me')) {
             $query->where('target_approver_user_id', auth()->id());
+        }
+
+        // 自分が依頼者 (作成者) の案件のみ表示するフィルタ
+        if ($request->boolean('mine')) {
+            $query->where('created_by_user_id', auth()->id());
         }
 
         if ($request->has('customer_id')) {
@@ -115,12 +121,20 @@ class PendingEmailController extends Controller
 
         try {
             DB::transaction(function () use ($pending, $settings, $fetchService) {
-                Mail::send([], [], function ($message) use ($pending, $settings) {
-                    $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
+                // (1) 先にスレッドを解決してチケット番号を確定させる
+                $inReplyToId = $pending->inReplyToEmail?->message_id;
+                $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
+                $thread = $fetchService->resolveThread($pending->subject, $inReplyToId, $fromAddress);
+                $ticket = $thread->ensureTicketNumber();
+
+                // (2) 件名にチケット番号を埋め込む (受信時にスレッド復元するための鍵)
+                $sendSubject = EmailThread::ensureTicketInSubject($pending->subject, $ticket);
+
+                Mail::send([], [], function ($message) use ($pending, $settings, $sendSubject, $fromAddress) {
                     $message
                         ->to($pending->to_address)
                         ->from($fromAddress, $settings->smtp_from_name)
-                        ->subject($pending->subject)
+                        ->subject($sendSubject)
                         ->text($pending->body);
 
                     if ($pending->cc) {
@@ -151,16 +165,12 @@ class PendingEmailController extends Controller
                     }
                 });
 
-                // 送信済みメールを記録
-                $inReplyToId = $pending->inReplyToEmail?->message_id;
-                $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
-                $thread = $fetchService->resolveThread($pending->subject, $inReplyToId, $fromAddress);
-
+                // 送信済みメールを記録 (スレッドは上で解決済み)
                 $email = Email::create([
                     'thread_id'    => $thread->id,
                     'message_id'   => 'SENT_' . time() . '_' . uniqid(),
                     'in_reply_to'  => $inReplyToId,
-                    'subject'      => $pending->subject,
+                    'subject'      => $sendSubject,
                     'from_address' => $fromAddress,
                     'from_name'    => $settings->smtp_from_name,
                     'to_address'   => $pending->to_address,
@@ -203,6 +213,41 @@ class PendingEmailController extends Controller
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * 自分が出した承認依頼を取り下げる (下書きに戻す)
+     */
+    public function withdraw(PendingEmail $pending): JsonResponse
+    {
+        if ($pending->status !== PendingEmail::STATUS_PENDING) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'この依頼は既に処理済みのため取り下げできません。',
+            ], 422);
+        }
+
+        // 依頼者のみ取り下げ可能
+        if ($pending->created_by_user_id !== auth()->id()) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => '自分が出した依頼のみ取り下げできます。',
+            ], 403);
+        }
+
+        $pending->update([
+            'status'                  => PendingEmail::STATUS_DRAFT,
+            'target_approver_user_id' => null,
+            // 取り下げ履歴をメモに追記
+            'memo' => trim((string) $pending->memo) === ''
+                ? '【取り下げ】 ' . now()->format('Y/m/d H:i')
+                : '【取り下げ】 ' . now()->format('Y/m/d H:i') . "\n— 元のメモ —\n" . $pending->memo,
+        ]);
+
+        return response()->json([
+            'status'  => 'ok',
+            'message' => '依頼を取り下げ、下書きに戻しました。',
+        ]);
     }
 
     public function reject(Request $request, PendingEmail $pending): JsonResponse

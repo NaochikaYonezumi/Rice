@@ -74,8 +74,15 @@ class AttachmentController extends Controller
                 ->where('mime_type', 'not like', 'text/%'))
             ->orderBy('created_at', $sort === 'asc' ? 'asc' : 'desc');
 
-        $total       = $query->count();
-        $attachments = $query->get()->map(function ($a) {
+        $perPage = max(10, min(100, (int) $request->input('per_page', 30)));
+        $page    = max(1, (int) $request->input('page', 1));
+        $total   = $query->count();
+        $totalPages = (int) max(1, ceil($total / $perPage));
+        // 範囲外の page はクランプ
+        if ($page > $totalPages) $page = $totalPages;
+        $offset = ($page - 1) * $perPage;
+
+        $attachments = $query->skip($offset)->take($perPage)->get()->map(function ($a) {
             $isSent = $a->email && is_string($a->email->message_id) && str_starts_with($a->email->message_id, 'SENT_');
             return [
                 'id'            => $a->id,
@@ -97,6 +104,9 @@ class AttachmentController extends Controller
 
         return response()->json([
             'total'       => $total,
+            'page'        => $page,
+            'per_page'    => $perPage,
+            'total_pages' => $totalPages,
             'attachments' => $attachments,
         ]);
     }

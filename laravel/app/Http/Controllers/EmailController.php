@@ -151,11 +151,12 @@ class EmailController extends Controller
                 ])->values(),
             ],
             'thread'       => $thread ? [
-                'id'       => $thread->id,
-                'subject'  => $thread->subject,
-                'status'   => $thread->status,
-                'customer' => $thread->customer ? ['id' => $thread->customer->id, 'name' => $thread->customer->name] : null,
-                'assignee' => $thread->assignee ? ['id' => $thread->assignee->id, 'name' => $thread->assignee->name] : null,
+                'id'            => $thread->id,
+                'subject'       => $thread->subject,
+                'ticket_number' => $thread->ticket_number,
+                'status'        => $thread->status,
+                'customer'      => $thread->customer ? ['id' => $thread->customer->id, 'name' => $thread->customer->name] : null,
+                'assignee'      => $thread->assignee ? ['id' => $thread->assignee->id, 'name' => $thread->assignee->name] : null,
             ] : null,
             'emails'       => $threadEmails,
             'defaultFrom'  => $fromForReply,
@@ -248,15 +249,83 @@ class EmailController extends Controller
         ]);
     }
 
+    /**
+     * 新規作成画面用の AI アシスタント (返信対象なし)
+     *   入力: subject, body, to, prompt, skill, mask_pii
+     */
+    public function askAiCompose(Request $request): JsonResponse
+    {
+        $userPrompt = trim($request->input('prompt', ''));
+        $subject    = trim((string) $request->input('subject', ''));
+        $body       = trim((string) $request->input('body', ''));
+        $to         = trim((string) $request->input('to', ''));
+        $skillKey   = $request->input('skill', 'reply');
+        $skills     = config('ai_skills.skills');
+        $selectedSkill = $skills[$skillKey] ?? $skills['reply'];
+
+        // ナレッジ + レポート (キーワード = 件名 + ユーザー指示 のうち先頭)
+        $queryStr = trim(($subject !== '' ? $subject : '') . ' ' . Str::limit($userPrompt, 80));
+        try {
+            $responses = Http::pool(fn ($pool) => [
+                $pool->as('kb')->timeout(8)->connectTimeout(3)
+                    ->get("http://rag-api:8000/query", ['query' => $queryStr]),
+                $pool->as('reports')->timeout(8)->connectTimeout(3)
+                    ->get("http://rag-api:8000/reports", ['query' => $queryStr]),
+            ]);
+            $kbContent     = ($responses['kb']     instanceof \Illuminate\Http\Client\Response && $responses['kb']->ok())     ? ($responses['kb']->json()['answer']      ?? '') : '';
+            $reportContent = ($responses['reports'] instanceof \Illuminate\Http\Client\Response && $responses['reports']->ok()) ? ($responses['reports']->json()['content'] ?? '') : '';
+        } catch (\Throwable $e) {
+            $kbContent = '';
+            $reportContent = '';
+        }
+
+        $aiSettings = AiSetting::getSettings();
+        $agentName  = $aiSettings->agent_name ?: '米住 直親';
+        $signature  = $aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n米住 直親";
+
+        $finalPrompt  = "【システム指示】\n{$selectedSkill['system_prompt']}\n\n";
+        $finalPrompt .= "【モード】新規作成 (返信対象なし)\n\n";
+        $finalPrompt .= "【コンテキスト: ナレッジベース】\n{$kbContent}\n\n";
+        $finalPrompt .= "【コンテキスト: 関連レポート】\n{$reportContent}\n\n";
+        $finalPrompt .= "【作成中のメール】\n";
+        $finalPrompt .= "宛先: " . ($to !== '' ? $to : '(未入力)') . "\n";
+        $finalPrompt .= "件名: " . ($subject !== '' ? $subject : '(未入力)') . "\n";
+        $finalPrompt .= "本文 (現状):\n" . ($body !== '' ? $body : '(空)') . "\n\n";
+        $finalPrompt .= "【ユーザーの追加指示】\n" . ($userPrompt !== '' ? $userPrompt : '特になし') . "\n\n";
+        $finalPrompt .= "【担当者情報】\n名前: {$agentName}\n署名:\n{$signature}\n\n";
+        $finalPrompt .= "【制約】必ず日本語で回答してください。新規メールの本文として直接貼り付けられる形式で出力してください。";
+
+        if ($request->boolean('mask_pii')) {
+            $patterns = [
+                '/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/' => '[EMAIL]',
+                '/(\d{2,4}-\d{2,4}-\d{4})/' => '[PHONE]',
+                '/(\d{3}-\d{4})/' => '[ZIP_CODE]',
+            ];
+            $finalPrompt = preg_replace(array_keys($patterns), array_values($patterns), $finalPrompt);
+        }
+
+        $result = $this->ragApi->query($finalPrompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
+
+        return response()->json([
+            'answer'     => $result['answer'] ?? '',
+            'skill_used' => $selectedSkill['name'],
+            'sources'    => [
+                'kb'      => !empty($kbContent),
+                'reports' => !empty($reportContent),
+            ],
+        ]);
+    }
+
     // 返信予約 (TO/CC/BCC/添付対応)
     public function reply(Request $request, Email $email): JsonResponse
     {
         $validated = $request->validate([
             'from_address' => 'nullable|string|email',
-            'to' => 'required|string',
+            // 下書き保存 (save_as_draft=1) の場合は未入力でも保存可
+            'to' => 'required_without:save_as_draft|nullable|string',
             'cc' => 'nullable|string',
             'bcc' => 'nullable|string',
-            'body' => 'required|string',
+            'body' => 'required_without:save_as_draft|nullable|string',
             'created_by' => 'nullable|string',
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
@@ -267,11 +336,11 @@ class EmailController extends Controller
         $pending->in_reply_to_email_id = $email->id;
         $pending->reply_type = PendingEmail::TYPE_REPLY;
         $pending->from_address = $validated['from_address'] ?? null;
-        $pending->to_address = $validated['to'];
+        $pending->to_address = $validated['to'] ?? '';
         $pending->cc = $validated['cc'] ?? null;
         $pending->bcc = $validated['bcc'] ?? null;
         $pending->subject = "Re: " . $email->subject;
-        $pending->body = $validated['body'];
+        $pending->body = $validated['body'] ?? '';
         $saveAsDraft = $request->boolean('save_as_draft');
         $pending->status = $saveAsDraft ? PendingEmail::STATUS_DRAFT : PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
@@ -296,10 +365,11 @@ class EmailController extends Controller
     {
         $validated = $request->validate([
             'from_address' => 'nullable|string|email',
-            'to' => 'required|string',
+            // 下書き保存 (save_as_draft=1) の場合は未入力でも保存可
+            'to' => 'required_without:save_as_draft|nullable|string',
             'cc' => 'nullable|string',
             'bcc' => 'nullable|string',
-            'body' => 'required|string',
+            'body' => 'required_without:save_as_draft|nullable|string',
             'subject' => 'nullable|string',
             'created_by' => 'nullable|string',
             'approver_id' => 'nullable|integer|exists:users,id',
@@ -310,11 +380,11 @@ class EmailController extends Controller
         $pending = new PendingEmail();
         $pending->reply_type = PendingEmail::TYPE_COMPOSE;
         $pending->from_address = $validated['from_address'] ?? null;
-        $pending->to_address = $validated['to'];
+        $pending->to_address = $validated['to'] ?? '';
         $pending->cc = $validated['cc'] ?? null;
         $pending->bcc = $validated['bcc'] ?? null;
-        $pending->subject = $validated['subject'] ?? '(無題)';
-        $pending->body = $validated['body'];
+        $pending->subject = $validated['subject'] ?: '(無題)';
+        $pending->body = $validated['body'] ?? '';
         $saveAsDraft = $request->boolean('save_as_draft');
         $pending->status = $saveAsDraft ? PendingEmail::STATUS_DRAFT : PendingEmail::STATUS_PENDING;
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
@@ -432,6 +502,7 @@ class EmailController extends Controller
         $result = $threads->get()->map(fn($t) => [
             'id' => $t->id,
             'subject' => $t->subject,
+            'ticket_number' => $t->ticket_number,
             'status' => $t->status,
             'is_pinned' => $t->is_pinned,
             'assigned_user_id' => $t->assigned_user_id,

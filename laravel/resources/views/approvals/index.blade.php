@@ -68,6 +68,15 @@
                           class="ml-1 bg-blue-600 text-white text-[9px] font-black px-1.5 rounded-full"
                           x-text="allEmails.length"></span>
                 </button>
+                <button @click="setFilter('mine')"
+                        :class="filter === 'mine' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1">
+                    <i class="fas fa-paper-plane text-[10px]"></i>
+                    自分が依頼
+                    <span x-show="filter === 'mine' && allEmails.length > 0"
+                          class="ml-1 bg-emerald-600 text-white text-[9px] font-black px-1.5 rounded-full"
+                          x-text="allEmails.length"></span>
+                </button>
                 <button @click="setFilter('all')"
                         :class="filter === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
                         class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1">
@@ -91,12 +100,16 @@
                     <i :class="emptyIconClass" class="fa-2x text-gray-300 mb-3"></i>
                     <p class="text-sm font-semibold text-gray-600 mb-1">
                         <span x-show="statusTab === 'pending' && filter === 'me'">あなた宛の承認依頼はありません</span>
+                        <span x-show="statusTab === 'pending' && filter === 'mine'">自分が依頼した承認待ちはありません</span>
                         <span x-show="statusTab === 'pending' && filter === 'all'">承認待ちの依頼はありません</span>
                         <span x-show="statusTab === 'approved'">承認済の依頼はありません</span>
                         <span x-show="statusTab === 'rejected'">却下された依頼はありません</span>
                     </p>
                     <p class="text-[11px] text-gray-400" x-show="statusTab === 'pending' && filter === 'me'">
                         他のユーザーが承認者にあなたを指定すると、ここに表示されます。
+                    </p>
+                    <p class="text-[11px] text-gray-400" x-show="statusTab === 'pending' && filter === 'mine'">
+                        新規作成・返信から「承認を依頼する」を送信すると、ここに表示されます。
                     </p>
                 </div>
             </template>
@@ -198,9 +211,24 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-2 shrink-0">
-                        <template x-if="selectedEmail.created_by_user_id === {{ auth()->id() }}">
+                        {{-- 自分の依頼: 承認待ちなら取り下げ可・承認/却下済はバッジのみ --}}
+                        <template x-if="statusTab === 'pending' && selectedEmail.created_by_user_id === {{ auth()->id() }}">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+                                    <i class="fas fa-info-circle mr-1"></i>あなたの依頼
+                                </span>
+                                <button @click="withdraw(selectedEmail)"
+                                    :disabled="actionLoading"
+                                    class="bg-white text-orange-600 border border-orange-200 text-xs font-bold px-4 py-2 rounded-lg hover:bg-orange-50 transition-all disabled:opacity-50 inline-flex items-center gap-1.5"
+                                    style="background-color:#ffffff;color:#ea580c;border-color:#fed7aa;">
+                                    <i class="fas fa-undo"></i>
+                                    <span x-text="actionLoading ? '処理中...' : '取り下げ'"></span>
+                                </button>
+                            </div>
+                        </template>
+                        <template x-if="statusTab !== 'pending' && selectedEmail.created_by_user_id === {{ auth()->id() }}">
                             <span class="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
-                                <i class="fas fa-info-circle mr-1"></i>自身の依頼は処理できません
+                                <i class="fas fa-info-circle mr-1"></i>あなたの依頼
                             </span>
                         </template>
                         <template x-if="statusTab === 'pending' && selectedEmail.created_by_user_id !== {{ auth()->id() }} && (!selectedEmail.target_approver_user_id || selectedEmail.target_approver_user_id === {{ auth()->id() }})">
@@ -418,9 +446,9 @@ function approvalApp() {
         get filterDescription() {
             if (this.statusTab === 'rejected') return '過去に却下された依頼の履歴';
             if (this.statusTab === 'approved') return '承認されて送信完了した依頼の履歴';
-            return this.filter === 'me'
-                ? '他のユーザーがあなたを承認者に指定した依頼'
-                : '全ての承認待ち';
+            if (this.filter === 'me')   return '他のユーザーがあなたを承認者に指定した依頼';
+            if (this.filter === 'mine') return 'あなたが送信した承認依頼 (相手の承認待ち)';
+            return '全ての承認待ち';
         },
         get emptyIconClass() {
             if (this.statusTab === 'approved') return 'fas fa-check-circle';
@@ -454,7 +482,8 @@ function approvalApp() {
             this.loading = true;
             try {
                 const params = new URLSearchParams({ status: this.statusTab });
-                if (this.statusTab === 'pending' && this.filter === 'me') params.set('for_me', '1');
+                if (this.statusTab === 'pending' && this.filter === 'me')   params.set('for_me', '1');
+                if (this.statusTab === 'pending' && this.filter === 'mine') params.set('mine',   '1');
                 const res = await fetch('/pending-emails?' + params.toString(), { headers: { 'Accept': 'application/json' } });
                 this.allEmails = await res.json();
                 if (this.selectedId) {
@@ -496,6 +525,41 @@ function approvalApp() {
                     this.actionError = true;
                 } else {
                     this.actionMessage = '承認しました。メールを送信しました。';
+                    this.actionError = false;
+                    setTimeout(() => {
+                        this.selectedId = null;
+                        this.selectedEmail = null;
+                        this.actionMessage = '';
+                        this.loadPending();
+                    }, 1500);
+                }
+            } catch (e) {
+                this.actionMessage = 'エラー: ' + e.message;
+                this.actionError = true;
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        async withdraw(p) {
+            if (!confirm('この承認依頼を取り下げますか？\n下書きに戻り、後から再編集・再依頼できます。')) return;
+            this.actionLoading = true;
+            this.actionMessage = '';
+            this.actionError = false;
+            try {
+                const res = await fetch(`/pending-emails/${p.id}/withdraw`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await res.json();
+                if (!res.ok || data.status === 'error') {
+                    this.actionMessage = data.message || '取り下げに失敗しました';
+                    this.actionError = true;
+                } else {
+                    this.actionMessage = data.message || '依頼を取り下げ、下書きに戻しました';
                     this.actionError = false;
                     setTimeout(() => {
                         this.selectedId = null;

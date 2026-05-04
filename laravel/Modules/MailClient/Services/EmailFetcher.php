@@ -139,30 +139,48 @@ class EmailFetcher
     {
         $thread = null;
 
-        if ($inReplyTo) {
+        // (1) 件名のチケット番号で最優先マッチ (カラム未作成環境でも落ちないようガード)
+        $ticket = EmailThread::extractTicketNumber($subject);
+        if ($ticket) {
+            try {
+                $thread = EmailThread::where('ticket_number', $ticket)->first();
+            } catch (\Throwable $e) {
+                $thread = null;
+            }
+        }
+
+        // (2) In-Reply-To のメッセージID から親スレッドを辿る
+        if (!$thread && $inReplyTo) {
             $parent = Email::where('message_id', $inReplyTo)->first();
             if ($parent?->thread_id) {
                 $thread = EmailThread::find($parent->thread_id);
             }
         }
 
+        // (3) 件名 (Re:/Fwd: 除去 + チケットタグ除去) で部分一致検索
         if (!$thread) {
             $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
-            $thread     = EmailThread::where('subject', 'like', "%{$normalized}%")
-                ->orderByDesc('last_email_at')
-                ->first();
+            $normalized = preg_replace(EmailThread::TICKET_REGEX, '', $normalized);
+            $normalized = trim($normalized);
+            if ($normalized !== '') {
+                $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
+                    ->orderByDesc('last_email_at')
+                    ->first();
+            }
 
             if (!$thread) {
-                // スレッドを新規作成する場合、顧客がいれば自動で紐付け
                 $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
                 $thread = EmailThread::create([
-                    'subject'       => $normalized,
+                    'subject'       => $normalized !== '' ? $normalized : $subject,
                     'status'        => 'inbox',
                     'last_email_at' => now(),
                     'customer_id'   => $customer?->id,
                 ]);
             }
         }
+
+        // チケット番号を未発行なら付与 (存在チェック含む)
+        $thread->ensureTicketNumber();
 
         // 新しいメールを受信した場合は保留・完了タグを削除
         $tags = $thread->tags ?? [];
@@ -176,6 +194,22 @@ class EmailFetcher
 
     protected function findOrCreateThread($message)
     {
+        $subject = $message->getSubject() ?: '(件名なし)';
+
+        // (0) 件名のチケット番号で最優先マッチ (カラム未作成環境でも落ちないようガード)
+        $ticket = EmailThread::extractTicketNumber($subject);
+        if ($ticket) {
+            try {
+                $byTicket = EmailThread::where('ticket_number', $ticket)->first();
+                if ($byTicket) {
+                    $byTicket->ensureTicketNumber();
+                    return $byTicket;
+                }
+            } catch (\Throwable $e) {
+                // カラム未存在時はスキップ
+            }
+        }
+
         // In-Reply-To または References に基づくスレッド検索
         $referencesAttr = $message->getReferences();
         $references = [];
@@ -197,30 +231,36 @@ class EmailFetcher
         if (!empty($references)) {
             $parentEmail = Email::whereIn('message_id', $references)->first();
             if ($parentEmail && $parentEmail->thread) {
+                $parentEmail->thread->ensureTicketNumber();
                 return $parentEmail->thread;
             }
         }
-        
-        $subject = $message->getSubject() ?: '(件名なし)';
-        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
-        $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
-            ->orderByDesc('last_email_at')
-            ->first();
 
-        if ($thread) {
-            return $thread;
+        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
+        $normalized = preg_replace(EmailThread::TICKET_REGEX, '', $normalized);
+        $normalized = trim($normalized);
+        if ($normalized !== '') {
+            $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
+                ->orderByDesc('last_email_at')
+                ->first();
+            if ($thread) {
+                $thread->ensureTicketNumber();
+                return $thread;
+            }
         }
 
         $fromAddress = $message->getFrom()[0]->mail ?? null;
         $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
 
-        // 新規スレッド作成
-        return EmailThread::create([
-            'subject'       => $normalized,
+        // 新規スレッド作成 → 自動でチケット番号を付与
+        $thread = EmailThread::create([
+            'subject'       => $normalized !== '' ? $normalized : $subject,
             'status'        => 'inbox',
             'last_email_at' => now(),
             'customer_id'   => $customer?->id,
         ]);
+        $thread->ensureTicketNumber();
+        return $thread;
     }
 
     protected function handleAttachments($message, $email)

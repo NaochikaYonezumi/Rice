@@ -115,8 +115,10 @@
             </div>
             <div class="flex items-center gap-2 shrink-0">
                 <button @click="toggleAi()"
-                        :class="aiPanelOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-indigo-600 border-indigo-200 hover:bg-indigo-50'"
-                        class="px-4 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-2 shadow-sm">
+                        class="px-4 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
+                        :style="aiPanelOpen
+                            ? 'background-color:#4f46e5;color:#ffffff;border:1px solid #4f46e5;'
+                            : 'background-color:#ffffff;color:#4f46e5;border:1px solid #c7d2fe;'">
                     <i class="fas fa-magic"></i> AIアシスタント
                 </button>
                 <button @click="attemptClose()" class="text-gray-400 hover:text-red-500 transition-colors p-2" title="閉じる">
@@ -221,62 +223,122 @@
                 </form>
             </div>
 
-            {{-- AIパネル (右側オーバレイ) --}}
-            <aside x-show="aiPanelOpen" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="translate-x-4 opacity-0" x-transition:enter-end="translate-x-0 opacity-100"
-                   class="w-[400px] shrink-0 border-l border-indigo-100 bg-indigo-50/30 flex flex-col overflow-hidden">
-                <div class="px-6 py-4 border-b border-indigo-100 bg-white flex items-center justify-between">
-                    <div>
-                        <h3 class="text-sm font-bold text-indigo-700">AIアシスタント</h3>
-                        <p class="text-[10px] text-indigo-400 mt-0.5">スキル + コンテキスト分析</p>
+        </div>
+
+        {{-- AIパネル (右側スライドオーバー) — フォームを圧迫しないようウィンドウ右にオーバレイ --}}
+        <div x-show="aiPanelOpen" x-cloak
+             class="fixed inset-0 z-[1500] flex"
+             style="background-color:rgba(15,23,42,0.35);"
+             @click.self="aiPanelOpen = false"
+             @keydown.escape.window="aiPanelOpen = false">
+            <div class="ml-auto h-full flex flex-col"
+                 x-transition:enter="transition ease-out duration-200"
+                 x-transition:enter-start="translate-x-8 opacity-0"
+                 x-transition:enter-end="translate-x-0 opacity-100"
+                 style="width:420px;max-width:100vw;background-color:#eef2ff;border-left:1px solid #c7d2fe;box-shadow:-12px 0 30px rgba(15,23,42,0.15);">
+
+                {{-- ヘッダー --}}
+                <div class="shrink-0 px-5 py-3 flex items-center justify-between"
+                     style="background-color:#ffffff;border-bottom:1px solid #e0e7ff;">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                             style="background-color:#4f46e5;color:#ffffff;">
+                            <i class="fas fa-magic"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <h3 class="text-sm font-extrabold truncate" style="color:#3730a3;">AIアシスタント</h3>
+                            <p class="text-[10px]" style="color:#818cf8;">スキル + コンテキスト分析</p>
+                        </div>
                     </div>
-                    <button @click="aiPanelOpen = false" class="text-gray-300 hover:text-indigo-600 p-1"><i class="fas fa-times"></i></button>
+                    <button @click="aiPanelOpen = false"
+                            class="w-8 h-8 inline-flex items-center justify-center rounded-lg transition-colors"
+                            style="color:#9ca3af;"
+                            onmouseover="this.style.backgroundColor='#f3f4f6';this.style.color='#4f46e5';"
+                            onmouseout="this.style.backgroundColor='';this.style.color='#9ca3af';"
+                            title="閉じる">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
-                <div class="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
+
+                {{-- 本体スクロール領域 --}}
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4" style="min-height:0;">
+                    {{-- スキル選択 --}}
                     <div class="space-y-2">
-                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">スキル</label>
-                        <div class="grid grid-cols-2 gap-2">
+                        <label class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">スキル</label>
+                        <div class="space-y-2">
                             <template x-for="(skill, key) in aiSkills" :key="key">
                                 <button type="button" @click="aiSkill = key"
-                                        :class="aiSkill === key ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'"
-                                        class="p-3 rounded-xl border text-left transition-all">
-                                    <p class="text-xs font-bold" x-text="skill.name"></p>
-                                    <p class="text-[10px] mt-1 opacity-70 leading-tight" x-text="skill.description"></p>
+                                        class="w-full p-3 rounded-xl text-left transition-all"
+                                        :style="aiSkill === key
+                                            ? 'background-color:#4f46e5;color:#ffffff;border:1px solid #4f46e5;box-shadow:0 4px 14px rgba(79,70,229,0.35);'
+                                            : 'background-color:#ffffff;color:#374151;border:1px solid #e5e7eb;'">
+                                    <p class="text-xs font-extrabold" x-text="skill.name"></p>
+                                    <p class="text-[10px] mt-1 leading-snug" :style="aiSkill === key ? 'color:rgba(255,255,255,0.85);' : 'color:#9ca3af;'" x-text="skill.description"></p>
                                 </button>
                             </template>
                         </div>
                     </div>
+
+                    {{-- 追加指示 --}}
                     <div class="space-y-2">
-                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider">追加の指示 (任意)</label>
+                        <label class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">追加の指示 (任意)</label>
                         <textarea x-model="aiUserPrompt" rows="3" placeholder="例: もっと簡潔に、箇条書きで..."
-                                  class="w-full text-xs border border-gray-200 bg-white rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 resize-none"></textarea>
+                                  class="w-full text-xs rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-100 resize-none"
+                                  style="color:#111827;background-color:#ffffff;border:1px solid #e5e7eb;"></textarea>
                     </div>
-                    <label class="flex items-center gap-2 bg-white p-3 rounded-lg border border-gray-200 cursor-pointer">
-                        <input type="checkbox" x-model="maskPii" class="w-4 h-4 rounded text-indigo-600">
-                        <span class="text-xs font-semibold text-gray-700">個人情報をマスキングする</span>
+
+                    {{-- マスキング --}}
+                    <label class="flex items-center gap-2 p-3 rounded-lg cursor-pointer"
+                           style="background-color:#ffffff;border:1px solid #e5e7eb;">
+                        <input type="checkbox" x-model="maskPii" class="w-4 h-4 rounded" style="accent-color:#4f46e5;">
+                        <span class="text-xs font-bold" style="color:#374151;">個人情報をマスキングする</span>
                     </label>
+
+                    {{-- 生成ボタン --}}
                     <button type="button" @click="askAi()" :disabled="aiLoading || !canAskAi"
-                            class="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-sm shadow-md hover:bg-indigo-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            class="w-full py-3 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            style="background-color:#4f46e5;color:#ffffff;box-shadow:0 4px 14px rgba(79,70,229,0.35);"
+                            onmouseover="if(!this.disabled)this.style.backgroundColor='#4338ca';"
+                            onmouseout="if(!this.disabled)this.style.backgroundColor='#4f46e5';">
                         <i class="fas fa-bolt" :class="aiLoading ? 'animate-spin' : ''"></i>
                         <span x-text="aiLoading ? '分析中...' : 'AI回答を生成する'"></span>
                     </button>
-                    <p x-show="!canAskAi" class="text-[11px] text-gray-400 text-center">新規作成では返信対象がないため利用できません</p>
 
+                    {{-- モード説明 --}}
+                    <p x-show="mode === 'compose'" class="text-[11px] text-center rounded-lg py-1.5 px-2"
+                       style="color:#4f46e5;background-color:rgba(238,242,255,0.7);border:1px solid #e0e7ff;">
+                        <i class="fas fa-info-circle mr-1"></i>新規作成: 件名・宛先・現在の本文を踏まえて生成します
+                    </p>
+
+                    {{-- 生成結果 --}}
                     <div x-show="aiAnalysis || aiLoading" class="space-y-3">
-                        <div class="bg-gray-900 rounded-2xl p-5 shadow-xl">
-                            <h4 class="text-[10px] font-bold text-indigo-400 uppercase tracking-widest mb-3">生成結果</h4>
-                            <div class="text-sm text-gray-100 leading-relaxed whitespace-pre-wrap min-h-[120px]" x-text="aiAnalysis?.answer"></div>
-                            <div class="mt-4 pt-3 border-t border-gray-800 flex flex-wrap gap-2">
-                                <template x-if="aiAnalysis?.sources?.kb"><span class="px-2 py-0.5 bg-green-900/30 text-green-400 text-[9px] font-bold rounded border border-green-800">ナレッジ</span></template>
-                                <template x-if="aiAnalysis?.sources?.reports"><span class="px-2 py-0.5 bg-blue-900/30 text-blue-400 text-[9px] font-bold rounded border border-blue-800">レポート</span></template>
+                        <div class="rounded-2xl p-5"
+                             style="background-color:#0f172a;color:#f3f4f6;box-shadow:0 12px 24px rgba(15,23,42,0.25);">
+                            <h4 class="text-[10px] font-extrabold uppercase tracking-widest mb-3" style="color:#a5b4fc;">生成結果</h4>
+                            <div class="text-sm leading-relaxed whitespace-pre-wrap min-h-[120px]"
+                                 style="color:#f3f4f6;" x-text="aiAnalysis?.answer || (aiLoading ? '生成中…' : '')"></div>
+                            <div class="mt-4 pt-3 flex flex-wrap gap-2"
+                                 style="border-top:1px solid #1e293b;">
+                                <template x-if="aiAnalysis?.sources?.kb">
+                                    <span class="px-2 py-0.5 text-[9px] font-extrabold rounded"
+                                          style="background-color:rgba(34,197,94,0.15);color:#86efac;border:1px solid rgba(34,197,94,0.3);">ナレッジ</span>
+                                </template>
+                                <template x-if="aiAnalysis?.sources?.reports">
+                                    <span class="px-2 py-0.5 text-[9px] font-extrabold rounded"
+                                          style="background-color:rgba(59,130,246,0.15);color:#93c5fd;border:1px solid rgba(59,130,246,0.3);">レポート</span>
+                                </template>
                             </div>
                             <button type="button" @click="applyAiDraft()" :disabled="!aiAnalysis?.answer"
-                                    class="mt-4 w-full bg-white text-gray-900 py-2.5 rounded-lg text-xs font-bold hover:bg-indigo-50 transition-all disabled:opacity-50">
-                                本文に反映する
+                                    class="mt-4 w-full py-2.5 rounded-lg text-xs font-extrabold transition-all disabled:opacity-40"
+                                    style="background-color:#ffffff;color:#0f172a;"
+                                    onmouseover="if(!this.disabled)this.style.backgroundColor='#e0e7ff';"
+                                    onmouseout="if(!this.disabled)this.style.backgroundColor='#ffffff';">
+                                <i class="fas fa-arrow-down mr-1"></i> 本文に反映する
                             </button>
                         </div>
                     </div>
                 </div>
-            </aside>
+            </div>
         </div>
 
         {{-- フッター: アクション --}}
@@ -585,6 +647,8 @@ function composeWindowApp() {
             return `合計 ${this.formatBytes(this.totalBytes)} / 20MB`;
         },
         get canAskAi() {
+            // 新規作成 (compose) でも AI を呼べる。返信系は元メールが必要
+            if (this.mode === 'compose') return true;
             return !!(this.email && this.email.id);
         },
         get isDirty() {
@@ -611,13 +675,10 @@ function composeWindowApp() {
 
         init() {
             this.draftKey = this.buildDraftKey();
-            this.loadLocalDraft();
+            // localStorage の自動復元は廃止。ウィンドウを開く度にサーバ側から渡された値で開始
+            // 古い localStorage エントリが残っていれば掃除しておく
+            this.clearLocalDraft();
             this.initialBody = this.form.body;
-
-            // 30秒ごとに localStorage 自動保存
-            setInterval(() => {
-                if (this.form.body || this.selectedFiles.length > 0) this.saveLocalDraft();
-            }, 30000);
 
             // 未保存確認 (タブ閉じる/リロード)
             window.addEventListener('beforeunload', (e) => {
@@ -700,20 +761,28 @@ function composeWindowApp() {
         removeSelectedFile(i) { this.selectedFiles.splice(i, 1); },
 
         toggleAi() {
-            if (!this.canAskAi && !this.aiPanelOpen) {
-                this.toast('新規作成ではAIアシスタントは利用できません', 'error');
-                return;
-            }
             this.aiPanelOpen = !this.aiPanelOpen;
         },
         async askAi() {
-            if (!this.canAskAi) { this.toast('返信対象が必要です', 'error'); return; }
+            if (!this.canAskAi) { this.toast('AI を呼び出せる状態ではありません', 'error'); return; }
             this.aiLoading = true; this.aiAnalysis = null;
             try {
-                const res = await fetch(`/emails/${this.email.id}/ai`, {
+                const isCompose = this.mode === 'compose';
+                const url = isCompose ? '/emails/ai-compose' : `/emails/${this.email.id}/ai`;
+                const payload = isCompose
+                    ? {
+                        prompt:   this.aiUserPrompt,
+                        skill:    this.aiSkill,
+                        mask_pii: this.maskPii,
+                        subject:  this.form.subject,
+                        body:     this.form.body,
+                        to:       this.form.to,
+                    }
+                    : { prompt: this.aiUserPrompt, skill: this.aiSkill, mask_pii: this.maskPii };
+                const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
-                    body: JSON.stringify({ prompt: this.aiUserPrompt, skill: this.aiSkill, mask_pii: this.maskPii }),
+                    body: JSON.stringify(payload),
                 });
                 if (!res.ok) throw new Error(`AI Server Error (${res.status})`);
                 const data = await res.json();
@@ -796,10 +865,14 @@ function composeWindowApp() {
                     this.toast(approverName
                         ? `${approverName} さんに承認依頼を送信しました`
                         : '承認待ちとして送信しました', 'success');
+                    // beforeunload を抑止するため、close する前にフラグを立てる
+                    this.sentCompleted = true;
+                    this.form.body = '';
+                    this.form.subject = '';
+                    this.selectedFiles = [];
                     setTimeout(() => {
                         try { window.close(); } catch(_) {}
-                        this.sentCompleted = true;
-                    }, 200);
+                    }, 400);
                 } else if (res.status === 422) {
                     const errs = data.errors ? Object.values(data.errors).flat().join('\n') : (data.message || '入力内容に誤りがあります');
                     this.toast('入力エラー: ' + errs, 'error');
@@ -850,6 +923,7 @@ function composeWindowApp() {
                 this.closeConfirmOpen = true;
                 return;
             }
+            this.sentCompleted = true; // beforeunload 抑止
             try { window.close(); } catch(_) {}
         },
         async saveDraftAndClose() {
@@ -859,6 +933,7 @@ function composeWindowApp() {
                 this.form.body = '';
                 this.selectedFiles = [];
                 this.closeConfirmOpen = false;
+                this.sentCompleted = true; // beforeunload 抑止
                 try { window.close(); } catch(_) {}
             } catch (_) {
                 // エラー時は閉じない
@@ -869,6 +944,7 @@ function composeWindowApp() {
             this.form.body = '';
             this.selectedFiles = [];
             this.closeConfirmOpen = false;
+            this.sentCompleted = true; // beforeunload 抑止
             try { window.close(); } catch(_) {}
         },
 

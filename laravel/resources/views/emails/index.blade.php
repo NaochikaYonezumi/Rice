@@ -127,9 +127,17 @@
                                  @mouseup="cancelLongPress()"
                                  @mouseleave="cancelLongPress()"
                                  @click="if(!isLongPressing){ selectionMode ? toggleSelection(thread) : loadThread(thread.id) }"
-                                 class="email-item w-full cursor-pointer border-b border-gray-100 hover:bg-blue-50 transition-all duration-200 thread-list-row relative"
+                                 class="email-item group/row w-full cursor-pointer border-b border-gray-100 hover:bg-blue-50 transition-all duration-200 thread-list-row relative"
                                  :style="'height: ' + virtualScroll.rowHeight + 'px'"
                                  :class="selectedThreadId === thread.id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : (selectedThreadIds.includes(thread.id) ? 'bg-blue-50/50' : '')">
+
+                                {{-- ホバー時に表示する削除ボタン (個別削除) --}}
+                                <button @click.stop="deleteThreadById(thread.id, thread.subject)"
+                                        x-show="!selectionMode"
+                                        class="absolute right-3 top-1/2 -translate-y-1/2 z-10 w-8 h-8 inline-flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 shadow-sm opacity-0 group-hover/row:opacity-100 transition-all"
+                                        title="このスレッドを削除">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
 
                                 <div class="px-5 py-2 flex flex-col justify-center h-full gap-1">
                                     {{-- 1段目: 送信者 + 日付 --}}
@@ -211,37 +219,39 @@
                         <div class="flex items-center gap-1">
                             {{-- 前/次ナビゲーション --}}
                             <div class="flex items-center gap-0.5 pr-2 mr-1 border-r border-gray-100" x-show="selectedThread">
-                                <button @click="goToPrevThread()" data-tooltip="前のスレッド"
+                                <button @click="goToPrevThread()" title="前のスレッド"
                                     class="icon-btn text-gray-400 hover:text-blue-600 hover:bg-blue-50">
                                     <i class="fas fa-chevron-up text-xs"></i>
                                 </button>
-                                <button @click="goToNextThread()" data-tooltip="次のスレッド"
+                                <button @click="goToNextThread()" title="次のスレッド"
                                     class="icon-btn text-gray-400 hover:text-blue-600 hover:bg-blue-50">
                                     <i class="fas fa-chevron-down text-xs"></i>
                                 </button>
                             </div>
                             {{-- メインアクション --}}
                             <div class="flex items-center gap-1" x-show="selectedThread">
-                                <button @click="updateThreadStatus(selectedThread, 'completed')" data-tooltip="完了にする"
+                                <button @click="updateThreadStatus(selectedThread, 'completed')" title="完了にする"
                                     class="icon-btn bg-green-50 text-green-600 hover:bg-green-600 hover:text-white">
                                     <i class="fas fa-check-double text-xs"></i>
                                 </button>
-                                <button @click="if(threadEmails.length > 0) openReplyForEmail(threadEmails[0])" data-tooltip="返信 (新しいウィンドウ)"
+                                <button @click="if(threadEmails.length > 0) openReplyForEmail(threadEmails[0])" title="返信 (新しいウィンドウ)"
                                     class="icon-btn bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white">
                                     <i class="fas fa-reply text-xs"></i>
                                 </button>
-                                <button @click="if(threadEmails.length > 0) openReplyForEmail(threadEmails[0], true)" data-tooltip="全員に返信 (新しいウィンドウ)"
+                                <button @click="if(threadEmails.length > 0) openReplyForEmail(threadEmails[0], true)" title="全員に返信 (新しいウィンドウ)"
                                     class="icon-btn text-blue-400 border border-blue-100 hover:bg-blue-50 hover:text-blue-600">
                                     <i class="fas fa-reply-all text-xs"></i>
                                 </button>
 
-                                {{-- チャット切替ボタン --}}
-                                <button @click="toggleChatPanel()" data-tooltip="チャット (このスレッドだけ)"
-                                    :class="chatOpen ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'text-emerald-600 border border-emerald-100 hover:bg-emerald-50'"
-                                    class="icon-btn relative">
-                                    <i class="fas fa-comments text-xs"></i>
-                                    <span x-show="chatComments.length > 0 && !chatOpen"
-                                          class="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black px-1.5 rounded-full"
+                                {{-- チャット切替ボタン (このスレッド専用のチャット) --}}
+                                <button @click="toggleChatPanel()" title="このスレッド専用のチャット"
+                                    :class="chatOpen ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'"
+                                    class="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border text-xs font-bold transition-all relative">
+                                    <i class="fas fa-comments"></i>
+                                    <span>チャット</span>
+                                    <span x-show="chatComments.length > 0"
+                                          class="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black"
+                                          :class="chatOpen ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'"
                                           x-text="chatComments.length"></span>
                                 </button>
 
@@ -250,7 +260,7 @@
                                     <button @click="assigneeOpen = !assigneeOpen" @click.away="assigneeOpen = false"
                                         :class="selectedThread?.assignee ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'"
                                         class="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border text-[11px] font-bold transition-all"
-                                        data-tooltip="担当者を変更">
+                                        title="担当者を変更">
                                         <i class="fas fa-user-circle"></i>
                                         <span class="max-w-[120px] truncate" x-text="selectedThread?.assignee?.name || '担当者未設定'"></span>
                                         <i class="fas fa-chevron-down text-[9px] opacity-60"></i>
@@ -279,7 +289,7 @@
 
                                 {{-- 三点リーダーメニュー (担当者以外のアクション) --}}
                                 <div class="relative" x-data="{ open: false }">
-                                    <button @click="open = !open" @click.away="open = false" data-tooltip="その他のアクション"
+                                    <button @click="open = !open" @click.away="open = false" title="その他のアクション"
                                         class="icon-btn text-gray-400 border border-gray-200 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50">
                                         <i class="fas fa-ellipsis-h text-xs"></i>
                                     </button>
@@ -303,7 +313,7 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-1">
-                            <button @click="closeWorkspace()" data-tooltip="閉じる"
+                            <button @click="closeWorkspace()" title="閉じる"
                                 class="icon-btn text-gray-400 border border-gray-200 hover:text-red-500 hover:border-red-200 hover:bg-red-50">
                                 <i class="fas fa-times text-xs"></i>
                             </button>
@@ -467,10 +477,13 @@
                                              :class="c.is_author ? 'justify-end' : 'justify-start'">
                                             <span class="text-[10px] font-bold text-gray-500" x-text="c.author"></span>
                                             <span class="text-[10px] text-gray-400" x-text="c.created_at"></span>
+                                            <template x-if="isMentionedToMe(c.content)">
+                                                <span class="text-[9px] font-black px-1 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">@あなた宛</span>
+                                            </template>
                                         </div>
-                                        <div class="rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words"
+                                        <div class="rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed"
                                              :class="c.is_author ? 'bg-emerald-500 text-white' : 'bg-white text-gray-800 border border-gray-200'"
-                                             x-text="c.content"></div>
+                                             x-html="renderMentions(c.content, c.is_author)"></div>
                                         <div class="text-right mt-1" x-show="c.is_author">
                                             <button @click="deleteChatComment(c.id)"
                                                     class="text-[10px] text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -484,12 +497,43 @@
                         </div>
 
                         {{-- 入力エリア --}}
-                        <div class="shrink-0 border-t border-emerald-100 bg-white p-3">
+                        <div class="shrink-0 border-t border-emerald-100 bg-white p-3 relative">
+
+                            {{-- メンション候補ドロップダウン --}}
+                            <template x-if="mentionOpen && mentionMatches.length > 0">
+                                <div class="absolute left-3 right-3 bottom-full mb-2 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar z-50">
+                                    <div class="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 bg-gray-50/60">
+                                        @メンション (↑↓ で移動 / Enter で選択 / Esc でキャンセル)
+                                    </div>
+                                    <template x-for="(u, i) in mentionMatches" :key="u.id">
+                                        <button type="button"
+                                                @click.stop="pickMention(u)"
+                                                @mouseenter="mentionIndex = i"
+                                                :class="mentionIndex === i ? 'bg-emerald-50 text-emerald-700' : 'text-gray-700 hover:bg-gray-50'"
+                                                class="w-full text-left px-3 py-2 text-sm font-semibold flex items-center gap-2 transition-colors">
+                                            <div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0"
+                                                 x-text="(u.name || '?').charAt(0)"></div>
+                                            <div class="min-w-0 flex-1">
+                                                <p class="truncate" x-text="u.name"></p>
+                                                <p class="text-[10px] text-gray-400 truncate" x-text="u.email"></p>
+                                            </div>
+                                            <i x-show="mentionIndex === i" class="fas fa-arrow-turn-down text-[10px] text-emerald-500"></i>
+                                        </button>
+                                    </template>
+                                </div>
+                            </template>
+
                             <div class="flex items-end gap-2">
-                                <textarea x-model="chatInput" rows="2"
-                                          @keydown.enter.exact.prevent="sendChatComment()"
+                                <textarea id="chat-input-textarea"
+                                          x-model="chatInput"
+                                          rows="2"
+                                          @input="onChatInput($event)"
+                                          @keydown.arrow-up="onMentionKeydown($event, 'up')"
+                                          @keydown.arrow-down="onMentionKeydown($event, 'down')"
+                                          @keydown.escape="closeMention()"
+                                          @keydown.enter.exact.prevent="onChatEnter()"
                                           @keydown.enter.shift="" @keydown.enter.meta="" @keydown.enter.ctrl=""
-                                          placeholder="メッセージを入力 (Enterで送信 / Shift+Enterで改行)"
+                                          placeholder="メッセージを入力 (@で担当者をメンション / Enterで送信 / Shift+Enterで改行)"
                                           class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 resize-none"></textarea>
                                 <button @click="sendChatComment()"
                                         :disabled="!chatInput.trim() || chatSending"
@@ -498,6 +542,10 @@
                                     <i class="fas" :class="chatSending ? 'fa-spinner animate-spin' : 'fa-paper-plane'"></i>
                                 </button>
                             </div>
+                            <p class="text-[10px] text-gray-400 mt-1.5">
+                                <i class="fas fa-at mr-1"></i>
+                                <span class="font-bold">@名前</span> で担当者にメンションできます
+                            </p>
                         </div>
                     </aside>
                 </div>
@@ -507,17 +555,56 @@
 
     {{-- 同期エラーモーダル --}}
     <template x-if="syncError">
-        <div class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4" @click.self="syncError = null">
-            <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in duration-200 text-center">
-                <div class="bg-red-50 px-8 py-6 flex flex-col items-center gap-4 border-b border-red-100">
-                    <div class="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center text-red-600 shadow-inner"><i class="fas fa-exclamation-triangle fa-lg"></i></div>
-                    <h3 class="text-lg font-black text-red-900 uppercase tracking-tighter" x-text="syncError.message"></h3>
+        <div class="fixed inset-0 z-[2000] flex items-center justify-center p-4"
+             style="background-color:rgba(15,23,42,0.55);"
+             @click.self="syncError = null"
+             @keydown.escape.window="syncError = null">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+                {{-- ヘッダー --}}
+                <div class="px-5 py-3 flex items-center gap-3 border-b border-red-100"
+                     style="background-color:#fef2f2;">
+                    <div class="w-9 h-9 rounded-lg inline-flex items-center justify-center shrink-0"
+                         style="background-color:#fee2e2;color:#b91c1c;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <h3 class="text-sm font-extrabold text-red-900" x-text="syncError.message"></h3>
                 </div>
-                <div class="px-8 py-6 space-y-4">
-                    <p class="bg-gray-50 rounded-xl p-4 border border-gray-100 text-left text-gray-800 leading-relaxed text-sm" x-text="syncError.detail"></p>
-                    <div x-data="{ expanded: false }" class="text-left"><button @click="expanded = !expanded" class="text-[10px] font-black text-blue-500 uppercase tracking-widest hover:text-blue-700 transition-colors flex items-center gap-1"><i class="fas" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i> スタックトレースを表示</button><div x-show="expanded" x-collapse class="mt-2 text-left"><pre class="bg-gray-900 text-gray-300 p-4 rounded-xl text-[9px] overflow-auto max-h-40 custom-scrollbar font-mono leading-relaxed" x-text="syncError.stack"></pre></div></div>
+                {{-- 本文 --}}
+                <div class="px-5 py-4 space-y-3">
+                    <p class="rounded-lg p-3 text-[12px] text-gray-800 leading-relaxed break-all"
+                       style="background-color:#f9fafb;border:1px solid #e5e7eb;"
+                       x-text="syncError.detail"></p>
+                    <div x-data="{ expanded: false }" class="text-left">
+                        <button @click="expanded = !expanded"
+                                class="text-[11px] font-bold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1">
+                            <i class="fas" :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+                            スタックトレースを表示
+                        </button>
+                        <div x-show="expanded" x-collapse class="mt-2">
+                            <pre class="p-3 rounded-lg text-[10px] overflow-auto max-h-40 custom-scrollbar font-mono leading-relaxed"
+                                 style="background-color:#0f172a;color:#cbd5e1;"
+                                 x-text="syncError.stack"></pre>
+                        </div>
+                    </div>
                 </div>
-                <div class="px-8 py-6 bg-gray-50 flex gap-3 border-t border-red-50"><button @click="syncError = null" class="flex-1 py-4 text-xs font-black text-gray-400 hover:bg-white rounded-2xl border border-transparent uppercase">閉じる</button><button @click="fetchEmails()" class="flex-[2] bg-red-600 text-white py-4 rounded-2xl font-black text-xs shadow-xl uppercase"><i class="fas fa-sync-alt"></i> リトライ</button></div>
+                {{-- フッター --}}
+                <div class="px-5 py-3 flex items-center justify-end gap-2 border-t border-gray-100"
+                     style="background-color:#f9fafb;">
+                    <button @click="syncError = null"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                            style="background-color:#ffffff;color:#374151;border:1px solid #d1d5db;"
+                            onmouseover="this.style.backgroundColor='#f3f4f6';"
+                            onmouseout="this.style.backgroundColor='#ffffff';">
+                        閉じる
+                    </button>
+                    <button @click="fetchEmails()"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-colors"
+                            style="background-color:#dc2626;"
+                            onmouseover="this.style.backgroundColor='#b91c1c';"
+                            onmouseout="this.style.backgroundColor='#dc2626';">
+                        <i class="fas fa-sync-alt text-[10px]"></i> リトライ
+                    </button>
+                </div>
             </div>
         </div>
     </template>
@@ -586,6 +673,9 @@ function emailApp() {
         threadEmails: [], threadMerges: [], expandedEmailIds: [],
         // チャット関連 (スレッド毎)
         chatOpen: false, chatComments: [], chatLoading: false, chatInput: '', chatSending: false,
+        chatPollIntervalId: null,
+        // @メンション機能
+        mentionOpen: false, mentionQuery: '', mentionStart: -1, mentionIndex: 0,
         selectionMode: false, selectedThreadIds: [], longPressTimer: null, isLongPressing: false,
         mergeModalOpen: false, mergeTargetId: null,
         threads: [], threadsLoading: false, syncError: null,
@@ -849,12 +939,24 @@ function emailApp() {
             } catch(e) { this.toast('解除に失敗しました', 'error'); }
         },
 
-        // 単一スレッドを削除 (三点リーダから)
+        // 単一スレッドを削除 (三点リーダから — 現在開いているスレッド)
         async deleteSelectedThread() {
             if (!this.selectedThreadId) return;
-            const subject = this.selectedThread?.subject || '(無題)';
-            if (!confirm(`「${subject}」を削除します。よろしいですか？\n\n※スレッド内のメールも一緒に削除されます。`)) return;
-            const id = this.selectedThreadId;
+            return this.deleteThreadById(this.selectedThreadId, this.selectedThread?.subject);
+        },
+
+        // 任意のスレッドを ID で削除 (リスト行のホバー削除ボタン用)
+        async deleteThreadById(id, subject) {
+            if (!id) return;
+            const label = subject || '(無題)';
+            if (!confirm(`「${label}」を削除します。よろしいですか？\n\n※スレッド内のメールも一緒に削除されます。`)) return;
+
+            const wasSelected = this.selectedThreadId === id;
+            const idx = this.threads.findIndex(t => t.id === id);
+            const nextThreadId = wasSelected && idx !== -1 && idx < this.threads.length - 1
+                ? this.threads[idx + 1].id
+                : null;
+
             try {
                 const res = await fetch(`/threads/${id}`, {
                     method: 'DELETE',
@@ -866,12 +968,18 @@ function emailApp() {
                     return;
                 }
                 this.toast('メールを削除しました', 'success');
-                // 次のスレッドへ移動 or ワークスペースを閉じる
-                const idx = this.threads.findIndex(t => t.id === id);
-                const nextThreadId = (idx !== -1 && idx < this.threads.length - 1) ? this.threads[idx + 1].id : null;
-                this.closeWorkspace();
+
+                // 削除したのが現在表示中のスレッドならワークスペースを閉じる/次へ
+                if (wasSelected) {
+                    this.closeWorkspace();
+                }
+                // 選択モードなら選択リストからも除外
+                if (this.selectedThreadIds.includes(id)) {
+                    this.selectedThreadIds = this.selectedThreadIds.filter(x => x !== id);
+                    this.selectionMode = this.selectedThreadIds.length > 0;
+                }
                 await this.loadThreads();
-                if (nextThreadId && this.threads.find(t => t.id === nextThreadId)) {
+                if (wasSelected && nextThreadId && this.threads.find(t => t.id === nextThreadId)) {
                     this.loadThread(nextThreadId);
                 }
             } catch (e) {
@@ -969,6 +1077,8 @@ function emailApp() {
             this.chatOpen = false;
             this.chatComments = [];
             this.chatInput = '';
+            this.stopChatPolling();
+            this.closeMention();
         },
 
         // チャットパネルの開閉
@@ -980,26 +1090,53 @@ function emailApp() {
             this.chatOpen = !this.chatOpen;
             if (this.chatOpen) {
                 this.loadChatComments();
+                this.startChatPolling();
+            } else {
+                this.stopChatPolling();
             }
         },
 
-        // チャット一覧の取得
-        async loadChatComments() {
+        // 8秒ごとに自動更新 (他ユーザーの新規メッセージを取得)
+        startChatPolling() {
+            this.stopChatPolling();
+            this.chatPollIntervalId = setInterval(() => {
+                if (!this.chatOpen || !this.selectedThreadId) {
+                    this.stopChatPolling();
+                    return;
+                }
+                this.loadChatComments(true);
+            }, 8000);
+        },
+        stopChatPolling() {
+            if (this.chatPollIntervalId) {
+                clearInterval(this.chatPollIntervalId);
+                this.chatPollIntervalId = null;
+            }
+        },
+
+        // チャット一覧の取得 (silent=true ならローディング表示なし＆自動スクロール抑制)
+        async loadChatComments(silent = false) {
             if (!this.selectedThreadId) return;
-            this.chatLoading = true;
+            if (!silent) this.chatLoading = true;
             try {
                 const res = await fetch(`/threads/${this.selectedThreadId}/comments`, {
                     headers: { 'Accept': 'application/json' }
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
+                const before = this.chatComments.length;
                 this.chatComments = data.comments || [];
-                this.$nextTick(() => this.scrollChatToBottom());
+                // 新着があればスクロール (画面下部にいる時のみ自動スクロール)
+                if (!silent || this.chatComments.length > before) {
+                    this.$nextTick(() => this.scrollChatToBottom(silent));
+                }
             } catch (e) {
-                console.error('チャット読み込み失敗', e);
-                this.toast('チャットの読み込みに失敗しました', 'error');
+                if (!silent) {
+                    console.error('チャット読み込み失敗', e);
+                    this.toast('チャットの読み込みに失敗しました', 'error');
+                }
             } finally {
-                this.chatLoading = false;
+                if (!silent) this.chatLoading = false;
             }
         },
 
@@ -1021,6 +1158,7 @@ function emailApp() {
                 }
                 if (data.comment) this.chatComments.push(data.comment);
                 this.chatInput = '';
+                this.closeMention();
                 this.$nextTick(() => this.scrollChatToBottom());
             } catch (e) {
                 this.toast('通信エラー: ' + (e.message || ''), 'error');
@@ -1048,9 +1186,126 @@ function emailApp() {
             }
         },
 
-        scrollChatToBottom() {
+        // チャット画面下部へスクロール (silent=true 時はユーザーが下部付近にいる場合のみ)
+        scrollChatToBottom(silent = false) {
             const el = document.getElementById('chat-messages');
-            if (el) el.scrollTop = el.scrollHeight;
+            if (!el) return;
+            if (silent) {
+                const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+                if (distance > 80) return; // ユーザーが過去メッセージを読んでいる時は触らない
+            }
+            el.scrollTop = el.scrollHeight;
+        },
+
+        // ============= @メンション =============
+
+        // 入力中: カーソル前の "@xxx" パターンを検出
+        onChatInput(e) {
+            const value = e.target.value;
+            const cursor = e.target.selectionStart || 0;
+            const before = value.slice(0, cursor);
+
+            // 直前の "@" を探す (空白や改行で区切られている)
+            const match = before.match(/(?:^|[\s\n])@([^\s\n]*)$/) || before.match(/^@([^\s\n]*)$/);
+            if (match) {
+                this.mentionQuery = match[1] || '';
+                this.mentionStart = cursor - this.mentionQuery.length - 1; // "@" の位置
+                this.mentionOpen = true;
+                this.mentionIndex = 0;
+            } else {
+                this.closeMention();
+            }
+        },
+
+        // メンション候補のフィルタリング
+        get mentionMatches() {
+            if (!this.mentionOpen) return [];
+            const q = (this.mentionQuery || '').toLowerCase();
+            const list = (this.users || []).filter(u =>
+                !q || (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+            );
+            return list.slice(0, 8);
+        },
+
+        // 候補内の上下移動
+        onMentionKeydown(e, dir) {
+            if (!this.mentionOpen || this.mentionMatches.length === 0) return;
+            e.preventDefault();
+            if (dir === 'up') {
+                this.mentionIndex = (this.mentionIndex - 1 + this.mentionMatches.length) % this.mentionMatches.length;
+            } else {
+                this.mentionIndex = (this.mentionIndex + 1) % this.mentionMatches.length;
+            }
+        },
+
+        // Enter 時: メンション候補が開いていれば選択、それ以外は送信
+        onChatEnter() {
+            if (this.mentionOpen && this.mentionMatches.length > 0) {
+                this.pickMention(this.mentionMatches[this.mentionIndex]);
+            } else {
+                this.sendChatComment();
+            }
+        },
+
+        // 候補を選択 → 入力欄に "@名前 " を挿入
+        pickMention(user) {
+            if (!user || this.mentionStart < 0) {
+                this.closeMention();
+                return;
+            }
+            const value = this.chatInput;
+            // mentionStart は "@" の位置。その前 + "@名前 " + その後ろ (現在のカーソル以降は @xxx の続きが消える前提)
+            const before = value.slice(0, this.mentionStart);
+            const ta = document.getElementById('chat-input-textarea');
+            const cursor = ta?.selectionStart ?? value.length;
+            const after = value.slice(cursor);
+            const inserted = '@' + user.name + ' ';
+            this.chatInput = before + inserted + after;
+            this.closeMention();
+            // 挿入後の位置にカーソル移動
+            this.$nextTick(() => {
+                if (ta) {
+                    const pos = (before + inserted).length;
+                    ta.focus();
+                    ta.setSelectionRange(pos, pos);
+                }
+            });
+        },
+
+        closeMention() {
+            this.mentionOpen = false;
+            this.mentionQuery = '';
+            this.mentionStart = -1;
+            this.mentionIndex = 0;
+        },
+
+        // 表示時のメンションハイライト (HTMLエスケープしてから @名前 を span でラップ)
+        renderMentions(content, isAuthor) {
+            const escape = (s) => String(s)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+            const escaped = escape(content);
+            // @名前 の集合を作成
+            const names = (this.users || []).map(u => u.name).filter(Boolean)
+                .sort((a, b) => b.length - a.length);
+            if (names.length === 0) return escaped;
+
+            // 名前を正規表現でエスケープ
+            const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp('@(' + names.map(reEsc).join('|') + ')(?=[\\s\\n.,!?。、]|$)', 'g');
+            const cls = isAuthor
+                ? 'bg-white/25 text-white font-bold rounded px-1'
+                : 'bg-amber-100 text-amber-700 font-bold rounded px-1';
+            return escaped.replace(pattern, '<span class="' + cls + '">@$1</span>');
+        },
+
+        // 自分宛メンションかチェック
+        isMentionedToMe(content) {
+            const myName = @json(auth()->user()->name ?? '');
+            if (!myName) return false;
+            const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp('@' + reEsc(myName) + '(?=[\\s\\n.,!?。、]|$)');
+            return re.test(content || '');
         },
 
         async loadThread(id) {
@@ -1150,26 +1405,6 @@ function emailApp() {
 /* 新規作成ボタンは Tailwind 未ビルドでも色が出るように補強 */
 .compose-btn:hover { background-color:#1d4ed8 !important; }
 
-/* ツールチップ（300ms 遅延、ボタンの上に表示） */
-[data-tooltip] { position: relative; }
-[data-tooltip]::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 50%;
-    transform: translateX(-50%);
-    background: #111827;
-    color: #f9fafb;
-    padding: 3px 9px;
-    border-radius: 6px;
-    font-size: 10px;
-    font-weight: 700;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.12s ease 0.3s;
-    z-index: 9999;
-}
-[data-tooltip]:hover::after { opacity: 1; }
+/* ツールチップは title 属性のブラウザ標準表示を使用 (カスタム CSS は撤去) */
 </style>
 @endsection

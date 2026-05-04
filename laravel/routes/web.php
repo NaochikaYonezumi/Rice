@@ -20,6 +20,7 @@ use App\Http\Controllers\TagController;
 use App\Http\Controllers\TagNoteController;
 use App\Http\Controllers\ThreadMergeController;
 use App\Http\Controllers\ThreadMemoController;
+use App\Http\Controllers\ThreadChatController;
 use App\Http\Controllers\ThreadCommentController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -85,6 +86,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/threads/{thread}/comments', [ThreadCommentController::class, 'store'])->name('threads.comments.store');
     Route::delete('/thread-comments/{comment}', [ThreadCommentController::class, 'destroy'])->name('threads.comments.destroy');
 
+    // チャット一覧 (スレッド毎のチャット集約ページ)
+    Route::get('/chats', [ThreadChatController::class, 'index'])->name('chats.index');
+    Route::get('/chats/threads', [ThreadChatController::class, 'listThreads'])->name('chats.threads');
+
+    Route::post('/emails/ai-compose', [EmailController::class, 'askAiCompose'])->name('emails.ai_compose');
     Route::post('/emails/{email}/ai', [EmailController::class, 'askAi'])->name('emails.ai');
     Route::post('/emails/{email}/reply', [EmailController::class, 'reply'])->name('emails.reply');
     Route::post('/emails/compose', [EmailController::class, 'compose'])->name('emails.compose');
@@ -98,6 +104,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/pending-emails', [PendingEmailController::class, 'index'])->name('pending.index');
     Route::post('/pending-emails/{pending}/approve', [PendingEmailController::class, 'approve'])->name('pending.approve');
     Route::post('/pending-emails/{pending}/reject', [PendingEmailController::class, 'reject'])->name('pending.reject');
+    Route::post('/pending-emails/{pending}/withdraw', [PendingEmailController::class, 'withdraw'])->name('pending.withdraw');
 
     // 通知
     Route::get('/notifications', function () {

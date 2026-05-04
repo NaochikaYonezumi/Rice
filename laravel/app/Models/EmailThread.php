@@ -13,7 +13,7 @@ class EmailThread extends Model
     public const STATUS_DONE = 'completed';
     public const STATUS_AWAITING_APPROVAL = 'pending';
 
-    protected $fillable = ['subject', 'last_email_at', 'tags', 'customer_id', 'status', 'is_pinned', 'assigned_user_id'];
+    protected $fillable = ['subject', 'ticket_number', 'last_email_at', 'tags', 'customer_id', 'status', 'is_pinned', 'assigned_user_id'];
 
     protected $casts = [
         'last_email_at' => 'datetime',
@@ -21,6 +21,64 @@ class EmailThread extends Model
         'status' => 'string',
         'is_pinned' => 'boolean',
     ];
+
+    /**
+     * チケット番号のフォーマット (例: RICE-000123)
+     */
+    public const TICKET_PREFIX = 'RICE-';
+    public const TICKET_PAD    = 6;
+    public const TICKET_REGEX  = '/\[#?(RICE-\d{1,12})\]/i';
+
+    public static function generateTicketNumber(int $threadId): string
+    {
+        return self::TICKET_PREFIX . str_pad((string) $threadId, self::TICKET_PAD, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * 件名からチケット番号を抽出 (見つからなければ null)
+     */
+    public static function extractTicketNumber(?string $subject): ?string
+    {
+        if (!$subject) return null;
+        if (preg_match(self::TICKET_REGEX, $subject, $m)) {
+            return strtoupper($m[1]);
+        }
+        return null;
+    }
+
+    /**
+     * 件名にチケット番号タグを付与 (既に含まれていればそのまま)
+     */
+    public static function ensureTicketInSubject(string $subject, string $ticketNumber): string
+    {
+        if (preg_match(self::TICKET_REGEX, $subject)) {
+            return $subject;
+        }
+        return '[#' . $ticketNumber . '] ' . trim($subject);
+    }
+
+    public function ensureTicketNumber(): string
+    {
+        // マイグレーション未実行環境でも落ちないようにガード
+        try {
+            if (!\Illuminate\Support\Facades\Schema::hasColumn('email_threads', 'ticket_number')) {
+                return self::generateTicketNumber($this->id);
+            }
+        } catch (\Throwable $e) {
+            return self::generateTicketNumber($this->id);
+        }
+
+        if (!$this->ticket_number) {
+            try {
+                $this->ticket_number = self::generateTicketNumber($this->id);
+                $this->save();
+            } catch (\Throwable $e) {
+                // 書き込み失敗時もアプリは継続
+                return self::generateTicketNumber($this->id);
+            }
+        }
+        return $this->ticket_number;
+    }
 
     public function customer(): BelongsTo
     {

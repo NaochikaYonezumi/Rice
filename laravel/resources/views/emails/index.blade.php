@@ -368,20 +368,16 @@
                                     </div>
                                 </template>
 
-                                {{-- 各メール表示 (コンパクトカード) --}}
+                                {{-- 各メール表示: 件名→宛先→日付の縦積み (アイコン無し) --}}
                                 <template x-for="email in threadEmails" :key="email.id">
                                     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow group">
-                                        <div class="px-4 py-2.5 cursor-pointer hover:bg-gray-50/50 transition-colors" @click="toggleEmailExpand(email.id)">
+                                        <div class="px-4 py-3 cursor-pointer hover:bg-gray-50/50 transition-colors" @click="toggleEmailExpand(email.id)">
 
-                                            {{-- 1行目: アバター + 送信者 + 日時 + 返信/全員返信 + 開閉アイコン --}}
-                                            <div class="flex items-center gap-2 min-w-0">
-                                                <div class="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 font-bold text-[11px] shrink-0"
-                                                     x-text="(email.from_label || '?')[0]"></div>
-                                                <div class="min-w-0 flex-1">
-                                                    <p class="text-xs font-bold text-gray-900 truncate" x-text="email.from_label" :title="email.from_label"></p>
-                                                    <p class="text-[10px] text-gray-400 truncate" x-text="email.from_address" :title="email.from_address"></p>
-                                                </div>
-                                                <span class="text-[10px] text-gray-400 font-semibold whitespace-nowrap shrink-0" x-text="email.received_at"></span>
+                                            {{-- 1段目: 件名 + 返信/全員/開閉 --}}
+                                            <div class="flex items-start gap-2 min-w-0">
+                                                <h3 class="text-sm font-bold text-gray-900 flex-1 min-w-0"
+                                                    style="word-break:break-word;overflow-wrap:anywhere;line-height:1.4;"
+                                                    x-text="email.subject || selectedThread?.subject || '(件名なし)'"></h3>
                                                 <button @click.stop="openReplyForEmail(email)"
                                                         class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors shrink-0"
                                                         style="background-color:#eff6ff;color:#2563eb;"
@@ -398,14 +394,29 @@
                                                         title="全員に返信">
                                                     <i class="fas fa-reply-all"></i> 全員
                                                 </button>
-                                                <i class="fas fa-chevron-down text-gray-300 group-hover:text-blue-500 transition-all shrink-0 text-[10px]"
+                                                <i class="fas fa-chevron-down text-gray-300 group-hover:text-blue-500 transition-all shrink-0 text-[10px] mt-1"
                                                    :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''"></i>
                                             </div>
 
-                                            {{-- 2行目: 宛先 (To) --}}
-                                            <div class="mt-1 text-[10px] text-gray-500 truncate pl-9" :title="email.to_address">
-                                                <span class="text-gray-400 mr-1">To:</span><span x-text="email.to_address"></span>
+                                            {{-- 2段目: From / To / Cc (件名の下にメールアドレス) --}}
+                                            <div class="mt-1.5 space-y-0.5 text-[11px] text-gray-600">
+                                                <div class="truncate" :title="(email.from_label || '') + ' <' + (email.from_address || '') + '>'">
+                                                    <span class="text-gray-400 mr-1 inline-block w-7">From:</span>
+                                                    <span class="font-semibold text-gray-800" x-text="email.from_label || email.from_address || '不明'"></span>
+                                                    <span class="text-gray-400 ml-1" x-show="email.from_label && email.from_address" x-text="'<' + email.from_address + '>'"></span>
+                                                </div>
+                                                <div class="truncate" :title="email.to_address">
+                                                    <span class="text-gray-400 mr-1 inline-block w-7">To:</span>
+                                                    <span x-text="email.to_address || '—'"></span>
+                                                </div>
+                                                <div class="truncate" x-show="email.cc" :title="email.cc">
+                                                    <span class="text-gray-400 mr-1 inline-block w-7">Cc:</span>
+                                                    <span x-text="email.cc"></span>
+                                                </div>
                                             </div>
+
+                                            {{-- 3段目: 日付 --}}
+                                            <div class="mt-1.5 text-[10px] text-gray-400 font-medium" x-text="email.received_at"></div>
                                         </div>
 
                                         <div x-show="expandedEmailIds.includes(email.id)" x-collapse>

@@ -368,41 +368,43 @@
                                     </div>
                                 </template>
 
-                                {{-- 各メール表示 (ヘッダを複数段に分割) --}}
+                                {{-- 各メール表示 (コンパクトカード) --}}
                                 <template x-for="email in threadEmails" :key="email.id">
-                                    <div class="bg-white border border-gray-200 rounded-3xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-                                        <div class="px-6 py-4 cursor-pointer hover:bg-gray-50/50 transition-colors flex flex-col gap-3" @click="toggleEmailExpand(email.id)">
+                                    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm hover:shadow transition-shadow group">
+                                        <div class="px-4 py-2.5 cursor-pointer hover:bg-gray-50/50 transition-colors" @click="toggleEmailExpand(email.id)">
 
-                                            {{-- 1段目: アバター + 送信者情報 + 開閉アイコン --}}
-                                            <div class="flex items-start justify-between gap-3">
-                                                <div class="flex items-center gap-4 min-w-0 flex-1">
-                                                    <div class="w-10 h-10 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-500 font-black text-lg shadow-inner shrink-0" x-text="(email.from_label || '?')[0]"></div>
-                                                    <div class="min-w-0 flex-1">
-                                                        <p class="text-sm font-black text-gray-900 break-words" x-text="email.from_label"></p>
-                                                        <p class="text-[11px] text-gray-400 font-medium break-all" x-text="email.from_address"></p>
-                                                    </div>
+                                            {{-- 1行目: アバター + 送信者 + 日時 + 返信/全員返信 + 開閉アイコン --}}
+                                            <div class="flex items-center gap-2 min-w-0">
+                                                <div class="w-7 h-7 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 font-bold text-[11px] shrink-0"
+                                                     x-text="(email.from_label || '?')[0]"></div>
+                                                <div class="min-w-0 flex-1">
+                                                    <p class="text-xs font-bold text-gray-900 truncate" x-text="email.from_label" :title="email.from_label"></p>
+                                                    <p class="text-[10px] text-gray-400 truncate" x-text="email.from_address" :title="email.from_address"></p>
                                                 </div>
-                                                <i class="fas fa-chevron-down text-gray-300 group-hover:text-blue-500 transition-all mt-2 shrink-0" :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''"></i>
-                                            </div>
-
-                                            {{-- 2段目: 宛先 (To) --}}
-                                            <div class="text-[11px] text-gray-500 font-medium break-all">
-                                                <span class="text-gray-400 mr-1">To:</span><span x-text="email.to_address"></span>
-                                            </div>
-
-                                            {{-- 3段目: 受信日時 --}}
-                                            <div class="text-[10px] text-gray-400 font-bold uppercase tracking-widest" x-text="email.received_at"></div>
-
-                                            {{-- 4段目: アクションボタン (返信 / 全員に返信) --}}
-                                            <div class="flex flex-wrap items-center gap-2">
+                                                <span class="text-[10px] text-gray-400 font-semibold whitespace-nowrap shrink-0" x-text="email.received_at"></span>
                                                 <button @click.stop="openReplyForEmail(email)"
-                                                        class="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl font-black text-[11px] 2xl:text-xs shadow-sm hover:bg-blue-600 hover:text-white transition-all inline-flex items-center gap-2">
+                                                        class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors shrink-0"
+                                                        style="background-color:#eff6ff;color:#2563eb;"
+                                                        onmouseover="this.style.backgroundColor='#2563eb';this.style.color='#ffffff';"
+                                                        onmouseout="this.style.backgroundColor='#eff6ff';this.style.color='#2563eb';"
+                                                        title="返信">
                                                     <i class="fas fa-reply"></i> 返信
                                                 </button>
                                                 <button @click.stop="openReplyForEmail(email, true)"
-                                                        class="bg-white text-blue-600 border border-blue-100 px-4 py-2 rounded-xl font-black text-[11px] 2xl:text-xs shadow-sm hover:bg-blue-50 transition-all inline-flex items-center gap-2">
-                                                    <i class="fas fa-reply-all"></i> 全員に返信
+                                                        class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors shrink-0"
+                                                        style="background-color:#ffffff;color:#2563eb;border:1px solid #dbeafe;"
+                                                        onmouseover="this.style.backgroundColor='#eff6ff';"
+                                                        onmouseout="this.style.backgroundColor='#ffffff';"
+                                                        title="全員に返信">
+                                                    <i class="fas fa-reply-all"></i> 全員
                                                 </button>
+                                                <i class="fas fa-chevron-down text-gray-300 group-hover:text-blue-500 transition-all shrink-0 text-[10px]"
+                                                   :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''"></i>
+                                            </div>
+
+                                            {{-- 2行目: 宛先 (To) --}}
+                                            <div class="mt-1 text-[10px] text-gray-500 truncate pl-9" :title="email.to_address">
+                                                <span class="text-gray-400 mr-1">To:</span><span x-text="email.to_address"></span>
                                             </div>
                                         </div>
 

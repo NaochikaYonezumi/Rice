@@ -481,8 +481,10 @@
                                                 <span class="text-[9px] font-black px-1 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">@あなた宛</span>
                                             </template>
                                         </div>
-                                        <div class="rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed"
-                                             :class="c.is_author ? 'bg-emerald-500 text-white' : 'bg-white text-gray-800 border border-gray-200'"
+                                        <div class="rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed shadow-sm"
+                                             :style="c.is_author
+                                                ? 'background-color:#10b981;color:#ffffff;'
+                                                : 'background-color:#ffffff;color:#1f2937;border:1px solid #e5e7eb;'"
                                              x-html="renderMentions(c.content, c.is_author)"></div>
                                         <div class="text-right mt-1" x-show="c.is_author">
                                             <button @click="deleteChatComment(c.id)"

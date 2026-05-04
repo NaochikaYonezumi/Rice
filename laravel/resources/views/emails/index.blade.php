@@ -319,15 +319,28 @@
                             </button>
                         </div>
                     </div>
-                    {{-- 2行目: 件名 + 承認状態バッジ + AI要約ボタン --}}
-                    <div class="px-6 py-2.5 flex items-center gap-2.5 min-w-0">
-                        <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
+                    {{-- 2行目: 件名 + AI要約 + 承認状態バッジ --}}
+                    <div class="px-6 py-2.5 flex items-start gap-2.5 min-w-0">
+                        <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0 mt-0.5">
                             <i class="fas fa-envelope text-[11px]"></i>
                         </div>
                         <div class="min-w-0 flex-1">
-                            <h2 class="text-sm font-extrabold text-gray-800"
-                                style="word-break:break-word;overflow-wrap:anywhere;line-height:1.35;"
-                                x-text="selectedThread?.subject"></h2>
+                            <div class="flex items-start gap-2 flex-wrap">
+                                <h2 class="text-sm font-extrabold text-gray-800 min-w-0"
+                                    style="word-break:break-word;overflow-wrap:anywhere;line-height:1.4;"
+                                    x-text="selectedThread?.subject"></h2>
+                                {{-- AI要約ボタン (件名の直後) --}}
+                                <button type="button" @click="openThreadSummary()"
+                                        :disabled="!threadEmails.length"
+                                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        style="background-color:#4f46e5;color:#ffffff;box-shadow:0 1px 3px rgba(79,70,229,0.25);"
+                                        onmouseover="if(!this.disabled)this.style.backgroundColor='#4338ca';"
+                                        onmouseout="if(!this.disabled)this.style.backgroundColor='#4f46e5';"
+                                        title="このスレッドの全メールを AI で要約">
+                                    <i class="fas fa-magic text-[9px]"></i>
+                                    AI要約
+                                </button>
+                            </div>
                             <div class="mt-0.5 flex flex-wrap items-center gap-2">
                                 <template x-if="pendingApprovals.some(p => p.status === 'pending')">
                                     <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-amber-100 text-amber-700 border border-amber-200">
@@ -341,17 +354,6 @@
                                 </template>
                             </div>
                         </div>
-                        {{-- AI要約ボタン (右端) --}}
-                        <button type="button" @click="openThreadSummary()"
-                                :disabled="!threadEmails.length"
-                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                                style="background-color:#4f46e5;color:#ffffff;box-shadow:0 2px 6px rgba(79,70,229,0.25);"
-                                onmouseover="if(!this.disabled)this.style.backgroundColor='#4338ca';"
-                                onmouseout="if(!this.disabled)this.style.backgroundColor='#4f46e5';"
-                                title="このスレッドの全メールを AI で要約">
-                            <i class="fas fa-magic text-[10px]"></i>
-                            AI要約
-                        </button>
                     </div>
                 </div>
 

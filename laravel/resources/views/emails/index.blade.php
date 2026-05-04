@@ -320,12 +320,14 @@
                         </div>
                     </div>
                     {{-- 2行目: 件名 + 承認状態バッジ --}}
-                    <div class="px-8 py-5 flex items-center gap-4 min-w-0">
-                        <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shrink-0">
-                            <i class="fas fa-envelope"></i>
+                    <div class="px-6 py-2.5 flex items-center gap-2.5 min-w-0">
+                        <div class="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
+                            <i class="fas fa-envelope text-[11px]"></i>
                         </div>
                         <div class="min-w-0 flex-1">
-                            <h2 class="text-lg font-black tracking-tight truncate text-gray-800" x-text="selectedThread?.subject"></h2>
+                            <h2 class="text-sm font-extrabold text-gray-800"
+                                style="word-break:break-word;overflow-wrap:anywhere;line-height:1.35;"
+                                x-text="selectedThread?.subject"></h2>
                             <div class="mt-0.5 flex flex-wrap items-center gap-2">
                                 {{-- 担当者は上部のトグルボタンに表示 (重複削除) --}}
                                 <template x-if="pendingApprovals.some(p => p.status === 'pending')">

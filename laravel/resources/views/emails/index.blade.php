@@ -149,13 +149,13 @@
                                             </template>
                                             <i x-show="thread.is_pinned" class="fas fa-thumbtack text-amber-500 text-[10px] shrink-0"></i>
                                             <i x-show="thread.thread_merges_count > 0" class="fas fa-object-group text-blue-500 text-[10px] shrink-0" title="マージ済み"></i>
-                                            <span class="text-[13px] 2xl:text-base font-black text-gray-900 truncate" x-text="thread.latest_email?.from_label || '不明な送信者'"></span>
+                                            <span class="text-[12px] font-bold text-gray-900 truncate" x-text="thread.latest_email?.from_label || '不明な送信者'"></span>
                                         </div>
-                                        <span class="text-[10px] 2xl:text-xs text-gray-400 font-medium shrink-0" x-text="thread.last_email_at"></span>
+                                        <span class="text-[10px] text-gray-400 font-medium shrink-0" x-text="thread.last_email_at"></span>
                                     </div>
 
                                     {{-- 2段目: 件名 (フル幅・最大2行) --}}
-                                    <div class="text-[12px] 2xl:text-sm text-gray-700 font-medium leading-snug break-words"
+                                    <div class="text-[11px] text-gray-700 font-medium leading-snug break-words"
                                          style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
                                          x-text="thread.subject"></div>
 

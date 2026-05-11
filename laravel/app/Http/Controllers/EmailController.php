@@ -82,6 +82,10 @@ class EmailController extends Controller
         $agentName = $aiSettings->agent_name ?: '米住 直親';
         $signature = $aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n米住 直親";
 
+        // リクエストで指定された provider/model を優先し、未指定なら AiSetting の既定値にフォールバック
+        $provider = $request->input('provider') ?: $aiSettings->default_provider;
+        $model    = $request->input('model')    ?: $aiSettings->default_model;
+
         $finalPrompt = "【システム指示】\n{$selectedSkill['system_prompt']}\n\n";
         $finalPrompt .= "【コンテキスト: ナレッジベース】\n{$kbContent}\n\n";
         $finalPrompt .= "【コンテキスト: 関連レポート】\n{$reportContent}\n\n";
@@ -101,11 +105,13 @@ class EmailController extends Controller
         }
 
         // RAG API経由で生成
-        $result = $this->ragApi->query($finalPrompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
-        
+        $result = $this->ragApi->query($finalPrompt, 3, $provider, $model);
+
         return response()->json([
             'answer' => $result['answer'] ?? '',
             'skill_used' => $selectedSkill['name'],
+            'provider_used' => $provider,
+            'model_used' => $model,
             'sources' => [
                 'kb' => !empty($kbContent),
                 'reports' => !empty($reportContent)

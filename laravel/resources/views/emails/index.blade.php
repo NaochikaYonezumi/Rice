@@ -611,6 +611,22 @@ function emailApp() {
             setInterval(() => { if (this.composeMode) this.autoSaveDraft(); }, 30000);
 
             this.setupPolling();
+
+            // クエリパラメータ `?thread=<id>` または `?email=<id>` で指定されたスレッドを自動表示
+            const url = new URL(window.location.href);
+            const threadParam = url.searchParams.get('thread');
+            const emailParam = url.searchParams.get('email');
+            if (threadParam) {
+                await this.loadThread(threadParam);
+            } else if (emailParam) {
+                try {
+                    const res = await fetch(`/emails/${emailParam}`, { headers: { 'Accept': 'application/json' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data?.thread_id) await this.loadThread(data.thread_id);
+                    }
+                } catch (e) { /* noop */ }
+            }
         },
 
         setupPolling() {

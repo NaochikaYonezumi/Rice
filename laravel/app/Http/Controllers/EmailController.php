@@ -23,6 +23,21 @@ class EmailController extends Controller
 
     public function pinned() { return view('emails.index', ['isPinnedView' => true]); }
 
+    // 単一メールの参照: JSON 要求時は thread_id を返し、それ以外は対応するスレッドを開いた一覧画面へリダイレクト
+    public function show(Request $request, Email $email)
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'id' => $email->id,
+                'thread_id' => $email->thread_id,
+                'subject' => $email->subject,
+                'from_label' => $email->from_label,
+                'received_at' => $email->received_at?->format('Y/m/d H:i'),
+            ]);
+        }
+        return redirect('/?thread=' . $email->thread_id);
+    }
+
     public function fetch(EmailFetcher $fetcher): JsonResponse
     {
         try {

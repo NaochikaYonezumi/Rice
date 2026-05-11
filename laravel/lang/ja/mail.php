@@ -5,6 +5,7 @@ return [
         'inbox' => '受信',
         'hold' => '保留',
         'completed' => '完了',
+        'no_action' => '対応不要',
         'pending' => '承認待ち',
     ],
     'ai' => [

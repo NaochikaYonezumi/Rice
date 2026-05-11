@@ -88,6 +88,7 @@
                     <div class="flex items-center gap-1.5 flex-wrap justify-end">
                         <button @click="updateSelectedStatus('completed')" class="bg-white/20 hover:bg-white/30 text-white px-2 py-1.5 rounded-lg text-[9px] font-black border border-white/30 uppercase tracking-widest transition-all">完了</button>
                         <button @click="updateSelectedStatus('hold')" class="bg-white/20 hover:bg-white/30 text-white px-2 py-1.5 rounded-lg text-[9px] font-black border border-white/30 uppercase tracking-widest transition-all">保留</button>
+                        <button @click="updateSelectedStatus('no_action')" class="bg-white/20 hover:bg-white/30 text-white px-2 py-1.5 rounded-lg text-[9px] font-black border border-white/30 uppercase tracking-widest transition-all">対応不要</button>
                         <button @click="updateSelectedStatus('inbox')" class="bg-white/20 hover:bg-white/30 text-white px-2 py-1.5 rounded-lg text-[9px] font-black border border-white/30 uppercase tracking-widest transition-all">未対応</button>
                         <button @click="batchPinSelected(true)" class="bg-white/20 hover:bg-white/30 text-white px-2 py-1.5 rounded-lg text-[9px] font-black border border-white/30 uppercase tracking-widest transition-all"><i class="fas fa-thumbtack"></i> ピン留</button>
                         <button @click="batchPinSelected(false)" class="bg-white/20 hover:bg-white/30 text-white px-2 py-1.5 rounded-lg text-[9px] font-black border border-white/30 uppercase tracking-widest transition-all"><i class="fas fa-unlink"></i> ピン外</button>
@@ -102,7 +103,7 @@
             {{-- ステータスタブ --}}
             <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                 <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
-                    <template x-for="tab in ['inbox', 'hold', 'completed', 'pending']">
+                    <template x-for="tab in ['inbox', 'hold', 'completed', 'no_action', 'pending']">
                         <button @click="setLeftTab(tab)" 
                                 :class="leftTab === tab ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'" 
                                 class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate" 
@@ -144,6 +145,7 @@
                                                         'bg-blue-100 text-blue-700 border-blue-200': thread.status === 'inbox' || !thread.status,
                                                         'bg-amber-100 text-amber-800 border-amber-200': thread.status === 'hold',
                                                         'bg-green-100 text-green-800 border-green-200': thread.status === 'completed',
+                                                        'bg-gray-100 text-gray-700 border-gray-200': thread.status === 'no_action',
                                                         'bg-orange-100 text-orange-800 border-orange-200': thread.status === 'pending'
                                                     }">
                                                     <span x-text="statusLabels[thread.status] || '受信'"></span>
@@ -219,6 +221,9 @@
                                         </button>
                                         <button @click="updateThreadStatus(selectedThread, 'hold'); open = false" class="w-full text-left px-4 py-2.5 text-[11px] font-black text-gray-600 hover:bg-blue-50 flex items-center gap-3 transition-colors uppercase tracking-widest">
                                             <i class="fas fa-pause text-amber-400"></i> 保留
+                                        </button>
+                                        <button @click="updateThreadStatus(selectedThread, 'no_action'); open = false" class="w-full text-left px-4 py-2.5 text-[11px] font-black text-gray-600 hover:bg-blue-50 flex items-center gap-3 transition-colors uppercase tracking-widest">
+                                            <i class="fas fa-ban text-gray-400"></i> 対応不要
                                         </button>
                                         <button @click="togglePin(); open = false" class="w-full text-left px-4 py-2.5 text-[11px] font-black text-gray-600 hover:bg-blue-50 flex items-center gap-3 transition-colors uppercase tracking-widest">
                                             <i class="fas fa-thumbtack text-amber-500"></i> ピン留め
@@ -586,7 +591,7 @@ function emailApp() {
         pinnedOnlyMode: {{ isset($isPinnedView) && $isPinnedView ? 'true' : 'false' }},
         assigneeFilterId: localStorage.getItem('assigneeFilterId') || 'all',
         sortOrder: 'desc',
-        statusLabels: { inbox: '受信', hold: '保留', completed: '完了', pending: '承認待ち' },
+        statusLabels: { inbox: '受信', hold: '保留', completed: '完了', no_action: '対応不要', pending: '承認待ち' },
         threadEmails: [], threadMerges: [], expandedEmailIds: [], 
         selectionMode: false, selectedThreadIds: [], longPressTimer: null, isLongPressing: false,
         mergeModalOpen: false, mergeTargetId: null,

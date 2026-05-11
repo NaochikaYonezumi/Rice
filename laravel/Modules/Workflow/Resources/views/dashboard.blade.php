@@ -74,7 +74,7 @@
                     <tbody>
                         @foreach($stats['status_stats'] as $stat)
                         <tr>
-                            <td>{{ $stat->status }}</td>
+                            <td>{{ __('mail.status.' . $stat->status, [], 'ja') !== 'mail.status.' . $stat->status ? __('mail.status.' . $stat->status) : $stat->status }}</td>
                             <td>{{ $stat->count }}</td>
                         </tr>
                         @endforeach

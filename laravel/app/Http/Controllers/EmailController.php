@@ -302,8 +302,28 @@ class EmailController extends Controller
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
-        $thread->update(['status' => $request->status]);
-        return response()->json(['status' => 'ok']);
+        $newStatus = $request->status;
+        $payload = ['status' => $newStatus];
+
+        // 完了に変更する際、担当者が未設定であれば押下したユーザを担当者として自動アサイン
+        $autoAssigned = false;
+        if ($newStatus === 'completed' && empty($thread->assigned_user_id) && auth()->id()) {
+            $payload['assigned_user_id'] = auth()->id();
+            $autoAssigned = true;
+        }
+
+        $thread->update($payload);
+
+        $response = ['status' => 'ok', 'auto_assigned' => $autoAssigned];
+        if ($autoAssigned) {
+            $thread->load('assignee');
+            $response['assigned_user_id'] = $thread->assigned_user_id;
+            $response['assignee'] = $thread->assignee
+                ? ['id' => $thread->assignee->id, 'name' => $thread->assignee->name]
+                : null;
+        }
+
+        return response()->json($response);
     }
 
     public function deleteThread(EmailThread $thread): JsonResponse

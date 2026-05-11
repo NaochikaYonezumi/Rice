@@ -980,9 +980,21 @@ function emailApp() {
                 const nextThreadId = (idx !== -1 && idx < this.threads.length - 1) ? this.threads[idx + 1].id : null;
 
                 const res = await fetch(`/threads/${thread.id}/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ status }) });
-                if(res.ok) { 
-                    this.selectedThread.status = status; 
-                    
+                if(res.ok) {
+                    this.selectedThread.status = status;
+
+                    // 完了押下時にバックエンドで担当者が自動セットされた場合は selectedThread と threads にも反映
+                    const data = await res.json().catch(() => ({}));
+                    if (data.auto_assigned && data.assigned_user_id) {
+                        this.selectedThread.assigned_user_id = data.assigned_user_id;
+                        this.selectedThread.assignee = data.assignee || null;
+                        const t = this.threads.find(x => x.id === thread.id);
+                        if (t) {
+                            t.assigned_user_id = data.assigned_user_id;
+                            t.assignee = data.assignee || null;
+                        }
+                    }
+
                     if (!this.selectionMode && (status === 'hold' || status === 'completed')) {
                         await this.loadThreads();
                         if (nextThreadId) {

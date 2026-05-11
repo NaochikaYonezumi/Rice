@@ -17,7 +17,7 @@ class RagApiService
     public function query(string $question, int $topK = 5, ?string $provider = null, ?string $model = null): array
     {
         $payload = array_filter([
-            'question' => $question,
+            'query' => $question,
             'top_k' => $topK,
             'provider' => $provider,
             'model' => $model,

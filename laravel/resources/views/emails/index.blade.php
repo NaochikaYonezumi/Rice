@@ -468,7 +468,7 @@
                                     <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">スキルを選択</label>
                                     <div class="grid grid-cols-2 gap-3">
                                         <template x-for="(skill, key) in aiSkills" :key="key">
-                                            <button @click="aiSkill = key" 
+                                            <button @click="aiSkill = key"
                                                 :class="aiSkill === key ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl' : 'bg-gray-50 text-gray-600 border-gray-100 hover:border-indigo-200'"
                                                 class="p-4 rounded-2xl border text-left transition-all">
                                                 <p class="text-[11px] font-black" x-text="skill.name"></p>
@@ -476,6 +476,39 @@
                                             </button>
                                         </template>
                                     </div>
+                                </div>
+                                {{-- AI Provider / Model 選択 --}}
+                                <div class="space-y-3">
+                                    <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">利用するAI</label>
+                                    <div class="flex rounded-xl border border-gray-200 overflow-hidden text-[10px]">
+                                        <button type="button" @click="setAiProvider('ollama')"
+                                            :class="aiProvider === 'ollama' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                            class="flex-1 px-2 py-2 font-black transition-all">ローカル LLM</button>
+                                        <button type="button" @click="setAiProvider('claude')"
+                                            :disabled="!aiHasClaudeKey"
+                                            :title="!aiHasClaudeKey ? 'APIキーが未設定です' : ''"
+                                            :class="aiProvider === 'claude' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'"
+                                            class="flex-1 px-2 py-2 font-black transition-all border-l border-gray-200">Claude</button>
+                                        <button type="button" @click="setAiProvider('gemini')"
+                                            :disabled="!aiHasGeminiKey"
+                                            :title="!aiHasGeminiKey ? 'APIキーが未設定です' : ''"
+                                            :class="aiProvider === 'gemini' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'"
+                                            class="flex-1 px-2 py-2 font-black transition-all border-l border-gray-200">Gemini</button>
+                                    </div>
+                                    <select x-model="aiModel"
+                                        class="w-full text-xs border border-gray-100 bg-gray-50 rounded-xl px-3 py-2 outline-none focus:ring-4 focus:ring-indigo-50 font-medium">
+                                        <template x-if="aiLoadingModels"><option>読み込み中...</option></template>
+                                        <template x-if="!aiLoadingModels && aiCurrentModels.length === 0"><option value="">モデルなし</option></template>
+                                        <template x-for="m in aiCurrentModels" :key="m.id || m">
+                                            <option :value="m.id || m" x-text="m.name || m"></option>
+                                        </template>
+                                    </select>
+                                    <template x-if="aiProvider === 'claude' && !aiHasClaudeKey">
+                                        <p class="text-[10px] text-amber-500 font-bold">⚠ Claude のAPIキーが未設定です（設定 → AIで登録できます）</p>
+                                    </template>
+                                    <template x-if="aiProvider === 'gemini' && !aiHasGeminiKey">
+                                        <p class="text-[10px] text-amber-500 font-bold">⚠ Gemini のAPIキーが未設定です（設定 → AIで登録できます）</p>
+                                    </template>
                                 </div>
                                 <div class="space-y-3">
                                     <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest">追加の指示 (任意)</label>
@@ -594,23 +627,84 @@ function emailApp() {
         users: [], // 招待管理から一元化されたユーザーリスト
         selectedFiles: [],
         replyToAddress: '', replyCc: '', replyBcc: '', replySubject: '', replyBody: '', replyFromAddress: '',
-        replyAiPanelOpen: false, aiSkill: 'reply', 
+        replyAiPanelOpen: false, aiSkill: 'reply',
         aiSkills: @json(config('ai_skills.skills', [])),
         aiUserPrompt: '', aiAnalysis: null, aiLoading: false, sendingReply: false, maskPii: true,
         replyingToEmailId: null,
+        // AI Provider / Model 選択 (Email AIアシスタント用)
+        aiProvider: localStorage.getItem('aiProvider') || 'ollama',
+        aiModel: localStorage.getItem('aiModel') || '',
+        aiOllamaModels: [], aiClaudeModels: [], aiGeminiModels: [],
+        aiHasClaudeKey: false, aiHasGeminiKey: false,
+        aiLoadingModels: true,
         virtualScroll: { startIndex: 0, endIndex: 30, rowHeight: 95, viewportHeight: 600, buffer: 10 },
         pollIntervalId: null, pollFailCount: 0, basePollDelay: 60000, maxPollDelay: 300000, currentPollDelay: 60000,
+
+        get aiCurrentModels() {
+            if (this.aiProvider === 'claude') return this.aiClaudeModels;
+            if (this.aiProvider === 'gemini') return this.aiGeminiModels;
+            return this.aiOllamaModels;
+        },
+
+        async loadAiModels() {
+            this.aiLoadingModels = true;
+            try {
+                const res = await fetch('/chat/models');
+                const data = await res.json();
+                this.aiOllamaModels = data.ollama || [];
+                this.aiClaudeModels = data.claude || [];
+                this.aiGeminiModels = data.gemini || [];
+                this.aiHasClaudeKey = !!data.has_claude_key;
+                this.aiHasGeminiKey = !!data.has_gemini_key;
+                // 既定値がセットされていなければ、現在のプロバイダの先頭モデルを選択
+                if (!this.aiModel) {
+                    const list = this.aiCurrentModels;
+                    if (list.length > 0) this.aiModel = list[0].id || list[0];
+                }
+            } catch (e) {
+                console.error('AIモデルの取得に失敗:', e);
+            } finally {
+                this.aiLoadingModels = false;
+            }
+        },
+
+        setAiProvider(p) {
+            if (p === 'claude' && !this.aiHasClaudeKey) return;
+            if (p === 'gemini' && !this.aiHasGeminiKey) return;
+            this.aiProvider = p;
+            localStorage.setItem('aiProvider', p);
+            const list = this.aiCurrentModels;
+            this.aiModel = list.length > 0 ? (list[0].id || list[0]) : '';
+            localStorage.setItem('aiModel', this.aiModel);
+        },
 
         async init() {
             await Promise.all([
                 this.loadThreads(),
-                this.loadUsers()
+                this.loadUsers(),
+                this.loadAiModels()
             ]);
             window.addEventListener('resize', () => this.updateVirtualViewport());
             this.$nextTick(() => this.updateVirtualViewport());
             setInterval(() => { if (this.composeMode) this.autoSaveDraft(); }, 30000);
 
             this.setupPolling();
+
+            // クエリパラメータ `?thread=<id>` または `?email=<id>` で指定されたスレッドを自動表示
+            const url = new URL(window.location.href);
+            const threadParam = url.searchParams.get('thread');
+            const emailParam = url.searchParams.get('email');
+            if (threadParam) {
+                await this.loadThread(threadParam);
+            } else if (emailParam) {
+                try {
+                    const res = await fetch(`/emails/${emailParam}`, { headers: { 'Accept': 'application/json' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data?.thread_id) await this.loadThread(data.thread_id);
+                    }
+                } catch (e) { /* noop */ }
+            }
         },
 
         setupPolling() {
@@ -914,9 +1008,21 @@ function emailApp() {
 
         async askAiForReply() {
             this.aiLoading = true; this.aiAnalysis = null;
+            // 選択中モデルを永続化
+            localStorage.setItem('aiModel', this.aiModel || '');
             try {
                 const emailId = this.replyingToEmailId || this.threadEmails[0]?.id || 1;
-                const res = await fetch(`/emails/${emailId}/ai`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }, body: JSON.stringify({ prompt: this.aiUserPrompt, skill: this.aiSkill, mask_pii: this.maskPii }) });
+                const res = await fetch(`/emails/${emailId}/ai`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({
+                        prompt: this.aiUserPrompt,
+                        skill: this.aiSkill,
+                        mask_pii: this.maskPii,
+                        provider: this.aiProvider,
+                        model: this.aiModel || null,
+                    })
+                });
                 if (!res.ok) throw new Error('AI Server Error');
                 const data = await res.json(); this.simulateStreaming(data);
             } catch(e) { alert('AI生成失敗'); this.aiLoading = false; }

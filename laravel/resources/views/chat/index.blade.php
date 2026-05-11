@@ -65,12 +65,24 @@
                             <span x-text="msg.text"></span>
                         </template>
                     </div>
-                    <div class="flex items-center gap-2 mt-1 px-1">
+                    <div class="flex flex-col gap-1 mt-1 px-1">
                         <template x-if="msg.modelLabel">
                             <span class="text-xs text-gray-300" x-text="msg.modelLabel"></span>
                         </template>
                         <template x-if="msg.sources && msg.sources.length > 0">
-                            <span class="text-xs text-gray-400">参照: <span x-text="msg.sources.join(', ')"></span></span>
+                            <div class="flex flex-col gap-1.5 mt-1">
+                                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">参照</span>
+                                <template x-for="(src, idx) in msg.sources" :key="idx">
+                                    <div class="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 text-xs">
+                                        <a :href="sourceHref(src)" target="_blank" rel="noopener"
+                                           class="text-blue-600 hover:underline font-bold break-all"
+                                           x-text="sourceLabel(src)"></a>
+                                        <template x-if="sourceSnippet(src)">
+                                            <p class="text-[11px] text-gray-500 mt-1 line-clamp-2" x-text="sourceSnippet(src)"></p>
+                                        </template>
+                                    </div>
+                                </template>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -217,6 +229,44 @@ function riceChat() {
         _scrollBottom() {
             const el = document.getElementById('message-area');
             if (el) el.scrollTop = el.scrollHeight;
+        },
+
+        // ソース表示用ヘルパー: rag-python は {text, score, url} の配列を返すが、
+        // 文字列が来ても落ちないようにフォールバックを入れる
+        _sourceUrl(src) {
+            if (typeof src === 'string') return src;
+            if (src && typeof src === 'object') return src.url || src.source_url || '';
+            return '';
+        },
+        _sourceText(src) {
+            if (src && typeof src === 'object') return src.text || src.snippet || '';
+            return '';
+        },
+        sourceHref(src) {
+            const url = this._sourceUrl(src);
+            if (!url) return '#';
+            // メール本文への内部リンクパターンを検出し、メール一覧画面が `?thread=` / `?email=` を解釈してスレッドを開く
+            const m = url.match(/(?:^|\/)emails\/(\d+)(?:[\/?#]|$)/);
+            if (m) return '/?email=' + m[1];
+            const tm = url.match(/[?&]thread=(\d+)/);
+            if (tm) return '/?thread=' + tm[1];
+            return url;
+        },
+        sourceLabel(src) {
+            const url = this._sourceUrl(src);
+            if (url) {
+                // 内部メールリンクの場合は分かりやすいラベルに置換
+                const m = url.match(/(?:^|\/)emails\/(\d+)(?:[\/?#]|$)/) || url.match(/[?&]thread=(\d+)/);
+                if (m) return 'メールスレッド #' + m[1];
+                return url;
+            }
+            const text = this._sourceText(src);
+            return text ? text.substring(0, 80) + (text.length > 80 ? '…' : '') : '(出典不明)';
+        },
+        sourceSnippet(src) {
+            const text = this._sourceText(src);
+            if (!text) return '';
+            return text.length > 200 ? text.substring(0, 200) + '…' : text;
         },
     };
 }

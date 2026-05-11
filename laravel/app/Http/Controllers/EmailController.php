@@ -302,7 +302,10 @@ class EmailController extends Controller
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
-        $newStatus = $request->status;
+        $validated = $request->validate([
+            'status' => 'required|string|in:' . implode(',', \App\Models\EmailThread::STATUSES),
+        ]);
+        $newStatus = $validated['status'];
         $payload = ['status' => $newStatus];
 
         // 完了に変更する際、担当者が未設定であれば押下したユーザを担当者として自動アサイン

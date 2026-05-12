@@ -184,6 +184,19 @@
             <div class="flex flex-col h-full animate-in fade-in duration-200">
                 {{-- アクションヘッダー --}}
                 <div class="px-8 py-5 bg-white border-b border-gray-200 flex items-start justify-between gap-6 shrink-0">
+                    {{-- 前/次の依頼ナビゲーション (メール一覧と同じパターン) --}}
+                    <div class="flex items-center gap-0.5 shrink-0 border-r border-gray-100 pr-3 mt-1">
+                        <button @click="goToPrevEmail()" title="前の依頼"
+                                :disabled="!hasPrevEmail"
+                                class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                            <i class="fas fa-chevron-up text-xs"></i>
+                        </button>
+                        <button @click="goToNextEmail()" title="次の依頼"
+                                :disabled="!hasNextEmail"
+                                class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </button>
+                    </div>
                     <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2 mb-2 flex-wrap">
                             <span class="text-[10px] font-black text-white bg-blue-600 px-2 py-0.5 rounded uppercase tracking-wider"
@@ -539,6 +552,29 @@ function approvalApp() {
             this.selectedEmail = p;
             this.actionMessage = '';
             this.actionError = false;
+        },
+
+        // ============= 前/次の依頼ナビゲーション (メール一覧と同じパターン) =============
+        get _currentEmailIndex() {
+            if (!this.selectedId) return -1;
+            return this.allEmails.findIndex(p => p.id === this.selectedId);
+        },
+        get hasPrevEmail() {
+            return this._currentEmailIndex > 0;
+        },
+        get hasNextEmail() {
+            const idx = this._currentEmailIndex;
+            return idx !== -1 && idx < this.allEmails.length - 1;
+        },
+        goToPrevEmail() {
+            const idx = this._currentEmailIndex;
+            if (idx > 0) this.selectEmail(this.allEmails[idx - 1]);
+        },
+        goToNextEmail() {
+            const idx = this._currentEmailIndex;
+            if (idx !== -1 && idx < this.allEmails.length - 1) {
+                this.selectEmail(this.allEmails[idx + 1]);
+            }
         },
 
         async approve(p) {

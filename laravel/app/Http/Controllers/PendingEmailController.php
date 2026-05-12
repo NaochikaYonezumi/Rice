@@ -287,15 +287,8 @@ class PendingEmailController extends Controller
         $rejecterName = auth()->user()->name ?? '承認者';
 
         \Illuminate\Support\Facades\DB::transaction(function () use ($pending, $reason, $rejecterName) {
-            // (A) 却下情報を保存・(D) 承認者制限・履歴保持
-            $pending->update([
-                'status'              => PendingEmail::STATUS_REJECTED,
-                'rejected_by_user_id' => auth()->id(),
-                'rejected_at'         => now(),
-                'rejection_reason'    => $reason !== '' ? $reason : null,
-            ]);
-
             // (B) 却下された内容を「下書き」として再生成 → 依頼者が再編集できる
+            //     却下情報 (rejected_by/at/reason) は下書きにも保持し、UI でバナー表示する
             $memoLines = [];
             $memoLines[] = '【却下されました】 by ' . $rejecterName . ' (' . now()->format('Y/m/d H:i') . ')';
             if ($reason !== '') {
@@ -316,10 +309,13 @@ class PendingEmailController extends Controller
             $newDraft->rejected_by_user_id      = auth()->id();
             $newDraft->rejected_at              = now();
             $newDraft->rejection_reason         = $reason !== '' ? $reason : null;
-            // 元の却下済レコードへのポインタを保持。
-            // 再承認依頼として送信されたタイミングでこの ID を辿り、却下済一覧から削除する。
-            $newDraft->source_rejected_id       = $pending->id;
+            // 元レコードは削除するため source_rejected_id は不要 (リファレンスを残さない)
+            $newDraft->source_rejected_id       = null;
             $newDraft->save();
+
+            // (A) 却下と同時に下書きとして再生成されたため、元の承認依頼レコードは削除
+            //     → 却下済一覧 (status=rejected) には残さず、下書き一覧で再編集できる状態にする
+            $pending->delete();
         });
 
         // (C) 依頼者へ通知

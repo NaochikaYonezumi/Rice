@@ -21,74 +21,55 @@
 @section('content')
 <div class="flex h-full bg-gray-50" x-data="approvalApp()" x-init="init()" x-cloak>
 
-    {{-- 左: 承認待ちリスト --}}
-    <div class="w-[360px] shrink-0 border-r border-gray-200 bg-white flex flex-col">
-        {{-- ヘッダー --}}
-        <div class="px-5 py-4 border-b border-gray-100 bg-white">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-base font-extrabold text-gray-900">承認・送信</h2>
+    {{-- 左: 承認・送信リスト (メール一覧と同じパネルスタイルに揃え) --}}
+    <div class="w-[360px] flex flex-col flex-shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 shadow-sm">
+        {{-- ヘッダー (タイトル + 更新ボタン + 任意のフィルタ description) --}}
+        <div class="shrink-0 px-4 py-3 border-b border-gray-200 bg-white flex flex-col gap-2 relative">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-sm font-extrabold text-gray-900 truncate">承認・送信</h2>
                 <button @click="loadPending()"
-                    class="w-9 h-9 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-gray-50 transition-all"
+                    class="h-9 w-9 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-gray-50 transition-all"
                     :class="{ 'animate-spin text-blue-600': loading }"
-                    title="更新">
+                    title="一覧を更新">
                     <i class="fas fa-sync-alt text-sm"></i>
                 </button>
             </div>
-
-            {{-- 表示モードタブ (承認待ち / 送信済 / 却下済) を 1 画面に統合 --}}
-            <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg mb-2 w-full">
-                <button @click="setStatusTab('pending')"
-                        :class="statusTab === 'pending' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                    <i class="fas fa-hourglass-half text-[10px]"></i>
-                    <span>承認待ち</span>
-                </button>
-                <button @click="setStatusTab('approved')"
-                        :class="statusTab === 'approved' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                    <i class="fas fa-paper-plane text-[10px]"></i>
-                    <span>送信済</span>
-                </button>
-                <button @click="setStatusTab('rejected')"
-                        :class="statusTab === 'rejected' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                    <i class="fas fa-times-circle text-[10px]"></i>
-                    <span>却下済</span>
-                </button>
-            </div>
-
-            {{-- 対象者フィルタ (承認待ち時のみ表示。レイアウトシフトを避けるため、非表示時も同じ高さを維持) --}}
-            <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-lg mb-2 transition-opacity" :class="statusTab === 'pending' ? '' : 'invisible pointer-events-none'">
-                <button @click="setFilter('me')"
-                        :class="filter === 'me' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1">
-                    <i class="fas fa-user-check text-[10px]"></i>
-                    あなた宛
-                    <span x-show="filter === 'me' && allEmails.length > 0"
-                          class="ml-1 bg-blue-600 text-white text-[9px] font-black px-1.5 rounded-full"
-                          x-text="allEmails.length"></span>
-                </button>
-                <button @click="setFilter('mine')"
-                        :class="filter === 'mine' ? 'bg-white shadow-sm text-emerald-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1">
-                    <i class="fas fa-paper-plane text-[10px]"></i>
-                    自分が依頼
-                    <span x-show="filter === 'mine' && allEmails.length > 0"
-                          class="ml-1 bg-emerald-600 text-white text-[9px] font-black px-1.5 rounded-full"
-                          x-text="allEmails.length"></span>
-                </button>
-                <button @click="setFilter('all')"
-                        :class="filter === 'all' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1">
-                    <i class="fas fa-list text-[10px]"></i>
-                    すべて
-                </button>
-            </div>
-            <p class="text-[11px] text-gray-400 font-medium min-h-[16px]" x-text="filterDescription"></p>
+            <p class="text-[10px] text-gray-400 font-medium min-h-[14px] truncate" x-text="filterDescription"></p>
         </div>
 
-        {{-- リスト --}}
-        <div class="overflow-y-auto flex-1 px-3 py-3 space-y-2 custom-scrollbar">
+        {{-- ステータスタブ (メール一覧と同じスタイル) --}}
+        <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
+            <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
+                <button @click="setStatusTab('pending')"
+                        :class="statusTab === 'pending' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">承認待ち</button>
+                <button @click="setStatusTab('approved')"
+                        :class="statusTab === 'approved' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">送信済</button>
+                <button @click="setStatusTab('rejected')"
+                        :class="statusTab === 'rejected' ? 'bg-white shadow text-red-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">却下済</button>
+            </div>
+        </div>
+
+        {{-- 対象者フィルタ (承認待ち時のみ。非表示時もスペースは確保) --}}
+        <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50/50 flex items-center gap-2 transition-opacity"
+             :class="statusTab === 'pending' ? '' : 'invisible pointer-events-none'">
+            <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
+                <button @click="setFilter('me')"
+                        :class="filter === 'me' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">あなた宛</button>
+                <button @click="setFilter('mine')"
+                        :class="filter === 'mine' ? 'bg-white shadow text-emerald-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">自分が依頼</button>
+                <button @click="setFilter('all')"
+                        :class="filter === 'all' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">すべて</button>
+            </div>
+        </div>
+
+        {{-- リスト (メール一覧と同じフラット行スタイル) --}}
+        <div class="flex-1 min-h-0 overflow-y-auto bg-white custom-scrollbar relative">
             <template x-if="loading">
                 <div class="flex flex-col items-center justify-center py-16 text-gray-300">
                     <i class="fas fa-circle-notch fa-spin fa-2x mb-2"></i>
@@ -115,13 +96,12 @@
             </template>
 
             <template x-for="p in allEmails" :key="p.id">
-                <div class="group border rounded-xl overflow-hidden cursor-pointer transition-all"
-                    :class="selectedId === p.id ? 'border-blue-500 ring-2 ring-blue-100 bg-white' : 'border-gray-200 hover:border-gray-300 bg-white'"
-                    @click="selectEmail(p)">
-                    <div class="px-3 py-2 border-b border-gray-50 flex items-center justify-between gap-2"
-                         :class="selectedId === p.id ? 'bg-blue-50' : 'bg-gray-50/40 group-hover:bg-gray-50'">
+                <div @click="selectEmail(p)"
+                     class="group/row w-full cursor-pointer border-b border-gray-100 hover:bg-blue-50 transition-all duration-200 relative"
+                     :class="selectedId === p.id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : ''">
+                    <div class="px-5 py-2 flex flex-col justify-center gap-1">
+                        {{-- 1 行目: ステータスバッジ + 依頼者 + 日時 --}}
                         <div class="flex items-center gap-1.5 min-w-0">
-                            {{-- ステータスバッジ (承認状態を一目で判別できるよう常時表示) --}}
                             <template x-if="p.status === 'approved'">
                                 <span class="text-[9px] font-black text-white bg-emerald-600 px-1.5 py-0.5 rounded shrink-0 inline-flex items-center gap-0.5" title="承認して送信済">
                                     <i class="fas fa-check"></i>送信済
@@ -139,52 +119,48 @@
                             </template>
                             <span class="text-[9px] font-black text-white bg-blue-600 px-1.5 py-0.5 rounded shrink-0"
                                 x-text="p.reply_type_label"></span>
-                            <span class="text-[11px] font-semibold text-gray-700 truncate"
+                            <span class="text-[12px] font-bold text-gray-900 truncate"
                                 x-text="p.created_by_user_id === {{ auth()->id() }} ? 'あなたの依頼' : (p.created_by || '不明') + ' から'"></span>
                         </div>
-                        <span class="text-[10px] text-gray-400 shrink-0" x-text="p.created_at"></span>
+
+                        {{-- 2 行目: 件名 (最大 2 行) --}}
+                        <div class="text-[11px] text-gray-700 font-medium leading-snug break-words"
+                             style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;"
+                             x-text="p.subject"></div>
+
+                        {{-- 3 行目: メタデータ (日時 + 承認者 / 却下 / メモ など) --}}
+                        <div class="flex items-center gap-1.5 flex-wrap min-h-[18px]">
+                            <span class="text-[10px] text-gray-400 font-medium shrink-0 inline-flex items-center gap-1">
+                                <i class="fas fa-clock text-[8px]"></i>
+                                <span x-text="p.created_at"></span>
+                            </span>
+                            <template x-if="p.target_approver_name">
+                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1">
+                                    <i class="fas fa-user-check text-[8px]"></i>
+                                    <span class="truncate max-w-[100px]" x-text="p.target_approver_name"></span>
+                                </span>
+                            </template>
+                            <template x-if="p.status === 'rejected' && p.rejected_by_name">
+                                <span class="bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1">
+                                    <i class="fas fa-times-circle text-[8px]"></i>
+                                    却下: <span class="truncate max-w-[80px]" x-text="p.rejected_by_name"></span>
+                                </span>
+                            </template>
+                            <template x-if="p.status === 'approved' && p.approved_by_name">
+                                <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1">
+                                    <i class="fas fa-check-double text-[8px]"></i>
+                                    <span class="truncate max-w-[100px]" x-text="p.approved_by_name"></span>
+                                </span>
+                            </template>
+                            <template x-if="p.memo">
+                                <span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1" :title="p.memo">
+                                    <i class="fas fa-comment-dots text-[8px]"></i> メモ
+                                </span>
+                            </template>
+                        </div>
                     </div>
-                    <div class="px-3 py-2.5">
-                        <p class="text-[13px] font-bold text-gray-800 mb-1 line-clamp-2" x-text="p.subject"></p>
-                        <p class="text-[11px] text-gray-500 truncate">
-                            <span class="text-gray-400">To:</span> <span x-text="p.to_address"></span>
-                        </p>
-                        <template x-if="p.target_approver_name">
-                            <p class="text-[10px] text-amber-700 mt-1.5 inline-flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
-                                <i class="fas fa-user-check"></i> 承認者: <span class="font-bold" x-text="p.target_approver_name"></span>
-                            </p>
-                        </template>
-                        <template x-if="statusTab === 'rejected'">
-                            <div class="mt-1.5 space-y-1">
-                                <p class="text-[10px] text-red-700 inline-flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded border border-red-200">
-                                    <i class="fas fa-times-circle"></i>
-                                    却下: <span class="font-bold" x-text="p.rejected_by_name || '不明'"></span>
-                                    <span class="text-red-400 ml-1" x-text="p.rejected_at"></span>
-                                </p>
-                                <p x-show="p.rejection_reason" class="text-[10px] text-red-700 bg-red-50 px-2 py-1 rounded border border-red-100 line-clamp-2">
-                                    理由: <span x-text="p.rejection_reason"></span>
-                                </p>
-                            </div>
-                        </template>
-                        <template x-if="statusTab === 'approved'">
-                            <div class="mt-2 bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 flex items-center gap-2">
-                                <i class="fas fa-check-double text-emerald-600"></i>
-                                <div class="flex flex-col leading-tight">
-                                    <span class="text-[10px] font-black text-emerald-700 uppercase tracking-wider">承認して送信済</span>
-                                    <span class="text-[10px] text-emerald-600">
-                                        by <span class="font-bold" x-text="p.approved_by_name || '不明'"></span>
-                                        <span class="text-emerald-500 ml-1" x-text="p.approved_at"></span>
-                                    </span>
-                                </div>
-                            </div>
-                        </template>
-                        <template x-if="p.memo">
-                            <div class="mt-2 p-2 bg-amber-50 border border-amber-100 rounded text-[11px] text-amber-700 line-clamp-2">
-                                <i class="fas fa-comment-dots mr-1"></i><span x-text="p.memo"></span>
-                            </div>
-                        </template>
-                        <p class="text-[11px] text-gray-500 mt-2 line-clamp-2 leading-relaxed" x-text="p.body_preview"></p>
-                    </div>
+                    {{-- 選択中の左ライン --}}
+                    <div x-show="selectedId === p.id" class="absolute left-0 top-0 w-1.5 h-full bg-blue-600"></div>
                 </div>
             </template>
         </div>

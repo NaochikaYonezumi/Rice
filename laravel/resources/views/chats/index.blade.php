@@ -195,10 +195,11 @@
                     </span>
                 </div>
             </div>
-            <a :href="`/?thread=${selectedThreadId}`" target="_blank"
-               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all shrink-0"
-               title="受信トレイで開く">
-                <i class="fas fa-external-link-alt"></i><span class="hidden sm:inline">メールを開く</span>
+            {{-- 元メールへのリンク (新規タブで開いて、現在のチャット画面はそのまま残す) --}}
+            <a :href="`/?thread=${selectedThreadId}`" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-all shrink-0 shadow-sm"
+               title="このチャットの元メールスレッドを新規タブで開く">
+                <i class="fas fa-envelope"></i><span>元メールを開く</span><i class="fas fa-external-link-alt text-[10px] opacity-75"></i>
             </a>
         </div>
 
@@ -224,7 +225,8 @@
             {{-- メッセージリスト --}}
             <div class="space-y-3" x-show="!chatLoading && chatComments.length > 0">
                 <template x-for="c in chatComments" :key="c.id">
-                    <div class="flex" :class="c.is_author ? 'justify-end' : 'justify-start'">
+                    <div class="flex" :class="c.is_author ? 'justify-end' : 'justify-start'"
+                         :id="'comment-' + c.id">
                         <div class="max-w-[75%] group">
                             <div class="flex items-center gap-2 mb-1"
                                  :class="c.is_author ? 'justify-end' : 'justify-start'">
@@ -241,6 +243,7 @@
                                  :style="c.is_author
                                     ? 'background-color:#10b981;color:#ffffff;'
                                     : 'background-color:#ffffff;color:#1f2937;border:1px solid #e5e7eb;'"
+                                 :class="highlightedCommentId === c.id ? 'ring-4 ring-amber-300 ring-offset-2 ring-offset-emerald-50' : ''"
                                  title="クリックで詳細を表示"
                                  x-html="renderMentions(c.content, c.is_author)"></div>
                             <div class="mt-1" :class="c.is_author ? 'text-right' : 'text-left'" x-show="c.is_author">
@@ -406,12 +409,13 @@
                         <i class="fas" :class="detailCopied ? 'fa-check' : 'fa-copy'"></i>
                         <span x-text="detailCopied ? 'コピーしました' : '本文をコピー'"></span>
                     </button>
-                    <a :href="`/?thread=${selectedThreadId}`" target="_blank"
-                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                       style="background-color:#ffffff;color:#374151;border:1px solid #d1d5db;"
-                       onmouseover="this.style.backgroundColor='#f3f4f6';"
-                       onmouseout="this.style.backgroundColor='#ffffff';">
-                        <i class="fas fa-external-link-alt"></i> メールを開く
+                    <a :href="`/?thread=${selectedThreadId}`" target="_blank" rel="noopener"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors text-white"
+                       style="background-color:#2563eb;"
+                       onmouseover="this.style.backgroundColor='#1d4ed8';"
+                       onmouseout="this.style.backgroundColor='#2563eb';"
+                       title="このチャットの元メールスレッドを新規タブで開く">
+                        <i class="fas fa-envelope"></i> 元メールを開く <i class="fas fa-external-link-alt text-[10px] opacity-75"></i>
                     </a>
                 </div>
                 <div class="flex items-center gap-2">
@@ -467,6 +471,11 @@ function threadChatApp() {
         detail: null,
         detailCopied: false,
 
+        // 通知ベルからの遷移でハイライトするコメント ID
+        highlightedCommentId: null,
+        // 次の loadComments() 完了後にスクロール対象とするコメント ID (一時保持)
+        pendingScrollCommentId: null,
+
         get csrfToken() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
         },
@@ -485,7 +494,11 @@ function threadChatApp() {
         },
 
         restoreFromHash() {
-            const m = (location.hash || '').match(/^#thread-(\d+)$/);
+            // 受け付けるハッシュ:
+            //   #thread-<id>
+            //   #thread-<id>&comment=<commentId>  (ベル通知から特定コメントへ遷移)
+            const raw = location.hash || '';
+            const m = raw.match(/^#thread-(\d+)(?:&comment=(\d+))?$/);
             if (!m) {
                 if (this.selectedThreadId !== null) {
                     this.selectedThreadId = null;
@@ -496,7 +509,13 @@ function threadChatApp() {
                 return;
             }
             const id = parseInt(m[1], 10);
-            if (this.selectedThreadId === id) return;
+            const commentId = m[2] ? parseInt(m[2], 10) : null;
+            // 同じスレッドだが特定コメントへスクロールしたい場合
+            if (this.selectedThreadId === id) {
+                if (commentId) this.scrollToComment(commentId);
+                return;
+            }
+            this.pendingScrollCommentId = commentId;
             const t = this.threads.find(x => x.id === id);
             if (t) {
                 this.selectThread(t, /*updateHash*/ false);
@@ -504,6 +523,23 @@ function threadChatApp() {
                 // 一覧フィルタで非表示でも、IDだけで開けるようにする
                 this.selectThread({ id, subject: '読み込み中...', assignee: null, customer_name: null, thread_last_email_at: null }, false);
             }
+        },
+
+        // 指定 ID のコメントへスクロール + 一時ハイライト
+        scrollToComment(commentId) {
+            if (!commentId) return;
+            this.$nextTick(() => {
+                const el = document.getElementById('comment-' + commentId);
+                if (!el) return;
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                this.highlightedCommentId = commentId;
+                // 数秒後に強調表示を解除
+                setTimeout(() => {
+                    if (this.highlightedCommentId === commentId) {
+                        this.highlightedCommentId = null;
+                    }
+                }, 3000);
+            });
         },
 
         async loadUsers() {
@@ -565,7 +601,12 @@ function threadChatApp() {
                 const data = await res.json();
                 const before = this.chatComments.length;
                 this.chatComments = data.comments || [];
-                if (!silent || this.chatComments.length > before) {
+                // 通知ベルから特定コメントを開く要求があれば優先してスクロール
+                if (!silent && this.pendingScrollCommentId) {
+                    const target = this.pendingScrollCommentId;
+                    this.pendingScrollCommentId = null;
+                    this.scrollToComment(target);
+                } else if (!silent || this.chatComments.length > before) {
                     this.$nextTick(() => this.scrollToBottom(silent));
                 }
             } catch (e) {

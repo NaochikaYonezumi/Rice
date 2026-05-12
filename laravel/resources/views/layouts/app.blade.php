@@ -117,31 +117,36 @@
                 </a>
                 <div x-show="open" x-transition
                     class="dropdown-menu dropdown-menu-right shadow"
-                    style="width:340px;max-height:400px;overflow-y:auto;display:block;">
+                    style="width:360px;max-height:440px;overflow-y:auto;display:block;">
                     <div class="dropdown-header d-flex justify-content-between align-items-center px-3 py-2">
-                        <strong>承認依頼</strong>
+                        <strong>通知</strong>
                         <button x-show="unread > 0" @click="readAll()" class="btn btn-xs btn-link text-muted p-0">すべて既読</button>
                     </div>
                     <template x-if="items.length === 0">
                         <div class="dropdown-item text-muted text-center py-3">通知はありません</div>
                     </template>
                     <template x-for="n in items" :key="n.id">
-                        <a :href="'{{ route('approvals.index') }}'" @click="markRead(n.id)"
+                        <a :href="bellLinkFor(n)" @click="markRead(n.id)"
                             class="dropdown-item border-bottom py-2"
                             :class="n.read_at ? 'text-muted' : 'font-weight-bold'">
-                            <div class="d-flex align-items-start gap-2">
-                                <i class="fas fa-envelope-open-text text-primary mt-1 mr-2"></i>
-                                <div style="min-width:0">
-                                    <div class="text-truncate" style="max-width:240px" x-text="n.data.subject || '(無題)'"></div>
-                                    <small class="text-muted" x-text="'依頼者: ' + (n.data.created_by || '不明')"></small>
+                            <div class="d-flex align-items-start" style="gap:8px;">
+                                <i :class="bellIcon(n)" class="mt-1 mr-2" style="min-width:18px;text-align:center;"></i>
+                                <div style="min-width:0;flex:1;">
+                                    <div class="text-truncate" style="max-width:280px" x-text="bellTitle(n)"></div>
+                                    <small class="text-muted text-truncate d-block" style="max-width:280px;" x-text="bellSubtitle(n)"></small>
                                 </div>
                             </div>
                         </a>
                     </template>
                     <template x-if="items.length > 0">
-                        <a href="{{ route('approvals.index') }}" class="dropdown-item text-center text-primary py-2">
-                            承認ページを開く
-                        </a>
+                        <div class="d-flex" style="gap:0;">
+                            <a href="{{ route('approvals.index') }}" class="dropdown-item text-center text-primary py-2 flex-fill border-right" style="font-size:12px;">
+                                <i class="fas fa-check-double mr-1"></i>承認
+                            </a>
+                            <a href="{{ route('chats.index') }}" class="dropdown-item text-center text-success py-2 flex-fill" style="font-size:12px;">
+                                <i class="fas fa-comments mr-1"></i>チャット一覧
+                            </a>
+                        </div>
                     </template>
                 </div>
             </li>
@@ -424,6 +429,40 @@ function notifApp() {
                 headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
             });
             this.fetch();
+        },
+
+        // 通知種別ごとに表示を切り替える (チャットメンション / 承認依頼 / 却下)
+        bellIcon(n) {
+            const k = n.data?.kind;
+            if (k === 'chat_mention') return 'fas fa-at text-success';
+            if (k === 'rejected')     return 'fas fa-times-circle text-danger';
+            return 'fas fa-envelope-open-text text-primary';
+        },
+        bellTitle(n) {
+            const k = n.data?.kind;
+            if (k === 'chat_mention') return '@' + (n.data?.mentioner || '誰か') + ' があなたをメンション';
+            if (k === 'rejected')     return '却下: ' + (n.data?.subject || '(無題)');
+            return '承認依頼: ' + (n.data?.subject || '(無題)');
+        },
+        bellSubtitle(n) {
+            const k = n.data?.kind;
+            if (k === 'chat_mention') {
+                const subj = n.data?.thread_subject || '';
+                const prev = n.data?.preview || '';
+                return subj ? (subj + ' — ' + prev) : prev;
+            }
+            if (k === 'rejected') return '却下理由: ' + (n.data?.rejection_reason || '(なし)');
+            return '依頼者: ' + (n.data?.created_by || '不明');
+        },
+        bellLinkFor(n) {
+            const k = n.data?.kind;
+            if (k === 'chat_mention' && n.data?.thread_id) {
+                // チャット一覧の該当スレッドを開き、コメント ID があれば該当行までスクロールさせる
+                const cid = n.data?.comment_id;
+                return '/chats#thread-' + n.data.thread_id + (cid ? ('&comment=' + cid) : '');
+            }
+            if (k === 'rejected') return '/drafts';
+            return '{{ route('approvals.index') }}';
         }
     };
 }

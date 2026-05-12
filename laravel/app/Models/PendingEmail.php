@@ -13,6 +13,7 @@ class PendingEmail extends Model
         'created_by_user_id', 'approved_by_user_id', 'rejected_by_user_id',
         'target_approver_user_id',
         'rejection_reason', 'rejected_at',
+        'source_rejected_id',
     ];
 
     protected $casts = [

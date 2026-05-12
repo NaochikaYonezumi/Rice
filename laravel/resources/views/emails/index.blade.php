@@ -842,14 +842,20 @@ function emailApp() {
             window.addEventListener('resize', () => this.updateVirtualViewport());
             this.$nextTick(() => this.updateVirtualViewport());
 
-            // 作成専用ウィンドウからの送信完了通知を購読
+            // 作成専用ウィンドウからの送信完了 / 下書き保存通知を購読
             window.addEventListener('message', (event) => {
                 if (event.origin !== window.location.origin) return;
-                if (!event.data || event.data.type !== 'rice-mail-sent') return;
-                this.fetchEmails(true);
-                this.toast('メールを送信しました', 'success');
-                if (this.selectedThreadId) {
-                    this.loadThread(this.selectedThreadId);
+                if (!event.data) return;
+                if (event.data.type === 'rice-mail-sent') {
+                    this.fetchEmails(true);
+                    this.toast('メールを送信しました', 'success');
+                    if (this.selectedThreadId) {
+                        this.loadThread(this.selectedThreadId);
+                    }
+                } else if (event.data.type === 'rice-mail-draft-saved') {
+                    // 下書き保存後はメール一覧を再読み込みして承認待ち件数等を更新
+                    this.loadThreads();
+                    this.toast('下書きを保存しました', 'success');
                 }
             });
 

@@ -345,7 +345,7 @@
         <footer class="shrink-0 px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
             <div class="text-xs text-gray-500 flex items-center gap-3">
                 <span x-show="lastSavedLabel"><i class="fas fa-save text-gray-400 mr-1"></i><span x-text="lastSavedLabel"></span></span>
-                <button type="button" @click="saveDraftToServer()" :disabled="savingDraft"
+                <button type="button" @click="saveDraftAndClose()" :disabled="savingDraft"
                         class="text-blue-600 hover:text-blue-800 font-bold underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
                     <span x-show="!savingDraft">下書き保存</span>
                     <span x-show="savingDraft">保存中...</span>
@@ -934,6 +934,12 @@ function composeWindowApp() {
                 this.selectedFiles = [];
                 this.closeConfirmOpen = false;
                 this.sentCompleted = true; // beforeunload 抑止
+                // メール一覧 (opener) に下書き保存完了を通知してから閉じる
+                try {
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage({ type: 'rice-mail-draft-saved', mode: this.mode }, window.location.origin);
+                    }
+                } catch (_) {}
                 try { window.close(); } catch(_) {}
             } catch (_) {
                 // エラー時は閉じない

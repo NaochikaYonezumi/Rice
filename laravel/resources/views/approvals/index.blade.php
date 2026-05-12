@@ -57,8 +57,8 @@
                 </button>
             </div>
 
-            {{-- 対象者フィルタ (承認待ち時のみ) --}}
-            <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-lg mb-2" x-show="statusTab === 'pending'">
+            {{-- 対象者フィルタ (承認待ち時のみ表示。レイアウトシフトを避けるため、非表示時も同じ高さを維持) --}}
+            <div class="flex items-center gap-1 bg-gray-50 p-1 rounded-lg mb-2 transition-opacity" :class="statusTab === 'pending' ? '' : 'invisible pointer-events-none'">
                 <button @click="setFilter('me')"
                         :class="filter === 'me' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
                         class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all flex items-center justify-center gap-1">
@@ -84,7 +84,7 @@
                     すべて
                 </button>
             </div>
-            <p class="text-[11px] text-gray-400 font-medium" x-text="filterDescription"></p>
+            <p class="text-[11px] text-gray-400 font-medium min-h-[16px]" x-text="filterDescription"></p>
         </div>
 
         {{-- リスト --}}
@@ -457,6 +457,15 @@ function approvalApp() {
         },
 
         async init() {
+            // URL クエリパラメータ ?tab=approved|rejected|pending で初期タブを切り替え可能にする
+            // (送信済一覧メニューなどから ?tab=approved でリンクするため)
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const tab = params.get('tab');
+                if (tab === 'approved' || tab === 'rejected' || tab === 'pending') {
+                    this.statusTab = tab;
+                }
+            } catch (_) {}
             await this.loadPending();
         },
 

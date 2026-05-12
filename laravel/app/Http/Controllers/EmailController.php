@@ -473,6 +473,20 @@ class EmailController extends Controller
         if (!$draft) return;
         if ($draft->status !== PendingEmail::STATUS_DRAFT) return;
         if ($draft->created_by_user_id !== auth()->id()) return;
+
+        // 却下からの再生成下書きの場合、元の却下済レコードも合わせて削除し、
+        // 却下済一覧に重複したレコードが残らないようにする。
+        $sourceRejectedId = $draft->source_rejected_id ?? null;
+        if ($sourceRejectedId) {
+            $sourceRejected = PendingEmail::find($sourceRejectedId);
+            if ($sourceRejected
+                && $sourceRejected->status === PendingEmail::STATUS_REJECTED
+                && $sourceRejected->created_by_user_id === auth()->id()
+            ) {
+                $sourceRejected->delete();
+            }
+        }
+
         $draft->delete();
     }
 

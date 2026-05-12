@@ -316,6 +316,9 @@ class PendingEmailController extends Controller
             $newDraft->rejected_by_user_id      = auth()->id();
             $newDraft->rejected_at              = now();
             $newDraft->rejection_reason         = $reason !== '' ? $reason : null;
+            // 元の却下済レコードへのポインタを保持。
+            // 再承認依頼として送信されたタイミングでこの ID を辿り、却下済一覧から削除する。
+            $newDraft->source_rejected_id       = $pending->id;
             $newDraft->save();
         });
 

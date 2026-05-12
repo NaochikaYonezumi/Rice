@@ -842,6 +842,17 @@ function emailApp() {
             window.addEventListener('resize', () => this.updateVirtualViewport());
             this.$nextTick(() => this.updateVirtualViewport());
 
+            // クエリパラメータ `?thread=<id>` で指定されたスレッドを自動表示
+            // (チャット画面の「元メールを開く」や添付ファイル画面の件名リンク等から
+            //  ?thread=N で飛んできた際に、該当スレッドを自動でロードしてワークスペースに表示)
+            try {
+                const url = new URL(window.location.href);
+                const threadParam = url.searchParams.get('thread');
+                if (threadParam) {
+                    await this.loadThread(threadParam);
+                }
+            } catch (e) { /* noop */ }
+
             // 作成専用ウィンドウからの送信完了 / 下書き保存通知を購読
             window.addEventListener('message', (event) => {
                 if (event.origin !== window.location.origin) return;

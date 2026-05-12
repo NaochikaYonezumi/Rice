@@ -125,6 +125,26 @@ class DraftController extends Controller
             ->map(fn($u) => ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role])
             ->all();
 
+        // 下書きに紐付く既存添付ファイルの一覧 (compose-window 側で表示・削除制御に使う)
+        $draftAttachments = collect((array) $draft->attachment_paths)
+            ->map(function ($att) {
+                if (is_string($att)) {
+                    return ['path' => $att, 'filename' => basename($att), 'size' => 0, 'mime_type' => 'application/octet-stream'];
+                }
+                if (is_array($att) && isset($att['path'])) {
+                    return [
+                        'path'      => (string) $att['path'],
+                        'filename'  => (string) ($att['filename'] ?? basename($att['path'])),
+                        'size'      => (int) ($att['size'] ?? 0),
+                        'mime_type' => (string) ($att['mime_type'] ?? 'application/octet-stream'),
+                    ];
+                }
+                return null;
+            })
+            ->filter()
+            ->values()
+            ->all();
+
         return view('emails.compose-window', [
             'mode'         => $mode,
             'email'        => $email ? [
@@ -151,9 +171,10 @@ class DraftController extends Controller
             'replySubject' => $draft->subject ?: '',
             'approvers'    => $approvers,
             // ▼ 下書き編集モード用の追加データ
-            'draftId'      => $draft->id,
-            'draftBody'    => $draft->body ?: '',
-            'draftMemo'    => $draft->memo,
+            'draftId'          => $draft->id,
+            'draftBody'        => $draft->body ?: '',
+            'draftMemo'        => $draft->memo,
+            'draftAttachments' => $draftAttachments,
             'rejectionInfo'=> $draft->rejection_reason ? [
                 'reason'      => $draft->rejection_reason,
                 'rejected_at' => $draft->rejected_at?->format('Y/m/d H:i'),

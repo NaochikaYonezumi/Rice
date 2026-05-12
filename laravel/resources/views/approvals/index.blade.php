@@ -22,7 +22,8 @@
 <div class="flex h-full bg-gray-50" x-data="approvalApp()" x-init="init()" x-cloak>
 
     {{-- 左: 承認・送信リスト (メール一覧と同じパネルスタイルに揃え) --}}
-    <div class="w-[360px] flex flex-col flex-shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 shadow-sm">
+    <div class="flex flex-col flex-shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 shadow-sm"
+         :style="'width:' + panelWidth + 'px'">
         {{-- ヘッダー (タイトル + 更新ボタン + 任意のフィルタ description) --}}
         <div class="shrink-0 px-4 py-3 border-b border-gray-200 bg-white flex flex-col gap-2 relative">
             <div class="flex items-center justify-between gap-2">
@@ -164,6 +165,9 @@
                 </div>
             </template>
         </div>
+        {{-- ドラッグリサイズハンドル (メール一覧と同じ) --}}
+        <div class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 z-50"
+             @mousedown.prevent="startResizePanel($event)"></div>
     </div>
 
     {{-- 右: 詳細 + 承認/却下 --}}
@@ -436,6 +440,9 @@ function approvalApp() {
         actionError: false,
         statusTab: 'pending',  // 'pending' / 'approved' / 'rejected'
         filter: 'me',          // 'me' / 'mine' / 'all' (pending タブ時のみ)
+
+        // 左パネル幅 (ドラッグで調整可能、localStorage に永続化)
+        panelWidth: parseInt(localStorage.getItem('approvalsPanelWidth')) || 360,
         rejectModalOpen: false,
         rejectingEmail: null,
         rejectReason: '',
@@ -468,6 +475,21 @@ function approvalApp() {
                 }
             } catch (_) {}
             await this.loadPending();
+        },
+
+        // 左パネルのドラッグリサイズ (300〜700px)
+        startResizePanel(e) {
+            const startX = e.clientX, startW = this.panelWidth;
+            const onMove = (me) => {
+                this.panelWidth = Math.max(300, Math.min(700, startW + (me.clientX - startX)));
+            };
+            const onUp = () => {
+                localStorage.setItem('approvalsPanelWidth', this.panelWidth);
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
         },
 
         setStatusTab(tab) {

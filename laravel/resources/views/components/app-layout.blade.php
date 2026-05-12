@@ -65,12 +65,12 @@
                     <span class="whitespace-nowrap">添付ファイル</span>
                 </a>
                 <a href="{{ route('approvals.index') }}"
-                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('approvals.*') && request('view') !== 'sent' ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
-                    <span class="whitespace-nowrap">承認</span>
+                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('approvals.*') && request('tab') !== 'approved' && request('view') !== 'sent' ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
+                    <span class="whitespace-nowrap">承認・送信</span>
                 </a>
-                <a href="{{ route('approvals.index') }}?view=sent"
-                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('approvals.*') && request('view') === 'sent' ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
-                    <span class="whitespace-nowrap">送信済一覧</span>
+                <a href="{{ route('approvals.index') }}?tab=approved"
+                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('approvals.*') && (request('tab') === 'approved' || request('view') === 'sent') ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
+                    <span class="whitespace-nowrap">送信済</span>
                 </a>
             </div>
         </div>

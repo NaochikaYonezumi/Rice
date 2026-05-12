@@ -26,7 +26,7 @@
         {{-- ヘッダー --}}
         <div class="px-5 py-4 border-b border-gray-100 bg-white">
             <div class="flex items-center justify-between mb-3">
-                <h2 class="text-base font-extrabold text-gray-900">承認待ち</h2>
+                <h2 class="text-base font-extrabold text-gray-900" x-text="viewMode === 'sent' ? '送信済' : '承認待ち'"></h2>
                 <button @click="loadPending()"
                     class="w-9 h-9 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-600 hover:bg-gray-50 transition-all"
                     :class="{ 'animate-spin text-blue-600': loading }"
@@ -35,26 +35,32 @@
                 </button>
             </div>
 
-            {{-- 表示モードタブ (承認待ち / 承認済 / 却下済み) - 横並び --}}
+            {{-- 表示モードタブ (viewMode により表示タブを切り替え) --}}
+            {{-- viewMode === 'approval' : 承認待ち / 却下済 のみ --}}
+            {{-- viewMode === 'sent'     : 送信済 のみ --}}
             <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg mb-2 w-full">
-                <button @click="setStatusTab('pending')"
-                        :class="statusTab === 'pending' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                    <i class="fas fa-hourglass-half text-[10px]"></i>
-                    <span>承認待ち</span>
-                </button>
-                <button @click="setStatusTab('approved')"
-                        :class="statusTab === 'approved' ? 'bg-white shadow-sm text-green-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                    <i class="fas fa-check-circle text-[10px]"></i>
-                    <span>承認済</span>
-                </button>
-                <button @click="setStatusTab('rejected')"
-                        :class="statusTab === 'rejected' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                    <i class="fas fa-times-circle text-[10px]"></i>
-                    <span>却下済</span>
-                </button>
+                <template x-if="viewMode === 'approval'">
+                    <div class="flex items-center gap-1 flex-1">
+                        <button @click="setStatusTab('pending')"
+                                :class="statusTab === 'pending' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-500 hover:text-gray-800'"
+                                class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
+                            <i class="fas fa-hourglass-half text-[10px]"></i>
+                            <span>承認待ち</span>
+                        </button>
+                        <button @click="setStatusTab('rejected')"
+                                :class="statusTab === 'rejected' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500 hover:text-gray-800'"
+                                class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1 whitespace-nowrap">
+                            <i class="fas fa-times-circle text-[10px]"></i>
+                            <span>却下済</span>
+                        </button>
+                    </div>
+                </template>
+                <template x-if="viewMode === 'sent'">
+                    <div class="flex-1 min-w-0 py-1.5 px-2 rounded-md text-[11px] font-bold inline-flex items-center justify-center gap-1 whitespace-nowrap bg-white shadow-sm text-green-600">
+                        <i class="fas fa-paper-plane text-[10px]"></i>
+                        <span>送信済</span>
+                    </div>
+                </template>
             </div>
 
             {{-- 対象者フィルタ (承認待ち時のみ表示。レイアウトシフトを避けるため、非表示時も同じ高さを維持) --}}
@@ -261,7 +267,7 @@
                         <template x-if="statusTab === 'approved'">
                             <span class="inline-flex items-center gap-1 text-xs font-bold text-green-700 bg-green-50 px-3 py-2 rounded-lg border border-green-200">
                                 <i class="fas fa-check-circle"></i>
-                                承認済み (送信完了)
+                                送信済み
                             </span>
                         </template>
                     </div>
@@ -437,7 +443,8 @@ function approvalApp() {
         actionLoading: false,
         actionMessage: '',
         actionError: false,
-        statusTab: 'pending',  // 'pending' / 'rejected'
+        statusTab: 'pending',  // 'pending' / 'rejected' / 'approved'
+        viewMode: 'approval',  // 'approval' (承認待ち画面: pending/rejected) / 'sent' (送信済画面: approved)
         filter: 'me',          // 'me' / 'all' (pending タブ時のみ)
         rejectModalOpen: false,
         rejectingEmail: null,
@@ -457,13 +464,20 @@ function approvalApp() {
         },
 
         async init() {
-            // URL クエリパラメータ ?tab=approved|rejected|pending で初期タブを切り替え可能にする
-            // (送信済一覧メニューなどから ?tab=approved でリンクするため)
+            // URL クエリパラメータで画面モードと初期タブを決定
+            //   ?view=sent : 送信済画面 (承認済データを表示。タブは「送信済」のみ)
+            //   それ以外    : 承認待ち画面 (タブは「承認待ち / 却下済」)
             try {
                 const params = new URLSearchParams(window.location.search);
-                const tab = params.get('tab');
-                if (tab === 'approved' || tab === 'rejected' || tab === 'pending') {
-                    this.statusTab = tab;
+                const view = params.get('view');
+                if (view === 'sent') {
+                    this.viewMode = 'sent';
+                    this.statusTab = 'approved';
+                } else {
+                    this.viewMode = 'approval';
+                    // 承認待ち画面では tab=rejected のみ受け付ける。それ以外は pending。
+                    const tab = params.get('tab');
+                    this.statusTab = (tab === 'rejected') ? 'rejected' : 'pending';
                 }
             } catch (_) {}
             await this.loadPending();
@@ -471,6 +485,10 @@ function approvalApp() {
 
         setStatusTab(tab) {
             if (this.statusTab === tab) return;
+            // 'sent' ビュー (送信済画面) では statusTab は 'approved' 固定
+            if (this.viewMode === 'sent') return;
+            // 'approval' ビューでは 'approved' (送信済) を表示しない
+            if (this.viewMode === 'approval' && tab === 'approved') return;
             this.statusTab = tab;
             this.selectedId = null;
             this.selectedEmail = null;

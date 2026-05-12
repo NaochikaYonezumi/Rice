@@ -268,7 +268,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ route('approvals.index') }}" class="nav-link {{ request()->routeIs('approvals.*') && request('tab') !== 'approved' ? 'active' : '' }}">
+                        <a href="{{ route('approvals.index') }}" class="nav-link {{ request()->routeIs('approvals.*') && request('view') !== 'sent' ? 'active' : '' }}">
                             <i class="nav-icon fas fa-check-double"></i>
                             <p>
                                 承認待ち一覧
@@ -279,7 +279,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ route('approvals.index') }}?tab=approved" class="nav-link {{ request()->routeIs('approvals.*') && request('tab') === 'approved' ? 'active' : '' }}">
+                        <a href="{{ route('approvals.index') }}?view=sent" class="nav-link {{ request()->routeIs('approvals.*') && request('view') === 'sent' ? 'active' : '' }}">
                             <i class="nav-icon fas fa-paper-plane"></i>
                             <p>送信済一覧</p>
                         </a>

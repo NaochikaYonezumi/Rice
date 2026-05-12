@@ -60,13 +60,17 @@
                    class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('emails.pinned') ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
                     <span class="whitespace-nowrap">ピン留め</span>
                 </a>
+                <a href="{{ route('approvals.index') }}"
+                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('approvals.*') ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
+                    <span class="whitespace-nowrap">承認・送信</span>
+                </a>
                 <a href="{{ route('attachments.index') }}"
                    class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('attachments.*') ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
                     <span class="whitespace-nowrap">添付ファイル</span>
                 </a>
-                <a href="{{ route('approvals.index') }}"
-                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('approvals.*') ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
-                    <span class="whitespace-nowrap">承認・送信</span>
+                <a href="{{ route('chats.index') }}"
+                   class="flex items-center gap-2 mx-2 pl-7 pr-2 py-1 rounded text-sm hover:bg-gray-700 {{ request()->routeIs('chats.*') ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400' }}">
+                    <span class="whitespace-nowrap">チャット一覧</span>
                 </a>
             </div>
         </div>

@@ -659,7 +659,7 @@ class EmailController extends Controller
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
         $validated = $request->validate([
-            'status' => 'required|string|in:inbox,hold,completed,pending',
+            'status' => 'required|string|in:inbox,hold,completed,no_action,pending',
         ]);
         $thread->update(['status' => $validated['status']]);
         return response()->json(['status' => 'ok']);

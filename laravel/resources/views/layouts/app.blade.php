@@ -273,7 +273,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ route('approvals.index') }}" class="nav-link {{ request()->routeIs('approvals.*') && request('tab') !== 'approved' && request('view') !== 'sent' ? 'active' : '' }}">
+                        <a href="{{ route('approvals.index') }}" class="nav-link {{ request()->routeIs('approvals.*') ? 'active' : '' }}">
                             <i class="nav-icon fas fa-check-double"></i>
                             <p>
                                 承認・送信
@@ -281,12 +281,6 @@
                                     <span class="badge badge-warning right">{{ $myPendingApprovalCount > 99 ? '99+' : $myPendingApprovalCount }}</span>
                                 @endif
                             </p>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ route('approvals.index') }}?tab=approved" class="nav-link {{ request()->routeIs('approvals.*') && (request('tab') === 'approved' || request('view') === 'sent') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-paper-plane"></i>
-                            <p>送信済</p>
                         </a>
                     </li>
                     <li class="nav-item">

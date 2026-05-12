@@ -181,6 +181,19 @@
         {{-- スレッドヘッダー --}}
         <div x-show="selectedThreadId"
              class="shrink-0 px-5 py-3 bg-white border-b border-gray-200 flex items-center justify-between gap-3 min-w-0">
+            {{-- 前/次のスレッドナビゲーション (メール一覧と同じパターン) --}}
+            <div class="flex items-center gap-0.5 shrink-0 border-r border-gray-100 pr-3 mr-1">
+                <button @click="goToPrevThread()" title="前のスレッド"
+                        :disabled="!hasPrevThread"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                    <i class="fas fa-chevron-up text-xs"></i>
+                </button>
+                <button @click="goToNextThread()" title="次のスレッド"
+                        :disabled="!hasNextThread"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                    <i class="fas fa-chevron-down text-xs"></i>
+                </button>
+            </div>
             <div class="min-w-0 flex-1 overflow-hidden">
                 <h2 class="text-base font-extrabold text-gray-900 truncate" x-text="selectedThread?.subject || ''"></h2>
                 <div class="flex items-center gap-2 mt-1 flex-wrap min-w-0">
@@ -585,6 +598,29 @@ function threadChatApp() {
             if (this.filter === f) return;
             this.filter = f;
             this.load();
+        },
+
+        // ============= 前/次のスレッドナビゲーション (メール一覧と同じパターン) =============
+        get _currentThreadIndex() {
+            if (!this.selectedThreadId) return -1;
+            return this.threads.findIndex(t => t.id === this.selectedThreadId);
+        },
+        get hasPrevThread() {
+            return this._currentThreadIndex > 0;
+        },
+        get hasNextThread() {
+            const idx = this._currentThreadIndex;
+            return idx !== -1 && idx < this.threads.length - 1;
+        },
+        goToPrevThread() {
+            const idx = this._currentThreadIndex;
+            if (idx > 0) this.selectThread(this.threads[idx - 1]);
+        },
+        goToNextThread() {
+            const idx = this._currentThreadIndex;
+            if (idx !== -1 && idx < this.threads.length - 1) {
+                this.selectThread(this.threads[idx + 1]);
+            }
         },
 
         // 左パネルのドラッグリサイズ (260〜600px)

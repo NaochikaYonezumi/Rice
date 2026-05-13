@@ -323,6 +323,13 @@
                             <p>招待管理</p>
                         </a>
                     </li>
+                    {{-- Phase 6-2: ワークフロー自動割当ルール (admin 専用) --}}
+                    <li class="nav-item">
+                        <a href="{{ route('admin.workflow-rules.index') }}" class="nav-link {{ request()->routeIs('admin.workflow-rules.*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-project-diagram"></i>
+                            <p>割当ルール</p>
+                        </a>
+                    </li>
                     <li class="nav-item">
                         <a href="{{ route('settings.mail') }}" class="nav-link {{ request()->routeIs('settings.mail*') ? 'active' : '' }}">
                             <i class="nav-icon fas fa-envelope-config"></i>

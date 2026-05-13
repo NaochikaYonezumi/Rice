@@ -198,5 +198,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/master/tags/{tag}', [MasterTagController::class, 'update'])->name('master.tags.update');
         Route::delete('/master/tags/{tag}', [MasterTagController::class, 'destroy'])->name('master.tags.destroy');
         Route::post('/master/tags/reorder', [MasterTagController::class, 'reorder'])->name('master.tags.reorder');
+
+        // Phase 6-2: ワークフロー自動割当ルール (admin)
+        Route::get('/admin/workflow-rules', [\Modules\Workflow\Http\Controllers\WorkflowRuleController::class, 'index'])->name('admin.workflow-rules.index');
+        Route::get('/admin/workflow-rules/list', [\Modules\Workflow\Http\Controllers\WorkflowRuleController::class, 'list'])->name('admin.workflow-rules.list');
+        Route::post('/admin/workflow-rules', [\Modules\Workflow\Http\Controllers\WorkflowRuleController::class, 'store'])->name('admin.workflow-rules.store');
+        Route::put('/admin/workflow-rules/{rule}', [\Modules\Workflow\Http\Controllers\WorkflowRuleController::class, 'update'])->name('admin.workflow-rules.update');
+        Route::delete('/admin/workflow-rules/{rule}', [\Modules\Workflow\Http\Controllers\WorkflowRuleController::class, 'destroy'])->name('admin.workflow-rules.destroy');
+        Route::post('/admin/workflow-rules/{rule}/toggle', [\Modules\Workflow\Http\Controllers\WorkflowRuleController::class, 'toggle'])->name('admin.workflow-rules.toggle');
     });
 });

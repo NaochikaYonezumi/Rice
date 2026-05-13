@@ -78,6 +78,8 @@ class EmailFetcher
 
                 // スレッドの特定または作成
                 $thread = $this->findOrCreateThread($message);
+                // 新規スレッドかどうかを後で判定するために保持 (Eloquent の wasRecentlyCreated を退避)
+                $threadIsNew = (bool) $thread->wasRecentlyCreated;
 
                 $receivedAt = $message->getDate();
                 if (!$receivedAt) {
@@ -126,6 +128,18 @@ class EmailFetcher
                 $newTags = array_values(array_filter($tags, fn($t) => !in_array($t, ['保留', '完了'])));
                 if (count($tags) !== count($newTags)) {
                     $thread->update(['tags' => $newTags]);
+                }
+
+                // Phase 6-2: 新規スレッドのみ自動割当 (既存スレッドへの返信は owner_lock で割当を変えない)
+                if ($threadIsNew) {
+                    try {
+                        app(\Modules\Workflow\Services\WorkflowEngine::class)->autoAssign($thread->fresh());
+                    } catch (\Throwable $e) {
+                        \Log::warning('WorkflowEngine::autoAssign failed', [
+                            'thread_id' => $thread->id,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
 
                 $imported++;

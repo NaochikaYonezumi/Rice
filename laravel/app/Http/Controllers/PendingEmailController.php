@@ -209,6 +209,16 @@ class PendingEmailController extends Controller
                 ]);
             });
 
+            // Phase 6-3: SMTP 送信成功後に AI 採用判定 (ai_log_id が紐付いていれば)
+            try {
+                app(\Modules\AIReply\Services\AdoptionEvaluator::class)->evaluate($pending->refresh());
+            } catch (\Throwable $e) {
+                \Log::warning('AdoptionEvaluator failed', [
+                    'pending_id' => $pending->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             return response()->json(['status' => 'ok']);
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);

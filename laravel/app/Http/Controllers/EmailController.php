@@ -388,6 +388,8 @@ class EmailController extends Controller
             'created_by' => 'nullable|string',
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
+            // Phase 6-3: AI 採用率算定で参照する元 AI ログ
+            'ai_log_id' => 'nullable|integer|exists:ext_ai_logs,id',
             'attachments.*' => 'file|max:20480', // 20MB
             // 下書き編集時に保持する既存添付のパス (storePendingAttachments で保存されたもの)
             'keep_attachments'   => 'nullable|array',
@@ -408,6 +410,7 @@ class EmailController extends Controller
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
         $pending->target_approver_user_id = $validated['approver_id'] ?? null;
+        $pending->ai_log_id = $validated['ai_log_id'] ?? null;
 
         // 既存添付 (下書き編集元) + 新規アップロードファイルを統合
         $pending->attachment_paths = $this->resolvePendingAttachments($request, $validated['draft_id'] ?? null);
@@ -437,6 +440,8 @@ class EmailController extends Controller
             'created_by' => 'nullable|string',
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
+            // Phase 6-3: AI 採用率算定用
+            'ai_log_id' => 'nullable|integer|exists:ext_ai_logs,id',
             'attachments.*' => 'file|max:20480',
             // 下書き編集時に保持する既存添付のパス
             'keep_attachments'   => 'nullable|array',
@@ -456,6 +461,7 @@ class EmailController extends Controller
         $pending->created_by = $validated['created_by'] ?? (auth()->user()->name ?? '米住 直親');
         $pending->created_by_user_id = auth()->id();
         $pending->target_approver_user_id = $validated['approver_id'] ?? null;
+        $pending->ai_log_id = $validated['ai_log_id'] ?? null;
 
         // 既存添付 (下書き編集元) + 新規アップロードファイルを統合
         $pending->attachment_paths = $this->resolvePendingAttachments($request, $validated['draft_id'] ?? null);

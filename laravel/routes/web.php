@@ -155,6 +155,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/knowledge', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'index'])->name('knowledge.index');
     Route::post('/knowledge/crawl', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'crawl'])->name('knowledge.crawl');
     Route::get('/reports', [\Modules\Workflow\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
+    // Phase 6-3: AI 利用統計 JSON API (レポート画面の Chart.js が fetch)
+    Route::get('/reports/ai-usage', [\Modules\Workflow\Http\Controllers\ReportController::class, 'aiUsage'])->name('reports.ai-usage');
     Route::post('/threads/{thread}/ai-generate', [\Modules\AIReply\Http\Controllers\AIReplyController::class, 'generate'])->name('ai.generate');
 
     Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');

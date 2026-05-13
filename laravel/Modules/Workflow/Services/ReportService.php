@@ -200,4 +200,156 @@ class ReportService
             'pending'   => (int) ($rows['pending']   ?? 0),
         ];
     }
+
+    // ===================================================================
+    // Phase 6-3: AI 利用統計
+    // ===================================================================
+
+    /**
+     * 期間内の AI 生成 / 採用 / 破棄サマリ。
+     */
+    public function aiUsageStats(?Carbon $from, ?Carbon $to): array
+    {
+        [$from, $to] = $this->normalizePeriod($from, $to);
+
+        $base = DB::table('ext_ai_logs')
+            ->whereBetween('created_at', [$from, $to]);
+
+        $total       = (clone $base)->count();
+        $adopted     = (clone $base)->where('was_adopted', 1)->count();
+        $discarded   = (clone $base)->where('was_adopted', 0)->count();
+        $pendingEval = (clone $base)->whereNull('was_adopted')->count();
+        $avgConfidence = (clone $base)->avg('confidence_score') ?: 0;
+        $avgEditDist   = (clone $base)->whereNotNull('edit_distance')->avg('edit_distance') ?: 0;
+
+        $evaluated = $adopted + $discarded;
+        $rate = $evaluated > 0 ? round($adopted / $evaluated, 4) : 0.0;
+
+        return [
+            'total'             => $total,
+            'adopted'           => $adopted,
+            'discarded'         => $discarded,
+            'pending'           => $pendingEval,
+            'adoption_rate'     => $rate,
+            'avg_confidence'    => round((float) $avgConfidence, 2),
+            'avg_edit_distance' => round((float) $avgEditDist, 2),
+        ];
+    }
+
+    /** ユーザー別 採用率 */
+    public function aiUsageByUser(?Carbon $from, ?Carbon $to): array
+    {
+        [$from, $to] = $this->normalizePeriod($from, $to);
+
+        $rows = DB::table('ext_ai_logs as l')
+            ->leftJoin('users as u', 'u.id', '=', 'l.user_id')
+            ->whereBetween('l.created_at', [$from, $to])
+            ->select(
+                'l.user_id',
+                'u.name as user_name',
+                DB::raw('COUNT(*) as total'),
+                DB::raw('SUM(CASE WHEN l.was_adopted = 1 THEN 1 ELSE 0 END) as adopted'),
+                DB::raw('SUM(CASE WHEN l.was_adopted = 0 THEN 1 ELSE 0 END) as discarded')
+            )
+            ->groupBy('l.user_id', 'u.name')
+            ->orderByDesc(DB::raw('COUNT(*)'))
+            ->get();
+
+        return $rows->map(function ($r) {
+            $eval = (int) $r->adopted + (int) $r->discarded;
+            return [
+                'user_id'       => $r->user_id,
+                'user_name'     => $r->user_name ?: '(unknown)',
+                'total'         => (int) $r->total,
+                'adopted'       => (int) $r->adopted,
+                'discarded'     => (int) $r->discarded,
+                'adoption_rate' => $eval > 0 ? round($r->adopted / $eval, 4) : 0.0,
+            ];
+        })->all();
+    }
+
+    /** コレクション別 採用率 */
+    public function aiUsageByCollection(?Carbon $from, ?Carbon $to): array
+    {
+        [$from, $to] = $this->normalizePeriod($from, $to);
+
+        $rows = DB::table('ext_ai_logs')
+            ->whereBetween('created_at', [$from, $to])
+            ->select(
+                DB::raw("COALESCE(collection, '(none)') as collection"),
+                DB::raw('COUNT(*) as total'),
+                DB::raw('SUM(CASE WHEN was_adopted = 1 THEN 1 ELSE 0 END) as adopted'),
+                DB::raw('SUM(CASE WHEN was_adopted = 0 THEN 1 ELSE 0 END) as discarded')
+            )
+            ->groupBy(DB::raw("COALESCE(collection, '(none)')"))
+            ->orderByDesc(DB::raw('COUNT(*)'))
+            ->get();
+
+        return $rows->map(function ($r) {
+            $eval = (int) $r->adopted + (int) $r->discarded;
+            return [
+                'collection'    => $r->collection,
+                'total'         => (int) $r->total,
+                'adopted'       => (int) $r->adopted,
+                'discarded'     => (int) $r->discarded,
+                'adoption_rate' => $eval > 0 ? round($r->adopted / $eval, 4) : 0.0,
+            ];
+        })->all();
+    }
+
+    /** 日別 採用率推移 */
+    public function aiUsageByDay(?Carbon $from, ?Carbon $to): array
+    {
+        [$from, $to] = $this->normalizePeriod($from, $to);
+
+        $rows = DB::table('ext_ai_logs')
+            ->whereBetween('created_at', [$from, $to])
+            ->select(
+                DB::raw('DATE(created_at) as d'),
+                DB::raw('COUNT(*) as total'),
+                DB::raw('SUM(CASE WHEN was_adopted = 1 THEN 1 ELSE 0 END) as adopted'),
+                DB::raw('SUM(CASE WHEN was_adopted = 0 THEN 1 ELSE 0 END) as discarded')
+            )
+            ->groupBy(DB::raw('DATE(created_at)'))
+            ->orderBy(DB::raw('DATE(created_at)'))
+            ->get();
+
+        return $rows->map(function ($r) {
+            $eval = (int) $r->adopted + (int) $r->discarded;
+            return [
+                'date'          => $r->d,
+                'total'         => (int) $r->total,
+                'adopted'       => (int) $r->adopted,
+                'discarded'     => (int) $r->discarded,
+                'adoption_rate' => $eval > 0 ? round($r->adopted / $eval, 4) : 0.0,
+            ];
+        })->all();
+    }
+
+    /** 確信度ヒストグラム (10 刻み) */
+    public function aiConfidenceHistogram(?Carbon $from, ?Carbon $to): array
+    {
+        [$from, $to] = $this->normalizePeriod($from, $to);
+
+        $rows = DB::table('ext_ai_logs')
+            ->whereBetween('created_at', [$from, $to])
+            ->whereNotNull('confidence_score')
+            ->select(
+                DB::raw('FLOOR(confidence_score / 10) * 10 as bucket'),
+                DB::raw('COUNT(*) as cnt')
+            )
+            ->groupBy(DB::raw('FLOOR(confidence_score / 10) * 10'))
+            ->orderBy(DB::raw('FLOOR(confidence_score / 10) * 10'))
+            ->get();
+
+        return $rows->map(fn($r) => ['bucket' => (int) $r->bucket, 'count' => (int) $r->cnt])->all();
+    }
+
+    /** 期間正規化 (from=直近 30 日、to=今日 末) */
+    private function normalizePeriod(?Carbon $from, ?Carbon $to): array
+    {
+        $to = $to ? $to->copy()->endOfDay() : Carbon::today()->endOfDay();
+        $from = $from ? $from->copy()->startOfDay() : $to->copy()->subDays(29)->startOfDay();
+        return [$from, $to];
+    }
 }

@@ -14,6 +14,8 @@ class PendingEmail extends Model
         'target_approver_user_id',
         'rejection_reason', 'rejected_at',
         'source_rejected_id',
+        // Phase 6-3: 紐づく AI 生成ログ
+        'ai_log_id',
     ];
 
     protected $casts = [
@@ -54,6 +56,12 @@ class PendingEmail extends Model
     public function targetApprover(): BelongsTo
     {
         return $this->belongsTo(User::class, 'target_approver_user_id');
+    }
+
+    /** Phase 6-3: 採用率算定で参照する元 AI ログ */
+    public function aiLog(): BelongsTo
+    {
+        return $this->belongsTo(AiLog::class, 'ai_log_id');
     }
 
     public function getReplyTypeLabelAttribute(): string

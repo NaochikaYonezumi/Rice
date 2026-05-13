@@ -323,8 +323,165 @@
         </div>
     </div>
 
+    {{-- =========================================================
+         Phase 6-3: AI 利用統計タブ
+         ========================================================= --}}
+    <div class="px-4 mt-6" x-data="aiUsageReport()" x-init="load(7)">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-bold text-gray-800 inline-flex items-center gap-2">
+                <i class="fas fa-robot text-purple-500"></i> AI 利用統計
+            </h2>
+            <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                <button @click="load(7)"  :class="period === 7  ? 'bg-white shadow text-purple-600' : 'text-gray-600'" class="px-3 py-1 rounded text-xs font-bold">直近 7 日</button>
+                <button @click="load(30)" :class="period === 30 ? 'bg-white shadow text-purple-600' : 'text-gray-600'" class="px-3 py-1 rounded text-xs font-bold">直近 30 日</button>
+                <button @click="load(90)" :class="period === 90 ? 'bg-white shadow text-purple-600' : 'text-gray-600'" class="px-3 py-1 rounded text-xs font-bold">直近 90 日</button>
+            </div>
+        </div>
+
+        {{-- サマリーカード --}}
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                <p class="text-[10px] font-bold text-gray-400 uppercase">生成数</p>
+                <p class="text-2xl font-extrabold text-gray-800" x-text="summary.total ?? '—'"></p>
+            </div>
+            <div class="bg-white border border-emerald-100 rounded-2xl p-4">
+                <p class="text-[10px] font-bold text-emerald-500 uppercase">採用率</p>
+                <p class="text-2xl font-extrabold text-emerald-600">
+                    <span x-text="((summary.adoption_rate ?? 0) * 100).toFixed(1)"></span><span class="text-base">%</span>
+                </p>
+                <p class="text-[10px] text-gray-400">
+                    採用 <span x-text="summary.adopted ?? 0"></span> / 破棄 <span x-text="summary.discarded ?? 0"></span>
+                </p>
+            </div>
+            <div class="bg-white border border-blue-100 rounded-2xl p-4">
+                <p class="text-[10px] font-bold text-blue-500 uppercase">平均確信度</p>
+                <p class="text-2xl font-extrabold text-blue-600" x-text="(summary.avg_confidence ?? 0).toFixed(1)"></p>
+            </div>
+            <div class="bg-white border border-amber-100 rounded-2xl p-4">
+                <p class="text-[10px] font-bold text-amber-500 uppercase">平均編集距離</p>
+                <p class="text-2xl font-extrabold text-amber-600" x-text="(summary.avg_edit_distance ?? 0).toFixed(1)"></p>
+            </div>
+        </div>
+
+        {{-- グラフ群 --}}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                <p class="text-xs font-bold text-gray-500 mb-2">日別 採用率推移</p>
+                <canvas id="ai-chart-day" height="140"></canvas>
+            </div>
+            <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                <p class="text-xs font-bold text-gray-500 mb-2">確信度ヒストグラム</p>
+                <canvas id="ai-chart-histogram" height="140"></canvas>
+            </div>
+            <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                <p class="text-xs font-bold text-gray-500 mb-2">ユーザー別 採用率</p>
+                <canvas id="ai-chart-user" height="160"></canvas>
+            </div>
+            <div class="bg-white border border-gray-100 rounded-2xl p-4">
+                <p class="text-xs font-bold text-gray-500 mb-2">コレクション別 採用率</p>
+                <canvas id="ai-chart-collection" height="160"></canvas>
+            </div>
+        </div>
+    </div>
+
     <div class="text-center text-[10px] text-gray-400 pt-2 pb-6">
         期間: <span class="font-bold">{{ $stats['period']['from'] }} 〜 {{ $stats['period']['to'] }}</span>
     </div>
 </div>
+
+{{-- Chart.js + Alpine 用ロジック --}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+function aiUsageReport() {
+    return {
+        period: 7,
+        summary: {},
+        charts: {},
+
+        async load(days) {
+            this.period = days;
+            const to = new Date();
+            const from = new Date(); from.setDate(from.getDate() - (days - 1));
+            const params = new URLSearchParams({
+                from: from.toISOString().slice(0, 10),
+                to: to.toISOString().slice(0, 10),
+            });
+            try {
+                const res = await fetch('/reports/ai-usage?' + params.toString(), { headers: { 'Accept': 'application/json' } });
+                if (!res.ok) return;
+                const data = await res.json();
+                this.summary = data.summary || {};
+                this.$nextTick(() => {
+                    this.renderDay(data.by_day || []);
+                    this.renderHistogram(data.histogram || []);
+                    this.renderUser(data.by_user || []);
+                    this.renderCollection(data.by_collection || []);
+                });
+            } catch (e) { console.error('ai-usage load error', e); }
+        },
+
+        destroy(id) { if (this.charts[id]) { this.charts[id].destroy(); delete this.charts[id]; } },
+
+        renderDay(rows) {
+            this.destroy('day');
+            const ctx = document.getElementById('ai-chart-day');
+            if (!ctx) return;
+            this.charts.day = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: rows.map(r => r.date),
+                    datasets: [{
+                        label: '採用率 (%)',
+                        data: rows.map(r => (r.adoption_rate * 100).toFixed(1)),
+                        backgroundColor: 'rgba(16,185,129,0.6)',
+                    }],
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } },
+            });
+        },
+
+        renderHistogram(rows) {
+            this.destroy('histogram');
+            const ctx = document.getElementById('ai-chart-histogram');
+            if (!ctx) return;
+            this.charts.histogram = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: rows.map(r => r.bucket + ' - ' + (r.bucket + 9)),
+                    datasets: [{ label: '件数', data: rows.map(r => r.count), backgroundColor: 'rgba(59,130,246,0.6)' }],
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } },
+            });
+        },
+
+        renderUser(rows) {
+            this.destroy('user');
+            const ctx = document.getElementById('ai-chart-user');
+            if (!ctx) return;
+            this.charts.user = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: rows.map(r => r.user_name),
+                    datasets: [{ label: '採用率 (%)', data: rows.map(r => (r.adoption_rate * 100).toFixed(1)), backgroundColor: 'rgba(168,85,247,0.6)' }],
+                },
+                options: { responsive: true, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
+            });
+        },
+
+        renderCollection(rows) {
+            this.destroy('collection');
+            const ctx = document.getElementById('ai-chart-collection');
+            if (!ctx) return;
+            this.charts.collection = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: rows.map(r => r.collection),
+                    datasets: [{ label: '採用率 (%)', data: rows.map(r => (r.adoption_rate * 100).toFixed(1)), backgroundColor: 'rgba(245,158,11,0.6)' }],
+                },
+                options: { responsive: true, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } },
+            });
+        },
+    };
+}
+</script>
 @endsection

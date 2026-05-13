@@ -46,7 +46,23 @@ class EmailController extends Controller
             'replyBcc'     => '',
             'replySubject' => '',
             'approvers'    => $this->getApproverCandidates(),
+            // Phase 6-4: 現ユーザーの署名 (新規作成画面で本文末尾に初期挿入する)
+            'userSignature' => $this->resolveUserSignature(),
         ]);
+    }
+
+    /** Phase 6-4: 現ユーザーの effectiveSignature() から表示用文字列を返す。 */
+    private function resolveUserSignature(): ?string
+    {
+        $user = auth()->user();
+        if (!$user) return null;
+        $sig = $user->effectiveSignature();
+        if ($sig['type'] === null) return null;
+        // 返信フォーム上はテキストとして埋め込むため、HTML はタグ除去で簡易変換
+        if ($sig['type'] === 'html') {
+            return trim(html_entity_decode(strip_tags($sig['content']), ENT_QUOTES | ENT_HTML5));
+        }
+        return (string) $sig['content'];
     }
 
     /**
@@ -165,6 +181,8 @@ class EmailController extends Controller
             'replyBcc'     => '',
             'replySubject' => $replySubject,
             'approvers'    => $this->getApproverCandidates(),
+            // Phase 6-4: 現ユーザーの署名 (返信フォームに初期挿入)
+            'userSignature' => $this->resolveUserSignature(),
         ]);
     }
 

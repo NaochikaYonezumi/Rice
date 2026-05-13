@@ -604,13 +604,25 @@ function composeWindowApp() {
         // 下書きから引き継いだ既存添付 (削除すると keep_attachments[] から外れて送信時に削除される)
         existingAttachments: @json($draftAttachments ?? []),
         rejectionInfo: @json($rejectionInfo ?? null),
+        // Phase 6-4: ユーザー個別署名 (新規作成・返信時のみ初期挿入)
+        userSignature: @json($userSignature ?? null),
         form: {
             from:    @json($defaultFrom),
             to:      @json($replyTo),
             cc:      @json($replyCc),
             bcc:     @json($replyBcc),
             subject: @json($replySubject),
-            body:    @json($draftBody ?? ''),
+            body:    (() => {
+                const draft = @json($draftBody ?? '');
+                const sig = @json($userSignature ?? null);
+                // 下書き編集 (draftId 有り) ならそのまま、新規作成/返信なら署名を末尾に
+                const isDraftEdit = !!@json($draftId ?? null);
+                if (isDraftEdit) return draft;
+                if (sig && sig.trim() !== '') {
+                    return (draft ? draft + '\n\n' : '\n\n') + '-- \n' + sig;
+                }
+                return draft;
+            })(),
             approver_id: '',
         },
         selectedFiles: [],

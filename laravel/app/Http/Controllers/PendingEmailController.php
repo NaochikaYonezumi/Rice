@@ -130,12 +130,15 @@ class PendingEmailController extends Controller
                 // (2) 件名にチケット番号を埋め込む (受信時にスレッド復元するための鍵)
                 $sendSubject = EmailThread::ensureTicketInSubject($pending->subject, $ticket);
 
-                Mail::send([], [], function ($message) use ($pending, $settings, $sendSubject, $fromAddress) {
+                // Phase 6-4: 送信者ユーザーの署名を本文末尾に付与 (重複防止チェック付き)
+                $bodyWithSignature = $this->appendSignature($pending);
+
+                Mail::send([], [], function ($message) use ($pending, $settings, $sendSubject, $fromAddress, $bodyWithSignature) {
                     $message
                         ->to($pending->to_address)
                         ->from($fromAddress, $settings->smtp_from_name)
                         ->subject($sendSubject)
-                        ->text($pending->body);
+                        ->text($bodyWithSignature);
 
                     if ($pending->cc) {
                         $message->cc(array_map('trim', explode(',', $pending->cc)));
@@ -334,6 +337,49 @@ class PendingEmailController extends Controller
 
     /**
      * 添付エントリを {path, filename, mime_type, size} 連想配列に正規化する。
+     * Phase 6-4: 送信者ユーザーの署名を本文末尾に付与。
+     * - 既に同じ署名が末尾にある場合は重複付与しない
+     * - HTML 署名は text/plain 送信のため markdown 風に簡易変換 (タグ除去)
+     * - User が null (api 経由など) なら AiSetting.agent_signature にフォールバック
+     */
+    private function appendSignature(PendingEmail $pending): string
+    {
+        $body = (string) ($pending->body ?? '');
+
+        $user = $pending->created_by_user_id ? \App\Models\User::find($pending->created_by_user_id) : null;
+        $sig = $user ? $user->effectiveSignature() : ['type' => null, 'content' => null];
+
+        // ユーザー個別が無ければグローバル AiSetting
+        if ($sig['type'] === null) {
+            try {
+                $global = \App\Models\AiSetting::getSettings()?->agent_signature;
+                if (!empty($global)) {
+                    $sig = ['type' => 'text', 'content' => (string) $global];
+                }
+            } catch (\Throwable $e) { /* noop */ }
+        }
+
+        if ($sig['type'] === null || empty($sig['content'])) {
+            return $body;
+        }
+
+        $sigText = $sig['type'] === 'html'
+            ? trim(html_entity_decode(strip_tags($sig['content']), ENT_QUOTES | ENT_HTML5))
+            : (string) $sig['content'];
+
+        if ($sigText === '') return $body;
+
+        // 重複付与防止: 本文の末尾 (改行を吸収) に既に同じ文字列があれば skip
+        $bodyTrim = rtrim($body);
+        $sigTrim  = rtrim($sigText);
+        if ($sigTrim !== '' && str_ends_with($bodyTrim, $sigTrim)) {
+            return $body;
+        }
+
+        return $bodyTrim . "\n\n-- \n" . $sigTrim;
+    }
+
+    /**
      * 旧データ (path 文字列) も読めるよう両対応。
      */
     private function normalizeAttachment($att): ?array

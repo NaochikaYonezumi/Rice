@@ -19,6 +19,13 @@
             </div>
         </div>
 
+        {{-- Phase 6-4: Agent 別メール署名 --}}
+        <div class="p-8 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <div class="max-w-xl">
+                @include('profile.partials.signature-form')
+            </div>
+        </div>
+
         <div class="p-8 bg-white border border-gray-100 shadow-sm rounded-2xl">
             <div class="max-w-xl">
                 @include('profile.partials.delete-user-form')

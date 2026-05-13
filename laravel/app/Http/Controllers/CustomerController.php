@@ -21,6 +21,7 @@ class CustomerController extends Controller
             'name'   => 'required|string|max:255',
             'email'  => 'nullable|email|max:255|unique:customers',
             'domain' => 'nullable|string|max:255',
+            'rag_collection' => 'nullable|string|max:100',
             'notes'  => 'nullable|string',
         ]);
 
@@ -46,6 +47,7 @@ class CustomerController extends Controller
             'name'   => 'required|string|max:255',
             'email'  => 'nullable|email|max:255|unique:customers,email,' . $customer->id,
             'domain' => 'nullable|string|max:255',
+            'rag_collection' => 'nullable|string|max:100',
             'notes'  => 'nullable|string',
         ]);
 

@@ -154,6 +154,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // AI 関連
     Route::get('/knowledge', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'index'])->name('knowledge.index');
     Route::post('/knowledge/crawl', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'crawl'])->name('knowledge.crawl');
+    // Phase 6-1: RAG コレクション一覧 (顧客編集 UI などから利用)
+    Route::get('/api/knowledge/collections', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'collections'])->name('knowledge.collections');
     Route::get('/reports', [\Modules\Workflow\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
     Route::post('/threads/{thread}/ai-generate', [\Modules\AIReply\Http\Controllers\AIReplyController::class, 'generate'])->name('ai.generate');
 

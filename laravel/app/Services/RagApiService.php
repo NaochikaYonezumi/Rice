@@ -14,14 +14,15 @@ class RagApiService
         $this->baseUrl = rtrim(config('services.rag_api.url', env('RAG_API_URL', 'http://rag-api:8000')), '/');
     }
 
-    public function query(string $question, int $topK = 5, ?string $provider = null, ?string $model = null): array
+    public function query(string $question, int $topK = 5, ?string $provider = null, ?string $model = null, ?string $collection = null): array
     {
         $payload = array_filter([
-            'question' => $question,
-            'top_k' => $topK,
-            'provider' => $provider,
-            'model' => $model,
-        ]);
+            'question'   => $question,
+            'top_k'      => $topK,
+            'provider'   => $provider,
+            'model'      => $model,
+            'collection' => $collection,
+        ], fn($v) => $v !== null && $v !== '');
 
         $settings = null;
         if (in_array($provider, ['claude', 'gemini'], true)) {

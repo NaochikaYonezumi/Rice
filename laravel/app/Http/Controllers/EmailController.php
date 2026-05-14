@@ -10,6 +10,7 @@ use App\Models\MailSetting;
 use App\Models\PendingEmail;
 use App\Models\User;
 use App\Notifications\ApprovalRequestedNotification;
+use App\Services\AiSkillService;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,11 +22,30 @@ use Modules\MailClient\Services\EmailFetcher;
 
 class EmailController extends Controller
 {
-    public function __construct(private RagApiService $ragApi) {}
+    public function __construct(
+        private RagApiService $ragApi,
+        private AiSkillService $skillService,
+    ) {}
 
-    public function index() { return view('emails.index', ['isPinnedView' => false]); }
+    public function index()
+    {
+        return view('emails.index', [
+            'isPinnedView'        => false,
+            'userAiSkills'        => $this->skillService->getSkillsForUser(auth()->user()),
+            'userSummarySkills'   => $this->skillService->getSkillsForUser(auth()->user(), 'summary'),
+            'userReplySkills'     => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
+        ]);
+    }
 
-    public function pinned() { return view('emails.index', ['isPinnedView' => true]); }
+    public function pinned()
+    {
+        return view('emails.index', [
+            'isPinnedView'        => true,
+            'userAiSkills'        => $this->skillService->getSkillsForUser(auth()->user()),
+            'userSummarySkills'   => $this->skillService->getSkillsForUser(auth()->user(), 'summary'),
+            'userReplySkills'     => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
+        ]);
+    }
 
     /**
      * 新規作成ウィンドウ (作成専用画面)
@@ -46,7 +66,61 @@ class EmailController extends Controller
             'replyBcc'     => '',
             'replySubject' => '',
             'approvers'    => $this->getApproverCandidates(),
+            'userAiSkills' => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
         ]);
+    }
+
+    /**
+     * プロンプト中の /コレクション 参照を抽出し、参照すべきナレッジソース一覧を返す。
+     *
+     * 戻り値: [
+     *   'collections' => ['モビリティ', 'マニュアル'],  // 検出されたコレクション名
+     *   'references_block' => "【参照すべきコレクション】\n■ コレクション: モビリティ\n  - [url] ...",
+     * ]
+     * 該当ソースが 1 件もなければ references_block は空文字。
+     */
+    private function expandCollectionReferences(string ...$texts): array
+    {
+        $combined = implode("\n", $texts);
+        preg_match_all('/(^|\s)\/([^\s\/\\\\#?&]+)/u', $combined, $matches);
+        $tokens = collect($matches[2] ?? [])->filter()->unique()->values();
+        if ($tokens->isEmpty()) {
+            return ['collections' => [], 'references_block' => ''];
+        }
+
+        $refs = [];
+        foreach ($tokens as $token) {
+            $sources = \App\Models\ScrapedUrl::where('collection', $token)
+                ->where('status', 'ok')
+                ->orderByDesc('chunks_indexed')
+                ->limit(20)
+                ->get();
+            if ($sources->isEmpty()) continue;
+            $refs[$token] = $sources;
+        }
+        if (empty($refs)) {
+            return ['collections' => $tokens->all(), 'references_block' => ''];
+        }
+
+        $block  = "【参照すべきコレクション】\n";
+        $block .= "ユーザーは以下のコレクションを参照するよう指示しています。回答時はこれらのソースに含まれる情報を優先的に使ってください。\n";
+        foreach ($refs as $colName => $sources) {
+            $block .= "\n■ コレクション: {$colName}\n";
+            foreach ($sources as $s) {
+                $title = $s->title ?: $s->url;
+                $type = $s->source_type ?: 'url';
+                $typeLabel = ['url' => 'URL', 'file' => 'ファイル', 'email' => 'メール'][$type] ?? $type;
+                $line = "  - [{$typeLabel}] " . \Illuminate\Support\Str::limit($title, 100);
+                if ($type === 'url') {
+                    $line .= " ({$s->url})";
+                }
+                $block .= $line . "\n";
+            }
+        }
+        return [
+            'collections' => array_keys($refs),
+            'references_block' => $block,
+        ];
     }
 
     /**
@@ -165,6 +239,7 @@ class EmailController extends Controller
             'replyBcc'     => '',
             'replySubject' => $replySubject,
             'approvers'    => $this->getApproverCandidates(),
+            'userAiSkills' => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
         ]);
     }
 
@@ -185,10 +260,14 @@ class EmailController extends Controller
     // AIアシスタントによる生成 (スキル選択・コンテキスト強化)
     public function askAi(Request $request, Email $email): JsonResponse
     {
+        $request->validate([
+            'provider' => 'nullable|string|in:ollama,claude,gemini',
+            'model'    => 'nullable|string|max:128',
+        ]);
         $userPrompt = trim($request->input('prompt', ''));
-        $skillKey   = $request->input('skill', 'reply');
-        $skills     = config('ai_skills.skills');
-        $selectedSkill = $skills[$skillKey] ?? $skills['reply'];
+        $skills     = $this->skillService->getSkillsForUser(auth()->user());
+        $skillKey   = $request->input('skill') ?: $this->skillService->getDefaultReplyKey(auth()->user()) ?? 'reply';
+        $selectedSkill = $skills[$skillKey] ?? ($skills['reply'] ?? array_values($skills)[0] ?? ['name' => '汎用', 'system_prompt' => '']);
 
         // 並列コンテキスト取得 (タイムアウトでハングを防ぐ)
         try {
@@ -215,10 +294,21 @@ class EmailController extends Controller
         }
 
         $aiSettings = AiSetting::getSettings();
-        $agentName = $aiSettings->agent_name ?: '米住 直親';
-        $signature = $aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n米住 直親";
+        // 担当者情報は「ログインユーザー個人設定 → 全体 AI 設定 → ハードコード」の順で解決
+        $authUser  = auth()->user();
+        $agentName = $authUser?->resolvedDisplayName() ?: ($aiSettings->agent_name ?: '米住 直親');
+        $signature = $authUser?->resolvedSignature()   ?: ($aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n{$agentName}");
+
+        // /コレクション 参照を抽出してプロンプトに注入
+        $colRef = $this->expandCollectionReferences(
+            $userPrompt,
+            $selectedSkill['system_prompt'] ?? ''
+        );
 
         $finalPrompt = "【システム指示】\n{$selectedSkill['system_prompt']}\n\n";
+        if (!empty($colRef['references_block'])) {
+            $finalPrompt .= $colRef['references_block'] . "\n";
+        }
         $finalPrompt .= "【コンテキスト: ナレッジベース】\n{$kbContent}\n\n";
         $finalPrompt .= "【コンテキスト: 関連レポート】\n{$reportContent}\n\n";
         $finalPrompt .= "【コンテキスト: スレッド履歴】\n{$threadContext}\n\n";
@@ -236,16 +326,39 @@ class EmailController extends Controller
             $finalPrompt = preg_replace(array_keys($patterns), array_values($patterns), $finalPrompt);
         }
 
-        // RAG API経由で生成
-        $result = $this->ragApi->query($finalPrompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
+        // RAG API経由で生成 (provider/model はリクエスト指定があればそれを優先)
+        $provider = $request->input('provider') ?: $aiSettings->default_provider;
+        $model    = $request->input('model')    ?: $aiSettings->default_model;
+
+        // 非同期化: タスクを作って Job に投げ、task_id を返す
+        $task = \App\Models\AiTask::create([
+            'user_id'   => auth()->id(),
+            'thread_id' => $email->thread_id,
+            'task_type' => \App\Models\AiTask::TYPE_REPLY_ASSIST,
+            'status'    => \App\Models\AiTask::STATUS_PENDING,
+            'provider'  => $provider,
+            'model'     => $model,
+            'prompt'    => $finalPrompt,
+            'result_meta' => [
+                'skill_used' => $selectedSkill['name'],
+                'sources' => [
+                    'kb'      => !empty($kbContent),
+                    'reports' => !empty($reportContent),
+                ],
+            ],
+        ]);
+        \App\Jobs\ProcessAiTask::dispatch($task->id);
 
         return response()->json([
-            'answer' => $result['answer'] ?? '',
+            'status'     => 'pending',
+            'task_id'    => $task->id,
             'skill_used' => $selectedSkill['name'],
-            'sources' => [
-                'kb' => !empty($kbContent),
-                'reports' => !empty($reportContent)
-            ]
+            'sources'    => [
+                'kb'      => !empty($kbContent),
+                'reports' => !empty($reportContent),
+            ],
+            'provider'   => $provider,
+            'model'      => $model,
         ]);
     }
 
@@ -255,13 +368,17 @@ class EmailController extends Controller
      */
     public function askAiCompose(Request $request): JsonResponse
     {
+        $request->validate([
+            'provider' => 'nullable|string|in:ollama,claude,gemini',
+            'model'    => 'nullable|string|max:128',
+        ]);
         $userPrompt = trim($request->input('prompt', ''));
         $subject    = trim((string) $request->input('subject', ''));
         $body       = trim((string) $request->input('body', ''));
         $to         = trim((string) $request->input('to', ''));
-        $skillKey   = $request->input('skill', 'reply');
-        $skills     = config('ai_skills.skills');
-        $selectedSkill = $skills[$skillKey] ?? $skills['reply'];
+        $skills     = $this->skillService->getSkillsForUser(auth()->user());
+        $skillKey   = $request->input('skill') ?: $this->skillService->getDefaultReplyKey(auth()->user()) ?? 'reply';
+        $selectedSkill = $skills[$skillKey] ?? ($skills['reply'] ?? array_values($skills)[0] ?? ['name' => '汎用', 'system_prompt' => '']);
 
         // ナレッジ + レポート (キーワード = 件名 + ユーザー指示 のうち先頭)
         $queryStr = trim(($subject !== '' ? $subject : '') . ' ' . Str::limit($userPrompt, 80));
@@ -280,11 +397,20 @@ class EmailController extends Controller
         }
 
         $aiSettings = AiSetting::getSettings();
-        $agentName  = $aiSettings->agent_name ?: '米住 直親';
-        $signature  = $aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n米住 直親";
+        $authUser  = auth()->user();
+        $agentName = $authUser?->resolvedDisplayName() ?: ($aiSettings->agent_name ?: '米住 直親');
+        $signature = $authUser?->resolvedSignature()   ?: ($aiSettings->agent_signature ?: "---\nPaperCutサポート窓口\n{$agentName}");
+
+        $colRef = $this->expandCollectionReferences(
+            $userPrompt,
+            $selectedSkill['system_prompt'] ?? ''
+        );
 
         $finalPrompt  = "【システム指示】\n{$selectedSkill['system_prompt']}\n\n";
         $finalPrompt .= "【モード】新規作成 (返信対象なし)\n\n";
+        if (!empty($colRef['references_block'])) {
+            $finalPrompt .= $colRef['references_block'] . "\n";
+        }
         $finalPrompt .= "【コンテキスト: ナレッジベース】\n{$kbContent}\n\n";
         $finalPrompt .= "【コンテキスト: 関連レポート】\n{$reportContent}\n\n";
         $finalPrompt .= "【作成中のメール】\n";
@@ -304,23 +430,56 @@ class EmailController extends Controller
             $finalPrompt = preg_replace(array_keys($patterns), array_values($patterns), $finalPrompt);
         }
 
-        $result = $this->ragApi->query($finalPrompt, 3, $aiSettings->default_provider, $aiSettings->default_model);
+        $provider = $request->input('provider') ?: $aiSettings->default_provider;
+        $model    = $request->input('model')    ?: $aiSettings->default_model;
+
+        // 非同期化
+        $task = \App\Models\AiTask::create([
+            'user_id'   => auth()->id(),
+            'thread_id' => null,
+            'task_type' => \App\Models\AiTask::TYPE_COMPOSE_ASSIST,
+            'status'    => \App\Models\AiTask::STATUS_PENDING,
+            'provider'  => $provider,
+            'model'     => $model,
+            'prompt'    => $finalPrompt,
+            'result_meta' => [
+                'skill_used' => $selectedSkill['name'],
+                'sources' => [
+                    'kb'      => !empty($kbContent),
+                    'reports' => !empty($reportContent),
+                ],
+            ],
+        ]);
+        \App\Jobs\ProcessAiTask::dispatch($task->id);
 
         return response()->json([
-            'answer'     => $result['answer'] ?? '',
+            'status'     => 'pending',
+            'task_id'    => $task->id,
             'skill_used' => $selectedSkill['name'],
             'sources'    => [
                 'kb'      => !empty($kbContent),
                 'reports' => !empty($reportContent),
             ],
+            'provider' => $provider,
+            'model'    => $model,
         ]);
     }
 
     /**
      * スレッド要約: 指定スレッドの全メールを参照して要約を生成
+     *
+     * オプションで provider / model をリクエスト本文から受け取り、
+     * デフォルト設定をオーバーライドできる。
      */
-    public function summarizeThread(EmailThread $thread): JsonResponse
+    public function summarizeThread(Request $request, EmailThread $thread): JsonResponse
     {
+        $request->validate([
+            'provider' => 'nullable|string|in:ollama,claude,gemini',
+            'model'    => 'nullable|string|max:128',
+            'skill'    => 'nullable|string|max:64',
+            'prompt'   => 'nullable|string|max:8000',
+        ]);
+
         $emails = $thread->emails()->with('attachments')->orderBy('received_at', 'asc')->get();
         if ($emails->isEmpty()) {
             return response()->json([
@@ -349,29 +508,68 @@ class EmailController extends Controller
         }
 
         $aiSettings = AiSetting::getSettings();
-        $prompt  = "【システム指示】\n";
-        $prompt .= "あなたはサポート窓口担当者です。以下のメールスレッドを日本語で要約してください。\n";
-        $prompt .= "出力フォーマット:\n";
-        $prompt .= "1. 概要 (3〜5行で何のスレッドか)\n";
-        $prompt .= "2. 経緯 (時系列で 5〜8 行の箇条書き)\n";
-        $prompt .= "3. 未解決事項 / ネクストアクション (箇条書き、なければ「なし」)\n";
-        $prompt .= "4. 重要な日付・金額・人物・固有名詞 (列挙)\n";
-        $prompt .= "返信案や挨拶文は不要、要約のみ。\n\n";
+
+        // スキル選択。リクエスト指定 > ユーザーの「AI要約デフォルト」> summarize > 先頭。
+        $skills        = $this->skillService->getSkillsForUser(auth()->user());
+        $skillKey      = $request->input('skill') ?: $this->skillService->getDefaultSummaryKey(auth()->user()) ?? 'summarize';
+        $selectedSkill = $skills[$skillKey] ?? ($skills['summarize'] ?? array_values($skills)[0] ?? [
+            'name'          => '要約',
+            'system_prompt' => "あなたはサポート窓口担当者です。以下のメールスレッドを日本語で要約してください。\n出力フォーマット:\n1. 概要 (3〜5行で何のスレッドか)\n2. 経緯 (時系列で 5〜8 行の箇条書き)\n3. 未解決事項 / ネクストアクション (箇条書き、なければ「なし」)\n4. 重要な日付・金額・人物・固有名詞 (列挙)\n返信案や挨拶文は不要、要約のみ。",
+        ]);
+
+        // ユーザーの追加指示プロンプト
+        $userPrompt = trim((string) $request->input('prompt', ''));
+
+        // /コレクション 参照を抽出してプロンプトに注入
+        $colRef = $this->expandCollectionReferences(
+            $userPrompt,
+            $selectedSkill['system_prompt'] ?? ''
+        );
+
+        $prompt  = "【システム指示】\n" . ($selectedSkill['system_prompt'] ?? '') . "\n\n";
+        if (!empty($colRef['references_block'])) {
+            $prompt .= $colRef['references_block'] . "\n";
+        }
         $prompt .= "【スレッド件名】\n" . ($thread->subject ?: '(件名なし)') . "\n";
         if ($thread->ticket_number) {
             $prompt .= "【チケット番号】\n[#" . $thread->ticket_number . "]\n";
         }
         $prompt .= "【メール総数】" . $emails->count() . " 通\n\n";
+        if ($userPrompt !== '') {
+            $prompt .= "【ユーザーの追加指示】\n" . $userPrompt . "\n\n";
+        }
         $prompt .= "【スレッド本文】\n" . $threadContext;
 
-        $result = $this->ragApi->query($prompt, 1, $aiSettings->default_provider, $aiSettings->default_model);
+        // 優先度: リクエスト指定 > AiSetting デフォルト
+        $provider = $request->input('provider') ?: $aiSettings->default_provider;
+        $model    = $request->input('model')    ?: $aiSettings->default_model;
+
+        // 非同期化: タスクを作って Job に投げ、task_id を返す
+        $task = \App\Models\AiTask::create([
+            'user_id'   => auth()->id(),
+            'thread_id' => $thread->id,
+            'task_type' => \App\Models\AiTask::TYPE_THREAD_SUMMARY,
+            'status'    => \App\Models\AiTask::STATUS_PENDING,
+            'provider'  => $provider,
+            'model'     => $model,
+            'prompt'    => $prompt,
+            'result_meta' => [
+                'skill_key'  => $skillKey,
+                'skill_name' => $selectedSkill['name'] ?? $skillKey,
+            ],
+        ]);
+        \App\Jobs\ProcessAiTask::dispatch($task->id);
 
         return response()->json([
-            'status'      => 'ok',
-            'summary'     => $result['answer'] ?? '',
+            'status'      => 'pending',
+            'task_id'     => $task->id,
             'email_count' => $emails->count(),
             'subject'     => $thread->subject,
             'ticket'      => $thread->ticket_number,
+            'provider'    => $provider,
+            'model'       => $model,
+            'skill_key'   => $skillKey,
+            'skill_name'  => $selectedSkill['name'] ?? $skillKey,
         ]);
     }
 
@@ -415,6 +613,8 @@ class EmailController extends Controller
 
         if (!$saveAsDraft) {
             $this->notifyAdmins($pending);
+            // 承認依頼が発生したスレッドは inbox から「承認待ち」へ移動
+            PendingEmail::syncThreadStatus($email->thread_id);
         }
 
         // 編集元の下書きが指定されている場合は削除
@@ -648,24 +848,83 @@ class EmailController extends Controller
             $threads->whereJsonContains('tags', $tag);
         }
 
-        $result = $threads->get()->map(fn($t) => [
-            'id' => $t->id,
-            'subject' => $t->subject,
-            'ticket_number' => $t->ticket_number,
-            'status' => $t->status,
-            'is_pinned' => $t->is_pinned,
-            'assigned_user_id' => $t->assigned_user_id,
-            'assignee' => $t->assignee ? ['id' => $t->assignee->id, 'name' => $t->assignee->name] : null,
-            'last_email_at' => $t->last_email_at?->format('Y/m/d H:i'),
-            'tags' => $t->tags ?? [],
-            'customer_id' => $t->customer_id,
-            'customer' => $t->customer ? ['name' => $t->customer->name] : null,
-            'latest_email' => $t->latestEmail ? [
-                'from_label' => $t->latestEmail->from_label,
-                'from_address' => $t->latestEmail->from_address,
-                'plain_body' => Str::limit($t->latestEmail->plain_body, 50),
-            ] : null,
-        ]);
+        $loadedThreads = $threads->get();
+
+        // 未読チャット件数 + チャット最終投稿時刻を thread ごとに集計
+        $unreadByThread     = [];
+        $lastChatAtByThread = [];
+        try {
+            $tIds = $loadedThreads->pluck('id')->all();
+            $myId = auth()->id();
+            if (!empty($tIds)) {
+                // 最終チャット投稿時刻 (誰の投稿でも対象 / ソート用)
+                $maxRows = \App\Models\ThreadComment::whereIn('thread_id', $tIds)
+                    ->selectRaw('thread_id, MAX(created_at) as max_at')
+                    ->groupBy('thread_id')
+                    ->get();
+                foreach ($maxRows as $r) {
+                    $lastChatAtByThread[$r->thread_id] = $r->max_at;
+                }
+
+                if ($myId) {
+                    $reads = \App\Models\UserThreadChatRead::where('user_id', $myId)
+                        ->whereIn('thread_id', $tIds)
+                        ->pluck('last_read_at', 'thread_id')
+                        ->all();
+
+                    // thread ごとに「自分以外の」コメントで last_read_at より新しいものを数える
+                    $rows = \App\Models\ThreadComment::whereIn('thread_id', $tIds)
+                        ->where('user_id', '!=', $myId)
+                        ->get(['id', 'thread_id', 'user_id', 'created_at']);
+                    foreach ($rows as $c) {
+                        $lastRead = $reads[$c->thread_id] ?? null;
+                        if ($lastRead === null || $c->created_at > $lastRead) {
+                            $unreadByThread[$c->thread_id] = ($unreadByThread[$c->thread_id] ?? 0) + 1;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // テーブル未作成等で壊れないように
+        }
+
+        $result = $loadedThreads->map(function ($t) use ($unreadByThread, $lastChatAtByThread) {
+            $lastChatAt = $lastChatAtByThread[$t->id] ?? null;
+            // ソート用キー: ピン留めが最上位、その下は (チャット最終 OR メール最終) の新しい順
+            $emailIso = $t->last_email_at?->toIso8601String() ?? '';
+            $chatIso  = $lastChatAt ? \Carbon\Carbon::parse($lastChatAt)->toIso8601String() : '';
+            $activity = $chatIso > $emailIso ? $chatIso : $emailIso;
+
+            return [
+                'id' => $t->id,
+                'subject' => $t->subject,
+                'ticket_number' => $t->ticket_number,
+                'status' => $t->status,
+                'is_pinned' => (bool) $t->is_pinned,
+                'assigned_user_id' => $t->assigned_user_id,
+                'assignee' => $t->assignee ? ['id' => $t->assignee->id, 'name' => $t->assignee->name] : null,
+                'last_email_at' => $t->last_email_at?->format('Y/m/d H:i'),
+                'last_chat_at' => $lastChatAt ? \Carbon\Carbon::parse($lastChatAt)->format('Y/m/d H:i') : null,
+                'last_activity_iso' => $activity,
+                'tags' => $t->tags ?? [],
+                'customer_id' => $t->customer_id,
+                'customer' => $t->customer ? ['name' => $t->customer->name] : null,
+                'latest_email' => $t->latestEmail ? [
+                    'from_label' => $t->latestEmail->from_label,
+                    'from_address' => $t->latestEmail->from_address,
+                    'plain_body' => Str::limit($t->latestEmail->plain_body, 50),
+                ] : null,
+                'unread_chat_count' => (int) ($unreadByThread[$t->id] ?? 0),
+            ];
+        })
+        // ピン留めが最上位 → 次にチャット/メールの最新活動降順
+        ->sort(function ($a, $b) {
+            if ($a['is_pinned'] !== $b['is_pinned']) {
+                return $a['is_pinned'] ? -1 : 1;
+            }
+            return strcmp($b['last_activity_iso'], $a['last_activity_iso']);
+        })
+        ->values();
 
         return response()->json($result);
     }

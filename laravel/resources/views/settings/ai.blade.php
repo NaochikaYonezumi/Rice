@@ -181,7 +181,7 @@
                                 @endforelse
                             </select>
                             @if(empty($models['ollama']))
-                                <p class="text-xs text-amber-500 mt-1">Ollamaにモデルがインストールされていません。<code class="bg-gray-100 px-1 rounded">ollama pull llama3.1</code> で追加できます。</p>
+                                <p class="text-xs text-amber-500 mt-1">Ollamaにモデルがインストールされていません。<code class="bg-gray-100 px-1 rounded">docker compose exec ollama ollama pull llama3.2:1b</code> で追加できます（CPU向け軽量モデル）。</p>
                             @endif
                         </div>
 

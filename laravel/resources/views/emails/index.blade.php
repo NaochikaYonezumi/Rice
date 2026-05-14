@@ -164,6 +164,16 @@
                                             <span x-text="thread.last_email_at"></span>
                                         </span>
 
+                                        {{-- 未読チャットバッジ --}}
+                                        <template x-if="thread.unread_chat_count > 0">
+                                            <span class="px-2 py-0.5 rounded-full text-[9px] 2xl:text-[10px] font-black border inline-flex items-center gap-1 shadow-sm animate-pulse"
+                                                  style="background:#fef3c7;color:#92400e;border-color:#fde68a;"
+                                                  :title="'未読チャット ' + thread.unread_chat_count + ' 件'">
+                                                <i class="fas fa-comment-dots"></i>
+                                                <span x-text="thread.unread_chat_count"></span>
+                                            </span>
+                                        </template>
+
                                         {{-- ステータスバッジ (全表示モード時) --}}
                                         <template x-if="allStatusMode">
                                             <span class="px-2 py-0.5 rounded text-[8px] 2xl:text-[10px] font-black uppercase shadow-sm border inline-flex items-center"
@@ -249,16 +259,17 @@
                                     <i class="fas fa-reply-all text-xs"></i>
                                 </button>
 
-                                {{-- チャット切替ボタン (このスレッド専用のチャット) --}}
-                                <button @click="toggleChatPanel()" title="このスレッド専用のチャット"
-                                    :class="chatOpen ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'"
+                                {{-- チャット切替ボタン (このスレッド専用のチャット - 未読のみバッジ表示) --}}
+                                <button @click="toggleChatPanel()" title="このスレッド全体のチャット"
+                                    :class="chatOpen ? 'bg-gray-800 text-white border-gray-800' : 'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-200'"
                                     class="h-9 inline-flex items-center gap-1.5 px-3 rounded-lg border text-xs font-bold transition-all relative">
-                                    <i class="fas fa-comments"></i>
+                                    <i class="fas fa-hashtag"></i>
                                     <span>チャット</span>
-                                    <span x-show="chatComments.length > 0"
-                                          class="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black"
-                                          :class="chatOpen ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'"
-                                          x-text="chatComments.length"></span>
+                                    <span x-show="threadChatUnread > 0"
+                                          class="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black animate-pulse"
+                                          style="background-color:#f59e0b;color:#fff;"
+                                          x-text="threadChatUnread"
+                                          title="未読チャット数"></span>
                                 </button>
 
                                 {{-- 担当者トグル (スレッド上部に独立配置) --}}
@@ -415,6 +426,24 @@
                                                         title="全員に返信">
                                                     <i class="fas fa-reply-all"></i> 全員
                                                 </button>
+                                                {{-- このメールをナレッジに登録 --}}
+                                                <button @click.stop="openKnowledgeRegister(email)"
+                                                        class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors shrink-0"
+                                                        style="background-color:#ffffff;color:#475569;border:1px solid #e2e8f0;"
+                                                        onmouseover="this.style.backgroundColor='#f1f5f9';this.style.color='#0f172a';"
+                                                        onmouseout="this.style.backgroundColor='#ffffff';this.style.color='#475569';"
+                                                        title="このメールをナレッジに登録">
+                                                    <i class="fas fa-book"></i> ナレッジ
+                                                </button>
+                                                {{-- このメールに紐付くチャット (per-email) --}}
+                                                <button @click.stop="openEmailChat(email)"
+                                                        class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold transition-colors shrink-0"
+                                                        style="background-color:#ffffff;color:#7c3aed;border:1px solid #ddd6fe;"
+                                                        onmouseover="this.style.backgroundColor='#7c3aed';this.style.color='#ffffff';"
+                                                        onmouseout="this.style.backgroundColor='#ffffff';this.style.color='#7c3aed';"
+                                                        title="このメールに関するチャット">
+                                                    <i class="fas fa-comment-dots"></i> チャット
+                                                </button>
                                                 <i class="fas fa-chevron-down text-gray-300 group-hover:text-blue-500 transition-all shrink-0 text-[10px] mt-1"
                                                    :class="expandedEmailIds.includes(email.id) ? 'rotate-180' : ''"></i>
                                             </div>
@@ -454,7 +483,7 @@
                                                             </div>
                                                         </template>
                                                     </div>
-                                                    <div class="flex flex-wrap gap-2">
+                                                    <div class="flex flex-wrap gap-2 items-center">
                                                         <template x-for="at in email.attachments" :key="at.id">
                                                             <a :href="at.url" class="flex items-center gap-2 bg-gray-50 border border-gray-100 px-3 py-2 rounded-xl text-[10px] font-black text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm">
                                                                 <i class="fas fa-paperclip"></i><span x-text="at.filename"></span>
@@ -475,114 +504,199 @@
                     <aside x-show="chatOpen" x-transition:enter="transition ease-out duration-200"
                            x-transition:enter-start="translate-x-4 opacity-0"
                            x-transition:enter-end="translate-x-0 opacity-100"
-                           class="w-[360px] shrink-0 border-l border-emerald-100 bg-emerald-50/20 flex flex-col overflow-hidden">
+                           :style="'width:' + chatPanelWidth + 'px'"
+                           class="thread-chat-panel shrink-0 flex flex-col overflow-hidden relative">
+                        {{-- リサイズハンドル (左端) --}}
+                        <div class="absolute top-0 left-0 w-1.5 h-full cursor-col-resize z-50 thread-chat-resize"
+                             @mousedown.prevent="startResizeChatPanel($event)"
+                             title="ドラッグして幅を変更"></div>
                         {{-- ヘッダ --}}
-                        <div class="shrink-0 px-4 py-3 bg-white border-b border-emerald-100 flex items-center justify-between">
-                            <div class="flex items-center gap-2 min-w-0">
-                                <div class="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white shrink-0">
-                                    <i class="fas fa-comments"></i>
-                                </div>
-                                <div class="min-w-0">
-                                    <h3 class="text-sm font-bold text-gray-800">スレッド内チャット</h3>
-                                    <p class="text-[10px] text-gray-400 truncate" x-text="selectedThread?.subject || ''"></p>
+                        <div class="thread-chat-header shrink-0 px-4 py-3 flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 min-w-0 flex-1">
+                                <template x-if="chatScope.kind === 'thread'">
+                                    <span class="thread-chat-hash">#</span>
+                                </template>
+                                <template x-if="chatScope.kind === 'email'">
+                                    <i class="fas fa-envelope-open-text" style="color:#7c3aed;font-size:14px;"></i>
+                                </template>
+                                <div class="min-w-0 flex-1">
+                                    <h3 class="text-sm font-bold" style="color:#111827;"
+                                        x-text="chatScope.kind === 'email' ? 'このメールのチャット' : 'スレッド全体のチャット'"></h3>
+                                    <p class="text-[10px] truncate" style="color:#6b7280;"
+                                       x-text="chatScope.kind === 'email' ? (chatScope.email_subject || '(件名なし)') : (selectedThread?.subject || '')"></p>
                                 </div>
                             </div>
-                            <button @click="toggleChatPanel()" class="text-gray-400 hover:text-emerald-600 p-1" title="閉じる">
+                            {{-- スコープ切替トグル --}}
+                            <div class="flex rounded-md overflow-hidden text-[10px] font-bold shrink-0"
+                                 style="border:1px solid #e5e7eb;">
+                                <button @click="setChatScopeThread()"
+                                        :style="chatScope.kind === 'thread'
+                                            ? 'background:#2563eb;color:#fff;'
+                                            : 'background:#ffffff;color:#6b7280;'"
+                                        class="px-2 py-1 transition-colors"
+                                        title="スレッド全体のチャットに切替">全体</button>
+                                <button @click="chatScope.kind === 'email' ? null : null"
+                                        :disabled="chatScope.kind !== 'email'"
+                                        :style="chatScope.kind === 'email'
+                                            ? 'background:#7c3aed;color:#fff;'
+                                            : 'background:#ffffff;color:#d1d5db;cursor:not-allowed;'"
+                                        class="px-2 py-1 transition-colors"
+                                        :title="chatScope.kind === 'email' ? '現在このメール固有のチャットを表示中' : 'メールの💬チャットボタンから開いてください'">メール</button>
+                            </div>
+                            <button @click="toggleChatPanel()" class="thread-chat-close" title="閉じる">
                                 <i class="fas fa-times text-sm"></i>
                             </button>
                         </div>
 
                         {{-- メッセージリスト --}}
-                        <div class="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar" id="chat-messages">
+                        <div class="thread-chat-messages flex-1 overflow-y-auto custom-scrollbar" id="chat-messages"
+                             @scroll.passive="onChatScroll($event)">
                             <template x-if="chatLoading">
-                                <div class="flex items-center justify-center py-8 text-emerald-300">
+                                <div class="flex items-center justify-center py-8" style="color:#3b82f6;">
                                     <i class="fas fa-circle-notch fa-spin"></i>
                                 </div>
                             </template>
                             <template x-if="!chatLoading && chatComments.length === 0">
-                                <div class="text-center py-12 text-gray-400">
-                                    <i class="fas fa-comment-slash fa-2x text-gray-200 mb-3"></i>
-                                    <p class="text-xs font-semibold">まだメッセージがありません</p>
-                                    <p class="text-[10px] text-gray-400 mt-1">下から最初のメッセージを送ってみましょう</p>
+                                <div class="text-center py-12" style="color:#9ca3af;">
+                                    <i class="fas fa-hashtag fa-2x mb-3" style="color:#e5e7eb;"></i>
+                                    <p class="text-xs font-semibold" style="color:#374151;">まだメッセージがありません</p>
+                                    <p class="text-[10px] mt-1">最初のメッセージを送ってみましょう</p>
                                 </div>
                             </template>
-                            <template x-for="c in chatComments" :key="c.id">
-                                <div class="flex" :class="c.is_author ? 'justify-end' : 'justify-start'">
-                                    <div class="max-w-[80%] group">
-                                        <div class="flex items-center gap-2 mb-0.5"
-                                             :class="c.is_author ? 'justify-end' : 'justify-start'">
-                                            <span class="text-[10px] font-bold text-gray-500" x-text="c.author"></span>
-                                            <span class="text-[10px] text-gray-400" x-text="c.created_at"></span>
-                                            <template x-if="isMentionedToMe(c.content)">
-                                                <span class="text-[9px] font-black px-1 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">@あなた宛</span>
-                                            </template>
-                                        </div>
-                                        <div class="rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words leading-relaxed shadow-sm"
-                                             :style="c.is_author
-                                                ? 'background-color:#10b981;color:#ffffff;'
-                                                : 'background-color:#ffffff;color:#1f2937;border:1px solid #e5e7eb;'"
-                                             x-html="renderMentions(c.content, c.is_author)"></div>
-                                        <div class="text-right mt-1" x-show="c.is_author">
-                                            <button @click="deleteChatComment(c.id)"
-                                                    class="text-[10px] text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    title="削除">
-                                                <i class="fas fa-trash"></i>
+                            <template x-for="(c, idx) in chatComments" :key="c.id">
+                                <div class="msg-row group"
+                                     :style="isMentionedToMe(c.content) ? 'background-color:#fff7ed;border-left:3px solid #f97316;' : ''">
+                                    <div class="avatar" :style="'background-color:' + threadChatAvatarColor(c.user_id)" x-text="(c.author || '?').charAt(0).toUpperCase()"></div>
+                                    <div class="ts-header">
+                                        <span class="author" x-text="c.author"></span>
+                                        <span class="ts" x-text="c.created_at"></span>
+                                        <template x-if="isMentionedToMe(c.content)">
+                                            <span class="ml-1 text-[9px] font-black px-1 py-0.5 rounded" style="background-color:#fef3c7;color:#92400e;border:1px solid #fde68a;">@あなた宛</span>
+                                        </template>
+                                        {{-- どのメールに紐付くか (全体表示時のみ) --}}
+                                        <template x-if="chatScope.kind === 'thread' && c.email_id">
+                                            <button @click="focusEmailFromChat(c.email_id)"
+                                                    class="ml-1 inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded transition-colors"
+                                                    style="background-color:#ede9fe;color:#5b21b6;border:1px solid #ddd6fe;"
+                                                    onmouseover="this.style.backgroundColor='#5b21b6';this.style.color='#ffffff';"
+                                                    onmouseout="this.style.backgroundColor='#ede9fe';this.style.color='#5b21b6';"
+                                                    :title="'対象メール: ' + (emailSubjectFor(c.email_id) || '(件名なし)') + ' / クリックで絞り込み'">
+                                                <i class="fas fa-envelope text-[8px]"></i>
+                                                <span class="truncate" style="max-width:120px;" x-text="emailSubjectFor(c.email_id) || '対象メール'"></span>
                                             </button>
-                                        </div>
+                                        </template>
                                     </div>
+                                    <div class="body" x-html="renderMentions(c.content, false)" x-show="c.content"></div>
+                                    {{-- 添付ファイル --}}
+                                    <div x-show="(c.attachments || []).length > 0"
+                                         style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
+                                        <template x-for="a in (c.attachments || [])" :key="a.id">
+                                            <div>
+                                                <template x-if="a.is_image">
+                                                    <a :href="a.url" :title="a.filename" target="_blank">
+                                                        <img :src="a.inline_url" :alt="a.filename"
+                                                             style="max-width:200px;max-height:160px;border-radius:8px;border:1px solid #e5e7eb;cursor:zoom-in;object-fit:cover;">
+                                                    </a>
+                                                </template>
+                                                <template x-if="!a.is_image">
+                                                    <a :href="a.url" :title="a.filename"
+                                                       style="display:inline-flex;align-items:center;gap:6px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;padding:6px 10px;font-size:12px;color:#374151;text-decoration:none;max-width:240px;">
+                                                        <i class="fas fa-paperclip"></i>
+                                                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;font-weight:600;" x-text="a.filename"></span>
+                                                        <span style="color:#9ca3af;font-size:10px;" x-text="formatFileBytes(a.size)"></span>
+                                                    </a>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <template x-if="c.is_author">
+                                        <button @click="deleteChatComment(c.id)"
+                                                class="msg-actions opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="削除">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </template>
                                 </div>
                             </template>
                         </div>
 
+                        {{-- 最新へスクロールするボタン (上にスクロールしている時のみ表示) --}}
+                        <button x-show="chatScrolledUp" x-cloak
+                                @click="scrollChatToBottom(false)"
+                                title="最新メッセージへ"
+                                style="position:absolute;right:14px;bottom:96px;z-index:10;background:#2563eb;color:#fff;border:none;border-radius:999px;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(37,99,235,0.4);cursor:pointer;"
+                                onmouseover="this.style.backgroundColor='#1d4ed8'"
+                                onmouseout="this.style.backgroundColor='#2563eb'">
+                            <i class="fas fa-arrow-down"></i>
+                        </button>
+
                         {{-- 入力エリア --}}
-                        <div class="shrink-0 border-t border-emerald-100 bg-white p-3 relative">
+                        <div class="shrink-0 thread-chat-input-wrap relative">
 
                             {{-- メンション候補ドロップダウン --}}
                             <template x-if="mentionOpen && mentionMatches.length > 0">
-                                <div class="absolute left-3 right-3 bottom-full mb-2 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar z-50">
-                                    <div class="px-3 py-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-100 bg-gray-50/60">
+                                <div class="absolute left-3 right-3 bottom-full mb-2 rounded-lg shadow-2xl overflow-hidden max-h-56 overflow-y-auto custom-scrollbar z-50"
+                                     style="background:#ffffff;border:1px solid #e5e7eb;">
+                                    <div class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest" style="color:#9ca3af;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
                                         @メンション (↑↓ で移動 / Enter で選択 / Esc でキャンセル)
                                     </div>
                                     <template x-for="(u, i) in mentionMatches" :key="u.id">
                                         <button type="button"
                                                 @click.stop="pickMention(u)"
                                                 @mouseenter="mentionIndex = i"
-                                                :class="mentionIndex === i ? 'bg-emerald-50 text-emerald-700' : 'text-gray-700 hover:bg-gray-50'"
-                                                class="w-full text-left px-3 py-2 text-sm font-semibold flex items-center gap-2 transition-colors">
-                                            <div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs shrink-0"
+                                                :style="mentionIndex === i ? 'background-color:#eff6ff;color:#1d4ed8;' : 'color:#374151;'"
+                                                class="w-full text-left px-3 py-2 text-sm font-semibold flex items-center gap-2">
+                                            <div class="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
+                                                 :style="'background-color:' + threadChatAvatarColor(u.id) + ';color:#fff;'"
                                                  x-text="(u.name || '?').charAt(0)"></div>
                                             <div class="min-w-0 flex-1">
                                                 <p class="truncate" x-text="u.name"></p>
-                                                <p class="text-[10px] text-gray-400 truncate" x-text="u.email"></p>
+                                                <p class="text-[10px] truncate" style="color:#9ca3af;" x-text="u.email"></p>
                                             </div>
-                                            <i x-show="mentionIndex === i" class="fas fa-arrow-turn-down text-[10px] text-emerald-500"></i>
                                         </button>
                                     </template>
                                 </div>
                             </template>
 
-                            <div class="flex items-end gap-2">
+                            {{-- 選択中の添付ファイル --}}
+                            <div x-show="chatPendingFiles.length > 0" style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 0;">
+                                <template x-for="(f, i) in chatPendingFiles" :key="i">
+                                    <span style="display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600;">
+                                        <i class="fas fa-paperclip"></i>
+                                        <span x-text="f.name"></span>
+                                        <span style="color:#6b7280;" x-text="'(' + formatFileBytes(f.size) + ')'"></span>
+                                        <button type="button" @click="removeChatPendingFile(i)" style="background:none;border:none;color:#1e40af;padding:0 2px;cursor:pointer;" title="除外"><i class="fas fa-times"></i></button>
+                                    </span>
+                                </template>
+                            </div>
+
+                            <div class="thread-chat-input-box">
                                 <textarea id="chat-input-textarea"
                                           x-model="chatInput"
-                                          rows="2"
-                                          @input="onChatInput($event)"
+                                          rows="1"
+                                          @input="onChatInput($event); threadChatAutoresize($event)"
                                           @keydown.arrow-up="onMentionKeydown($event, 'up')"
                                           @keydown.arrow-down="onMentionKeydown($event, 'down')"
                                           @keydown.escape="closeMention()"
-                                          @keydown.enter.exact.prevent="onChatEnter()"
-                                          @keydown.enter.shift="" @keydown.enter.meta="" @keydown.enter.ctrl=""
-                                          placeholder="メッセージを入力 (@で担当者をメンション / Enterで送信 / Shift+Enterで改行)"
-                                          class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300 resize-none"></textarea>
+                                          @keydown="onChatKeydown($event)"
+                                          placeholder="メッセージを入力 (@で担当者をメンション)"></textarea>
+                                {{-- ファイル添付 --}}
+                                <input type="file" x-ref="threadChatFileInput" multiple style="display:none;" @change="onChatFilesPicked($event)">
+                                <button @click="$refs.threadChatFileInput.click()"
+                                        title="ファイルを添付"
+                                        class="thread-chat-send" style="color:#94a3b8;">
+                                    <i class="fas fa-paperclip"></i>
+                                </button>
                                 <button @click="sendChatComment()"
-                                        :disabled="!chatInput.trim() || chatSending"
-                                        class="h-10 w-10 inline-flex items-center justify-center rounded-xl text-white shadow-md disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
-                                        style="background-color:#10b981;">
+                                        :disabled="(!chatInput.trim() && chatPendingFiles.length === 0) || chatSending"
+                                        title="送信 (Ctrl+Enter)"
+                                        class="thread-chat-send disabled:opacity-30">
                                     <i class="fas" :class="chatSending ? 'fa-spinner animate-spin' : 'fa-paper-plane'"></i>
                                 </button>
                             </div>
-                            <p class="text-[10px] text-gray-400 mt-1.5">
-                                <i class="fas fa-at mr-1"></i>
-                                <span class="font-bold">@名前</span> で担当者にメンションできます
+                            </div>
+                            <p class="text-[10px] mt-1.5" style="color:#949ba4;">
+                                <kbd class="thread-chat-kbd">Ctrl</kbd> + <kbd class="thread-chat-kbd">Enter</kbd> で送信 / <kbd class="thread-chat-kbd">Enter</kbd> で改行 / <span style="color:#dbdee1;font-weight:600;">@名前</span> で メンション / <i class="fas fa-paperclip"></i> 添付
                             </p>
                         </div>
                     </aside>
@@ -626,6 +740,136 @@
             {{-- 本文 --}}
             <div class="flex-1 overflow-y-auto custom-scrollbar p-5"
                  style="min-height:0;background-color:#ffffff;">
+                {{-- モデル選択ピッカー --}}
+                <div class="mb-4 p-3 rounded-xl border" style="background-color:#fafafa;border-color:#e5e7eb;">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">
+                            <i class="fas fa-cog text-[9px] mr-1"></i>AIモデル
+                        </span>
+                        <span x-show="aiPickerLoading" class="text-[10px]" style="color:#9ca3af;">
+                            <i class="fas fa-circle-notch fa-spin"></i> 読み込み中
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        {{-- プロバイダー切り替え --}}
+                        <div class="flex rounded-lg border border-gray-200 overflow-hidden text-[11px]">
+                            <button type="button" @click="setAiProvider('ollama')"
+                                    :class="aiProvider === 'ollama' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                    class="px-3 py-1 transition-colors">Ollama</button>
+                            <button type="button" @click="setAiProvider('claude')"
+                                    :class="aiProvider === 'claude' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                    :title="!aiHasClaudeKey ? 'APIキー未設定' : ''"
+                                    class="px-3 py-1 transition-colors border-l border-gray-200">Claude</button>
+                            <button type="button" @click="setAiProvider('gemini')"
+                                    :class="aiProvider === 'gemini' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                    :title="!aiHasGeminiKey ? 'APIキー未設定' : ''"
+                                    class="px-3 py-1 transition-colors border-l border-gray-200">Gemini</button>
+                        </div>
+                        {{-- モデル選択 --}}
+                        <select x-model="aiModel"
+                                class="border border-gray-200 rounded-lg px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white min-w-[180px]">
+                            <template x-if="aiCurrentModels.length === 0">
+                                <option value="">モデルなし</option>
+                            </template>
+                            <template x-for="m in aiCurrentModels" :key="m.id || m">
+                                <option :value="m.id || m" x-text="m.name || m"></option>
+                            </template>
+                        </select>
+                        {{-- 再生成ボタン (モデル変更後の便利ボタン) --}}
+                        <button type="button" @click="loadThreadSummary(true)"
+                                :disabled="threadSummaryLoading || !aiModel"
+                                class="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-40"
+                                style="background-color:#4f46e5;color:#fff;">
+                            <i class="fas fa-bolt"></i> このモデルで生成
+                        </button>
+                    </div>
+                    <template x-if="aiProvider === 'claude' && !aiHasClaudeKey">
+                        <p class="mt-1 text-[10px]" style="color:#d97706;">⚠ Claude APIキー未設定。AI設定から登録してください。</p>
+                    </template>
+                    <template x-if="aiProvider === 'gemini' && !aiHasGeminiKey">
+                        <p class="mt-1 text-[10px]" style="color:#d97706;">⚠ Gemini APIキー未設定。AI設定から登録してください。</p>
+                    </template>
+                </div>
+
+                {{-- スキル選択 + プロンプト編集 --}}
+                <div class="mb-4 p-3 rounded-xl border" style="background-color:#fafafa;border-color:#e5e7eb;">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">
+                            <i class="fas fa-lightbulb text-[9px] mr-1"></i>スキル / 指示
+                        </span>
+                        <button type="button" @click="summaryShowPrompt = !summaryShowPrompt"
+                                class="text-[10px] font-bold underline" style="color:#4f46e5;">
+                            <span x-show="!summaryShowPrompt">追加指示を入力</span>
+                            <span x-show="summaryShowPrompt">追加指示を閉じる</span>
+                        </button>
+                    </div>
+                    {{-- スキルピッカー --}}
+                    <div class="flex flex-wrap gap-1.5">
+                        <template x-for="(skill, key) in aiSkills" :key="key">
+                            <button type="button" @click="summarySkill = key"
+                                    :title="skill.description"
+                                    class="px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors"
+                                    :class="summarySkill === key ? '' : 'hover:bg-white'"
+                                    :style="summarySkill === key
+                                        ? 'background-color:#4f46e5;color:#ffffff;border-color:#4f46e5;'
+                                        : 'background-color:#ffffff;color:#374151;border-color:#e5e7eb;'">
+                                <i class="fas fa-magic text-[9px] mr-1"></i>
+                                <span x-text="skill.name"></span>
+                            </button>
+                        </template>
+                    </div>
+                    <p class="mt-1.5 text-[10px] leading-snug" style="color:#9ca3af;"
+                       x-text="aiSkills[summarySkill]?.description || ''"></p>
+
+                    {{-- 追加指示 (プロンプト) --}}
+                    <div x-show="summaryShowPrompt" x-cloak class="mt-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">追加指示 (任意)</label>
+                            <span class="text-[10px]" style="color:#6366f1;"><kbd class="px-1 bg-white border border-gray-200 rounded text-[9px]">/</kbd> でコレクション挿入</span>
+                        </div>
+                        <div class="relative prompt-editor-container">
+                            <div x-ref="summaryPromptHighlight" class="prompt-editor-highlight" aria-hidden="true"
+                                 x-html="renderSummaryHighlight(summaryUserPrompt)"></div>
+                            <textarea x-ref="summaryPromptArea"
+                                      x-model="summaryUserPrompt"
+                                      @input="onSummaryPromptInput($event); syncSummaryHighlightScroll()"
+                                      @scroll="syncSummaryHighlightScroll()"
+                                      @keydown="onSummaryPromptKeyDown($event)"
+                                      @blur="setTimeout(() => summarySlash.open = false, 150)"
+                                      rows="3"
+                                      placeholder="例: /(コレクション名) を参照、丁寧な敬語で、技術用語は平易に。"
+                                      class="w-full text-sm border rounded-lg resize-y prompt-editor-input"
+                                      style="border-color:#e5e7eb;"></textarea>
+
+                            {{-- スラッシュコマンド候補 --}}
+                            <div x-show="summarySlash.open" x-cloak
+                                 class="absolute left-0 right-0 z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto"
+                                 style="top:100%;">
+                                <div class="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                                    <span><i class="fas fa-folder text-indigo-400 mr-1"></i>ナレッジコレクション</span>
+                                    <span class="text-[9px] text-gray-300" x-show="summarySlash.loading">読み込み中...</span>
+                                </div>
+                                <template x-for="(c, idx) in filteredSummaryCollections" :key="c.name + idx">
+                                    <button type="button"
+                                            @mousedown.prevent="insertSummaryCollection(c.name)"
+                                            @mouseenter="summarySlash.activeIdx = idx"
+                                            :class="idx === summarySlash.activeIdx ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'"
+                                            class="w-full text-left px-3 py-2 text-xs flex items-center gap-2">
+                                        <i class="fas fa-folder text-indigo-400 text-[10px]"></i>
+                                        <span class="flex-1 font-mono" x-text="c.name"></span>
+                                    </button>
+                                </template>
+                                <template x-if="!summarySlash.loading && filteredSummaryCollections.length === 0">
+                                    <p class="px-3 py-3 text-xs text-gray-400 text-center">該当するコレクションがありません</p>
+                                </template>
+                            </div>
+                        </div>
+                        <p class="mt-1 text-[10px]" style="color:#9ca3af;">
+                            スキルの基本指示に加えて、この依頼に固有の指示を追加できます。空でも OK。
+                        </p>
+                    </div>
+                </div>
+
                 {{-- ローディング --}}
                 <div x-show="threadSummaryLoading" class="flex flex-col items-center justify-center py-10">
                     <i class="fas fa-circle-notch fa-spin fa-2x mb-3" style="color:#818cf8;"></i>
@@ -636,8 +880,8 @@
 
                 {{-- エラー --}}
                 <div x-show="!threadSummaryLoading && threadSummaryError"
-                     class="rounded-lg p-4 text-sm"
-                     style="background-color:#fef2f2;color:#b91c1c;border:1px solid #fecaca;"
+                     class="rounded-lg p-4 text-sm whitespace-pre-wrap break-words"
+                     style="background-color:#fef2f2;color:#b91c1c;border:1px solid #fecaca;max-height:24rem;overflow-y:auto;"
                      x-text="threadSummaryError"></div>
 
                 {{-- 結果 --}}
@@ -648,6 +892,13 @@
                             <i class="fas fa-envelope"></i>
                             <span x-text="(threadSummary?.email_count || 0) + ' 通'"></span>
                         </span>
+                        <template x-if="threadSummary?.skill_name">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
+                                  style="background-color:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;">
+                                <i class="fas fa-magic"></i>
+                                <span x-text="threadSummary.skill_name"></span>
+                            </span>
+                        </template>
                         <template x-if="threadSummary?.ticket">
                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full"
                                   style="background-color:#fef3c7;color:#92400e;border:1px solid #fde68a;">
@@ -658,7 +909,7 @@
                     </div>
                     <div class="rounded-xl p-4 text-sm leading-relaxed whitespace-pre-wrap"
                          style="background-color:#f9fafb;color:#111827;border:1px solid #e5e7eb;word-break:break-word;"
-                         x-text="threadSummary.summary"></div>
+                         x-text="threadSummary?.summary || ''"></div>
                 </div>
             </div>
 
@@ -692,6 +943,90 @@
                         閉じる
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- ナレッジ登録モーダル (メール本文を編集 → 登録) --}}
+    <div x-show="knowledgeRegisterOpen" x-cloak
+         class="fixed inset-0 z-[2000] flex items-center justify-center p-4"
+         style="background-color:rgba(15,23,42,0.55);"
+         @click.self="knowledgeRegisterOpen = false"
+         @keydown.escape.window="knowledgeRegisterOpen = false">
+        <div class="w-full max-w-3xl rounded-2xl overflow-hidden flex flex-col"
+             style="background-color:#ffffff;max-height:90vh;box-shadow:0 25px 50px -12px rgba(0,0,0,0.4);">
+            <div class="shrink-0 px-5 py-3 flex items-center justify-between gap-3 border-b border-emerald-100"
+                 style="background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);">
+                <div class="flex items-center gap-2 min-w-0">
+                    <div class="w-9 h-9 rounded-lg inline-flex items-center justify-center shrink-0" style="background-color:#059669;color:#ffffff;">
+                        <i class="fas fa-book"></i>
+                    </div>
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-extrabold" style="color:#065f46;">メールをナレッジに登録</h3>
+                        <p class="text-[10px]" style="color:#10b981;">登録前に個人情報をマスクしてください</p>
+                    </div>
+                </div>
+                <button @click="knowledgeRegisterOpen = false" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-white" title="閉じる">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-5 space-y-4">
+                <div x-show="knowledgeLoading" class="flex items-center justify-center py-8 text-emerald-300">
+                    <i class="fas fa-circle-notch fa-spin"></i>
+                    <span class="ml-2 text-sm">読み込み中...</span>
+                </div>
+
+                <template x-if="knowledgeError">
+                    <div class="rounded-lg p-3 text-sm bg-red-50 text-red-700 border border-red-200" x-text="knowledgeError"></div>
+                </template>
+
+                <div x-show="!knowledgeLoading && knowledgeForm">
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800 mb-3">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>
+                        <span x-text="knowledgeForm.suggested_pii_warning || ''"></span>
+                        <p class="mt-1.5 text-[11px]">よく使うマスク例:
+                            <code class="bg-white px-1 rounded">[氏名]</code>
+                            <code class="bg-white px-1 rounded">[メール]</code>
+                            <code class="bg-white px-1 rounded">[電話]</code>
+                            <code class="bg-white px-1 rounded">[住所]</code>
+                            <button type="button" @click="applyMaskHeuristics()" class="ml-2 underline font-bold">自動マスク</button>
+                        </p>
+                    </div>
+
+                    <div>
+                        <label class="block text-[10px] font-extrabold uppercase tracking-widest text-gray-500 mb-1">タイトル</label>
+                        <input type="text" x-model="knowledgeForm.title" maxlength="255"
+                               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200">
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="block text-[10px] font-extrabold uppercase tracking-widest text-gray-500 mb-1">コレクション</label>
+                        <input type="text" x-model="knowledgeForm.collection" maxlength="64" placeholder="default"
+                               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200">
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-[10px] font-extrabold uppercase tracking-widest text-gray-500">登録する本文 (編集可)</label>
+                            <span class="text-[10px] text-gray-400" x-text="(knowledgeForm.content?.length || 0) + ' 字'"></span>
+                        </div>
+                        <textarea x-model="knowledgeForm.content" rows="14"
+                                  class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-200 resize-y"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="shrink-0 px-5 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-2">
+                <button type="button" @click="knowledgeRegisterOpen = false"
+                        class="px-3 py-1.5 rounded-lg text-sm text-gray-700 bg-white border border-gray-200 hover:bg-gray-100">キャンセル</button>
+                <button type="button" @click="submitKnowledgeRegister()"
+                        :disabled="knowledgeSaving || !knowledgeForm?.content"
+                        class="px-4 py-1.5 rounded-lg text-sm font-bold text-white disabled:opacity-50 inline-flex items-center gap-1.5"
+                        style="background-color:#059669;">
+                    <i x-show="knowledgeSaving" class="fas fa-circle-notch fa-spin text-xs"></i>
+                    <span x-text="knowledgeSaving ? '登録中…' : 'ナレッジに登録'"></span>
+                </button>
             </div>
         </div>
     </div>
@@ -792,9 +1127,21 @@
                     'bg-red-600 text-white': t.type === 'error',
                     'bg-gray-900 text-white': t.type !== 'success' && t.type !== 'error'
                  }"
-                 class="px-5 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-center gap-3 max-w-md pointer-events-auto animate-in slide-in-from-bottom duration-200">
-                <i class="fas" :class="t.type === 'success' ? 'fa-check-circle' : (t.type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle')"></i>
-                <span x-text="t.message" class="whitespace-pre-line"></span>
+                 class="px-5 py-3 rounded-xl shadow-2xl text-sm font-semibold flex items-start gap-3 max-w-md pointer-events-auto animate-in slide-in-from-bottom duration-200">
+                <i class="fas mt-0.5" :class="t.type === 'success' ? 'fa-check-circle' : (t.type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle')"></i>
+                <div class="flex-1 min-w-0">
+                    <p class="whitespace-pre-line" x-text="t.message"></p>
+                    <template x-if="t.actionLabel">
+                        <button type="button" @click="invokeToastAction(t)"
+                                class="mt-1.5 inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white/20 hover:bg-white/30 text-white text-xs font-bold">
+                            <i class="fas fa-arrow-up-right-from-square text-[10px]"></i>
+                            <span x-text="t.actionLabel"></span>
+                        </button>
+                    </template>
+                </div>
+                <button type="button" @click="dismissToast(t.id)" class="ml-2 -mr-1 text-white/70 hover:text-white" title="閉じる">
+                    <i class="fas fa-times text-xs"></i>
+                </button>
             </div>
         </template>
     </div>
@@ -817,9 +1164,35 @@ function emailApp() {
         // AI要約 (スレッド全体)
         threadSummaryOpen: false, threadSummaryLoading: false, threadSummary: null,
         threadSummaryError: '', threadSummaryCopied: false,
+        // AI モデルピッカー (要約共通)
+        aiPickerLoading: false, aiPickerLoaded: false,
+        aiProvider: 'ollama', aiModel: '',
+        aiOllamaModels: [], aiClaudeModels: [], aiGeminiModels: [],
+        aiHasClaudeKey: false, aiHasGeminiKey: false,
+        // ナレッジ登録 (メール本文を編集してから登録)
+        knowledgeRegisterOpen: false, knowledgeLoading: false, knowledgeSaving: false,
+        knowledgeForm: null, knowledgeError: '',
+        // AI 要約スキル / プロンプト編集 (ユーザー個別、show_in_summary=true のみ)
+        aiSkills: @json($userSummarySkills ?? $userAiSkills ?? config('ai_skills.skills', [])),
+        summarySkill: localStorage.getItem('summarySkill') || @json(collect($userSummarySkills ?? [])->filter(fn($s) => ($s['is_default_summary'] ?? false))->keys()->first() ?? array_key_first($userSummarySkills ?? []) ?? 'summarize'),
+        summaryUserPrompt: '',
+        summaryShowPrompt: false,
+        // 要約モーダル用スラッシュコマンド
+        summarySlash: { open: false, query: '', startPos: 0, activeIdx: 0, loading: false },
+        summaryCollections: [],
+        summaryCollectionsLoaded: false,
         // チャット関連 (スレッド毎)
         chatOpen: false, chatComments: [], chatLoading: false, chatInput: '', chatSending: false,
         chatPollIntervalId: null,
+        chatPanelWidth: parseInt(localStorage.getItem('chatPanelWidth') || '360', 10),
+        // チャット開閉後にバッジを抑制するための明示フラグ (true の間は 0)
+        _chatReadJustNow: false,
+        // チャットスコープ: 'thread' = スレッド全体 / 'email' = 特定メール
+        chatScope: { kind: 'thread', email_id: null, email_subject: '', email_from: '' },
+        // 最新へスクロールボタン用 (ユーザーがスクロールアップしている時に表示)
+        chatScrolledUp: false,
+        // スレッド全体チャット添付
+        chatPendingFiles: [],
         // @メンション機能
         mentionOpen: false, mentionQuery: '', mentionStart: -1, mentionIndex: 0,
         selectionMode: false, selectedThreadIds: [], longPressTimer: null, isLongPressing: false,
@@ -834,13 +1207,185 @@ function emailApp() {
         get csrfToken() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
         },
+        // スレッド上部チャットの未読件数 (チャットを開いている / 開いた直後は 0)
+        get threadChatUnread() {
+            if (this.chatOpen || this._chatReadJustNow) return 0;
+            const row = (this.threads || []).find(t => t.id === this.selectedThreadId);
+            return row?.unread_chat_count || 0;
+        },
         jsonHeaders() {
             return { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' };
         },
-        toast(message, type = 'info') {
+        toast(message, type = 'info', opts = {}) {
             const id = Date.now() + Math.random();
-            this.toasts.push({ id, message, type });
-            setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3500);
+            const ttl = opts.ttl ?? (opts.actionLabel ? 12000 : 3500);  // アクション付きは長め
+            this.toasts.push({
+                id, message, type,
+                actionLabel: opts.actionLabel ?? null,
+                actionUrl:   opts.actionUrl   ?? null,
+                actionFn:    opts.actionFn    ?? null,
+            });
+            setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, ttl);
+        },
+        dismissToast(id) { this.toasts = this.toasts.filter(t => t.id !== id); },
+        invokeToastAction(t) {
+            if (t.actionFn) { try { t.actionFn(); } catch (_) {} }
+            if (t.actionUrl) { window.open(t.actionUrl, '_blank'); }
+            this.dismissToast(t.id);
+        },
+
+        // OS のデスクトップ通知 (許可済みかつタブ非フォーカス時のみ)
+        _notifyDesktop(title, body, opts = {}) {
+            try {
+                if (!('Notification' in window)) return;
+                const open = (perm) => {
+                    if (perm !== 'granted') return;
+                    const n = new Notification(title, { body, tag: opts.tag || ('rice-ai-' + Date.now()) });
+                    if (opts.onClick) {
+                        n.onclick = (e) => { e.preventDefault(); window.focus(); opts.onClick(); n.close(); };
+                    }
+                };
+                if (document.hasFocus() && !opts.force) return;
+                if (Notification.permission === 'granted') open('granted');
+                else if (Notification.permission !== 'denied') Notification.requestPermission().then(open);
+            } catch (_) {}
+        },
+
+        // ===== AI要約モーダルの追加指示用スラッシュコマンド =====
+        get filteredSummaryCollections() {
+            const q = (this.summarySlash.query || '').toLowerCase();
+            if (!q) return this.summaryCollections;
+            const prefix = [], rest = [];
+            this.summaryCollections.forEach(c => {
+                const name = (c.name || '').toLowerCase();
+                if (name.startsWith(q)) prefix.push(c);
+                else if (name.includes(q)) rest.push(c);
+            });
+            return [...prefix, ...rest];
+        },
+        async loadSummaryCollections() {
+            if (this.summaryCollectionsLoaded) return;
+            this.summarySlash.loading = true;
+            try {
+                const res = await fetch('/api/knowledge/collections', { headers: { Accept: 'application/json' } });
+                if (res.ok) { this.summaryCollections = (await res.json()).collections || []; }
+            } catch (_) {}
+            this.summaryCollectionsLoaded = true;
+            this.summarySlash.loading = false;
+        },
+        onSummaryPromptInput(e) {
+            const ta = e.target, pos = ta.selectionStart, value = ta.value;
+            let validIdx = -1;
+            for (let i = pos - 1; i >= 0; i--) {
+                const ch = value[i];
+                if (/\s/.test(ch)) break;
+                if (ch === '/') {
+                    const prev = value[i - 1];
+                    if (i === 0 || /\s/.test(prev)) validIdx = i;
+                    break;
+                }
+            }
+            if (validIdx === -1) { this.summarySlash.open = false; return; }
+            this.summarySlash.startPos = validIdx;
+            this.summarySlash.query    = value.slice(validIdx + 1, pos);
+            this.summarySlash.activeIdx = 0;
+            this.summarySlash.open = true;
+            this.loadSummaryCollections();
+        },
+        onSummaryPromptKeyDown(e) {
+            if (!this.summarySlash.open) return;
+            const list = this.filteredSummaryCollections;
+            if (e.key === 'ArrowDown') { e.preventDefault(); this.summarySlash.activeIdx = Math.min(this.summarySlash.activeIdx + 1, Math.max(list.length - 1, 0)); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); this.summarySlash.activeIdx = Math.max(this.summarySlash.activeIdx - 1, 0); }
+            else if (e.key === 'Enter' || e.key === 'Tab') {
+                if (list[this.summarySlash.activeIdx]) { e.preventDefault(); this.insertSummaryCollection(list[this.summarySlash.activeIdx].name); }
+            } else if (e.key === 'Escape') { e.preventDefault(); this.summarySlash.open = false; }
+        },
+        insertSummaryCollection(name) {
+            const ta = this.$refs.summaryPromptArea;
+            if (!ta) return;
+            const value = ta.value, pos = ta.selectionStart;
+            const before = value.slice(0, this.summarySlash.startPos);
+            const after  = value.slice(pos);
+            const insertion = '/' + name + ' ';
+            this.summaryUserPrompt = before + insertion + after;
+            this.$nextTick(() => {
+                const newPos = before.length + insertion.length;
+                try { ta.focus(); ta.setSelectionRange(newPos, newPos); } catch (_) {}
+                this.syncSummaryHighlightScroll();
+            });
+            this.summarySlash.open = false;
+        },
+        renderSummaryHighlight(text) {
+            const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const tokenRegex = /(^|[\s])\/([^\s\/\\#?&]+)/gu;
+            let result = '', lastIndex = 0;
+            for (const m of (text || '').matchAll(tokenRegex)) {
+                const start = m.index + m[1].length;
+                result += esc((text || '').slice(lastIndex, start));
+                const token = m[2];
+                result += '<span class="col-tag">/' + esc(token) + '</span>';
+                lastIndex = start + 1 + token.length;
+            }
+            result += esc((text || '').slice(lastIndex));
+            if (result.endsWith('\n')) result += ' ';
+            return result;
+        },
+        syncSummaryHighlightScroll() {
+            const ta = this.$refs.summaryPromptArea;
+            const hi = this.$refs.summaryPromptHighlight;
+            if (!ta || !hi) return;
+            hi.scrollTop = ta.scrollTop;
+            hi.scrollLeft = ta.scrollLeft;
+        },
+
+        // バックグラウンドで他ウィンドウ (compose-window 等) が走らせた AI タスクの完了を監視
+        _aiBackgroundPoller: null,
+        _aiLastSeenId: parseInt(localStorage.getItem('aiLastSeenTaskId') || '0', 10),
+        startAiBackgroundPoll() {
+            if (this._aiBackgroundPoller) return;
+            const poll = async () => {
+                try {
+                    const res = await fetch(`/ai-tasks/recent?since_id=${this._aiLastSeenId}`, { headers: { Accept: 'application/json' } });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    (data.tasks || []).forEach(t => {
+                        // 既に同じ画面内 (この emails/index の loadThreadSummary など) で開いていたタスクは toast 済みなので、
+                        // 「自分が直接ハンドルしていない reply_assist / compose_assist」を中心に通知する。
+                        // ここでは reply_assist のみ toast を出す (要約は本画面で完結している)
+                        if (t.task_type === 'reply_assist' && t.related_email_id) {
+                            const url = `/emails/${t.related_email_id}/reply-window?ai_task=${t.id}`;
+                            if (t.status === 'done') {
+                                this.toast(
+                                    `AI返信が完了しました${t.skill_used ? ' (' + t.skill_used + ')' : ''}`,
+                                    'success',
+                                    {
+                                        actionLabel: '返信を開く',
+                                        actionUrl: url,
+                                    }
+                                );
+                                this._notifyDesktop('AI返信 完了', 'クリックして返信を開く', {
+                                    force: true,
+                                    tag: 'rice-ai-reply-' + t.id,
+                                    onClick: () => window.open(url, '_blank'),
+                                });
+                            } else if (t.status === 'error') {
+                                this.toast(
+                                    'AI返信に失敗: ' + (t.error_message || '不明なエラー'),
+                                    'error',
+                                    { actionLabel: '返信を開く', actionUrl: url }
+                                );
+                            }
+                        }
+                        this._aiLastSeenId = Math.max(this._aiLastSeenId, t.id);
+                    });
+                    localStorage.setItem('aiLastSeenTaskId', String(this._aiLastSeenId));
+                } catch (_) { /* 一時的なエラーは無視 */ }
+            };
+            // 5 秒ごとにポーリング (バックグラウンドの compose-window 完了検知用)
+            this._aiBackgroundPoller = setInterval(poll, 5000);
+            // 初回も即実行 (ページロード時に既に done のタスクがあれば即通知)
+            poll();
         },
 
         async init() {
@@ -850,6 +1395,9 @@ function emailApp() {
             ]);
             window.addEventListener('resize', () => this.updateVirtualViewport());
             this.$nextTick(() => this.updateVirtualViewport());
+
+            // 別ウィンドウ (compose-window) で走った AI タスクの完了をバックグラウンドポーリング
+            this.startAiBackgroundPoll();
 
             // クエリパラメータ `?thread=<id>` で指定されたスレッドを自動表示
             // (チャット画面の「元メールを開く」や添付ファイル画面の件名リンク等から
@@ -1244,8 +1792,125 @@ function emailApp() {
             this.chatOpen = false;
             this.chatComments = [];
             this.chatInput = '';
+            this.chatPendingFiles = [];
+            this.chatScope = { kind: 'thread', email_id: null, email_subject: '', email_from: '' };
+            this.chatScrolledUp = false;
             this.stopChatPolling();
             this.closeMention();
+        },
+
+        // ============= AI モデルピッカー (共通) =============
+        get aiCurrentModels() {
+            if (this.aiProvider === 'claude') return this.aiClaudeModels;
+            if (this.aiProvider === 'gemini') return this.aiGeminiModels;
+            return this.aiOllamaModels;
+        },
+        async loadAiModels(force = false) {
+            if (this.aiPickerLoaded && !force) return;
+            this.aiPickerLoading = true;
+            try {
+                const res = await fetch('{{ route("chat.models") }}', {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) throw new Error('models endpoint error');
+                const data = await res.json();
+                this.aiOllamaModels = (data.ollama || []).map(m => typeof m === 'string' ? { id: m, name: m } : m);
+                this.aiClaudeModels = data.claude || [];
+                this.aiGeminiModels = data.gemini || [];
+                this.aiHasClaudeKey = !!data.has_claude_key;
+                this.aiHasGeminiKey = !!data.has_gemini_key;
+                this.aiPickerLoaded = true;
+                // 初期値: なければ provider 用の先頭モデル
+                if (!this.aiModel) {
+                    const list = this.aiCurrentModels;
+                    if (list.length > 0) this.aiModel = list[0].id || list[0];
+                }
+            } catch (e) {
+                // 失敗時はサイレント (空配列のまま)
+            } finally {
+                this.aiPickerLoading = false;
+            }
+        },
+        setAiProvider(p) {
+            this.aiProvider = p;
+            const list = this.aiCurrentModels;
+            this.aiModel = list.length > 0 ? (list[0].id || list[0]) : '';
+        },
+
+        // ============= ナレッジ登録 (メール本文) =============
+        // 引数なし → スレッドの最新メールを使う / 引数あり → そのメールを使う
+        async openKnowledgeRegister(emailArg = null) {
+            let target = emailArg;
+            if (!target?.id) {
+                const emails = this.threadEmails || [];
+                if (emails.length === 0) { this.toast('スレッドにメールがありません', 'error'); return; }
+                target = emails.find(e => e.id) || emails[0];
+            }
+            if (!target?.id) { this.toast('登録対象のメールが見つかりません', 'error'); return; }
+
+            this.knowledgeRegisterOpen = true;
+            this.knowledgeLoading = true;
+            this.knowledgeError = '';
+            this.knowledgeForm = null;
+            try {
+                const res = await fetch(`/knowledge/from-email/${target.id}`, { headers: { Accept: 'application/json' } });
+                if (!res.ok) {
+                    this.knowledgeError = 'メール内容を取得できませんでした (HTTP ' + res.status + ')';
+                    return;
+                }
+                const data = await res.json();
+                this.knowledgeForm = {
+                    email_id: data.email_id,
+                    title: data.default_title || '',
+                    content: data.editable_content || '',
+                    collection: 'default',
+                    suggested_pii_warning: data.suggested_pii_warning || '',
+                };
+            } catch (e) {
+                this.knowledgeError = '通信エラー: ' + (e.message || '');
+            } finally {
+                this.knowledgeLoading = false;
+            }
+        },
+
+        // 簡易な PII 自動マスク (メール / 電話 / 郵便番号 を置換)
+        applyMaskHeuristics() {
+            if (!this.knowledgeForm) return;
+            let text = this.knowledgeForm.content;
+            text = text.replace(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g, '[メール]');
+            text = text.replace(/(\d{2,4}-\d{2,4}-\d{4})/g, '[電話]');
+            text = text.replace(/(\d{3}-\d{4})(?!\d)/g, '[郵便番号]');
+            // 全角数字の電話 (例: 090-1234-5678 系)
+            text = text.replace(/([０-９]{2,4}[\-－][０-９]{2,4}[\-－][０-９]{4})/g, '[電話]');
+            this.knowledgeForm.content = text;
+            this.toast('連絡先パターンを自動マスクしました', 'info');
+        },
+
+        async submitKnowledgeRegister() {
+            if (!this.knowledgeForm) return;
+            if (!this.knowledgeForm.content?.trim()) { this.knowledgeError = '本文が空です'; return; }
+            if (!this.knowledgeForm.title?.trim()) { this.knowledgeError = 'タイトルを入力してください'; return; }
+            this.knowledgeSaving = true;
+            this.knowledgeError = '';
+            try {
+                const res = await fetch(`/knowledge/from-email/${this.knowledgeForm.email_id}`, {
+                    method: 'POST',
+                    headers: this.jsonHeaders(),
+                    body: JSON.stringify({
+                        title: this.knowledgeForm.title,
+                        content: this.knowledgeForm.content,
+                        collection: this.knowledgeForm.collection || 'default',
+                    }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) { this.knowledgeError = data.message || ('登録に失敗しました (HTTP ' + res.status + ')'); return; }
+                this.toast(data.message || 'ナレッジに登録しました', 'success');
+                this.knowledgeRegisterOpen = false;
+            } catch (e) {
+                this.knowledgeError = '通信エラー: ' + (e.message || '');
+            } finally {
+                this.knowledgeSaving = false;
+            }
         },
 
         // ============= AI要約 (スレッド全体) =============
@@ -1256,6 +1921,8 @@ function emailApp() {
             }
             this.threadSummaryOpen = true;
             this.threadSummaryCopied = false;
+            // モデル一覧をロード (初回のみ)
+            this.loadAiModels();
             // 既に生成済みなら再利用、未生成なら生成
             if (!this.threadSummary || this.threadSummary?.thread_id !== this.selectedThreadId) {
                 this.loadThreadSummary(false);
@@ -1268,25 +1935,82 @@ function emailApp() {
             this.threadSummaryLoading = true;
             this.threadSummaryError = '';
             this.threadSummary = null;
+            const targetThreadId = this.selectedThreadId;
             try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/ai-summary`, {
+                const res = await fetch(`/threads/${targetThreadId}/ai-summary`, {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                         'Accept': 'application/json',
+                        'Content-Type': 'application/json',
                     },
+                    body: JSON.stringify({
+                        provider: this.aiProvider || null,
+                        model:    this.aiModel    || null,
+                        skill:    this.summarySkill || 'summarize',
+                        prompt:   this.summaryUserPrompt || '',
+                    }),
                 });
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok || data.status === 'error') {
-                    this.threadSummaryError = data.message || `AI要約に失敗しました (HTTP ${res.status})`;
+                localStorage.setItem('summarySkill', this.summarySkill || 'summarize');
+                const initial = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    this.threadSummaryError = initial.message || `AI要約の開始に失敗しました (HTTP ${res.status})`;
                     return;
                 }
-                this.threadSummary = { ...data, thread_id: this.selectedThreadId };
+                // task_id を受け取ったので完了までポーリング
+                const taskId = initial.task_id;
+                const finalData = await this._pollAiTask(taskId);
+                if (!finalData) return; // タイムアウトはエラー設定済み
+                if (finalData.status === 'error') {
+                    const code = finalData.error_code;
+                    let prefix = '';
+                    if (code === 'insufficient_credits') prefix = '【クレジット不足】';
+                    else if (code === 'invalid_api_key') prefix = '【APIキー無効】';
+                    else if (code === 'rate_limited') prefix = '【レート制限】';
+                    else if (code === 'model_not_found') prefix = '【モデル未存在】';
+                    else if (code === 'rag_api_unreachable') prefix = '【RAG API 未起動】';
+                    this.threadSummaryError = prefix + 'AI要約に失敗しました: ' + (finalData.error_message || '');
+                    this.toast(prefix + 'AI要約に失敗', 'error');
+                    this._notifyDesktop('AI要約失敗', prefix + (finalData.error_message || ''));
+                    return;
+                }
+                this.threadSummary = {
+                    summary: finalData.answer,
+                    sources: finalData.sources || [],
+                    provider: finalData.provider,
+                    model:    finalData.model,
+                    skill_name: initial.skill_name,
+                    email_count: initial.email_count,
+                    subject:  initial.subject,
+                    ticket:   initial.ticket,
+                    thread_id: targetThreadId,
+                };
+                // 完了通知 (モーダルが閉じていてもユーザーに知らせる)
+                const subjLabel = initial.subject ? ('「' + initial.subject + '」') : '';
+                this.toast('AI要約が完了しました' + (this.threadSummaryOpen ? '' : ' (モーダルを開いて確認)'), 'success');
+                this._notifyDesktop('AI要約 完了', subjLabel || 'スレッドの要約が生成されました');
             } catch (e) {
                 this.threadSummaryError = '通信エラー: ' + (e.message || '');
             } finally {
                 this.threadSummaryLoading = false;
             }
+        },
+
+        // AiTask の完了をポーリング (最大 180s, 1.5s 間隔)。done/error なら最終データ、タイムアウトなら null
+        async _pollAiTask(taskId, maxWaitMs = 180000, intervalMs = 1500) {
+            const started = Date.now();
+            while (Date.now() - started < maxWaitMs) {
+                try {
+                    const res = await fetch(`/ai-tasks/${taskId}`, { headers: { Accept: 'application/json' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.status === 'done' || data.status === 'error') return data;
+                    }
+                } catch (_) { /* ネットワーク一時エラーは無視して継続 */ }
+                await new Promise(r => setTimeout(r, intervalMs));
+            }
+            this.threadSummaryError = 'タイムアウト: AI 処理に時間がかかっています。しばらく後で再度お試しください。';
+            return null;
         },
         async copyThreadSummary() {
             if (!this.threadSummary?.summary) return;
@@ -1299,19 +2023,53 @@ function emailApp() {
             }
         },
 
-        // チャットパネルの開閉
+        // チャットパネルの開閉 (スレッド全体スコープで開く)
         toggleChatPanel() {
             if (!this.selectedThreadId) {
                 this.toast('スレッドを選択してください', 'error');
                 return;
             }
-            this.chatOpen = !this.chatOpen;
-            if (this.chatOpen) {
-                this.loadChatComments();
-                this.startChatPolling();
-            } else {
+            if (this.chatOpen && this.chatScope.kind === 'thread') {
+                // 既に thread スコープで開いている → 閉じる
+                this.chatOpen = false;
                 this.stopChatPolling();
+                this._chatReadJustNow = false;
+                return;
             }
+            // thread スコープに切替えて開く
+            this.setChatScopeThread();
+            this.chatOpen = true;
+            this._chatReadJustNow = true;
+            const row = (this.threads || []).find(t => t.id === this.selectedThreadId);
+            if (row) row.unread_chat_count = 0;
+            this.loadChatComments();
+            this.startChatPolling();
+        },
+
+        // スレッド全体スコープに切替
+        setChatScopeThread() {
+            this.chatScope = { kind: 'thread', email_id: null, email_subject: '', email_from: '' };
+            if (this.chatOpen) this.loadChatComments();
+        },
+
+        // 特定メールにフォーカス (チャットコメントの📧チップから)
+        focusEmailFromChat(emailId) {
+            const email = (this.threadEmails || []).find(e => e.id === emailId);
+            if (email) this.openEmailChat(email);
+        },
+
+        // メール件名を id から逆引き (チップ表示用)
+        emailSubjectFor(emailId) {
+            const e = (this.threadEmails || []).find(x => x.id === emailId);
+            return e ? (e.subject || '') : '';
+        },
+
+        // スクロール検知 (一番下から80px以上離れたら「最新へ」ボタン表示)
+        onChatScroll(e) {
+            const el = e.target;
+            if (!el) return;
+            const distance = el.scrollHeight - (el.scrollTop + el.clientHeight);
+            this.chatScrolledUp = distance > 80;
         },
 
         // 8秒ごとに自動更新 (他ユーザーの新規メッセージを取得)
@@ -1337,9 +2095,13 @@ function emailApp() {
             if (!this.selectedThreadId) return;
             if (!silent) this.chatLoading = true;
             try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/comments`, {
-                    headers: { 'Accept': 'application/json' }
-                });
+                // スコープに応じて URL を切替 (email スコープなら email_id を付与)
+                const params = new URLSearchParams();
+                if (this.chatScope.kind === 'email' && this.chatScope.email_id) {
+                    params.set('email_id', this.chatScope.email_id);
+                }
+                const url = `/threads/${this.selectedThreadId}/comments${params.toString() ? '?' + params.toString() : ''}`;
+                const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const data = await res.json();
                 const before = this.chatComments.length;
@@ -1361,14 +2123,33 @@ function emailApp() {
         // チャット送信
         async sendChatComment() {
             const text = this.chatInput.trim();
-            if (!text || !this.selectedThreadId || this.chatSending) return;
+            const hasFiles = this.chatPendingFiles.length > 0;
+            if ((!text && !hasFiles) || !this.selectedThreadId || this.chatSending) return;
             this.chatSending = true;
             try {
-                const res = await fetch(`/threads/${this.selectedThreadId}/comments`, {
-                    method: 'POST',
-                    headers: this.jsonHeaders(),
-                    body: JSON.stringify({ content: text }),
-                });
+                const url = `/threads/${this.selectedThreadId}/comments`;
+                // email スコープなら email_id を含めて送信 (per-email chat)
+                const emailIdForSend = this.chatScope.kind === 'email' ? this.chatScope.email_id : null;
+                let res;
+                if (hasFiles) {
+                    const fd = new FormData();
+                    if (text) fd.append('content', text);
+                    if (emailIdForSend) fd.append('email_id', emailIdForSend);
+                    this.chatPendingFiles.forEach(f => fd.append('files[]', f));
+                    res = await fetch(url, {
+                        method:'POST',
+                        headers:{'Accept':'application/json','X-CSRF-TOKEN':this.csrfToken},
+                        body: fd,
+                    });
+                } else {
+                    const body = { content: text };
+                    if (emailIdForSend) body.email_id = emailIdForSend;
+                    res = await fetch(url, {
+                        method:'POST',
+                        headers: this.jsonHeaders(),
+                        body: JSON.stringify(body),
+                    });
+                }
                 const data = await res.json();
                 if (!res.ok || data.status === 'error') {
                     this.toast(data.message || '送信に失敗しました', 'error');
@@ -1376,6 +2157,7 @@ function emailApp() {
                 }
                 if (data.comment) this.chatComments.push(data.comment);
                 this.chatInput = '';
+                this.chatPendingFiles = [];
                 this.closeMention();
                 this.$nextTick(() => this.scrollChatToBottom());
             } catch (e) {
@@ -1383,6 +2165,25 @@ function emailApp() {
             } finally {
                 this.chatSending = false;
             }
+        },
+
+        // チャット用ファイル選択 / 除外 / バイト整形
+        onChatFilesPicked(e) {
+            const files = Array.from(e.target.files || []);
+            const max = 10, maxBytes = 10 * 1024 * 1024;
+            for (const f of files) {
+                if (this.chatPendingFiles.length >= max) { this.toast('添付は最大10ファイル', 'error'); break; }
+                if (f.size > maxBytes) { this.toast(`「${f.name}」は10MB超`, 'error'); continue; }
+                this.chatPendingFiles.push(f);
+            }
+            e.target.value = '';
+        },
+        removeChatPendingFile(i) { this.chatPendingFiles.splice(i, 1); },
+        formatFileBytes(n) {
+            n = Number(n) || 0;
+            if (n < 1024) return n + 'B';
+            if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'KB';
+            return (n / 1024 / 1024).toFixed(1) + 'MB';
         },
 
         // チャット削除
@@ -1415,6 +2216,27 @@ function emailApp() {
             el.scrollTop = el.scrollHeight;
         },
 
+        // ============= メール毎チャット (per-email) - サイドバーで開く =============
+        async openEmailChat(email) {
+            if (!email?.id || !this.selectedThreadId) {
+                this.toast('スレッドを選択してください', 'error');
+                return;
+            }
+            // チャットスコープを email に切替してサイドバーを開く
+            this.chatScope = {
+                kind: 'email',
+                email_id: email.id,
+                email_subject: email.subject || '',
+                email_from: email.from_label || email.from_address || '',
+            };
+            if (!this.chatOpen) {
+                this.chatOpen = true;
+                this.startChatPolling();
+            }
+            this._chatReadJustNow = true;
+            this.chatComments = [];
+            await this.loadChatComments();
+        },
         // ============= @メンション =============
 
         // 入力中: カーソル前の "@xxx" パターンを検出
@@ -1463,6 +2285,32 @@ function emailApp() {
             } else {
                 this.sendChatComment();
             }
+        },
+
+        // Discord 風: Ctrl/Cmd + Enter で送信、Enter は改行 (デフォルト)
+        onChatKeydown(e) {
+            if (e.key !== 'Enter') return;
+            if (this.mentionOpen && this.mentionMatches.length > 0) {
+                // メンション選択中は Enter で選択
+                e.preventDefault();
+                this.pickMention(this.mentionMatches[this.mentionIndex]);
+                return;
+            }
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                this.sendChatComment();
+            }
+        },
+
+        threadChatAutoresize(e) {
+            const ta = e.target;
+            ta.style.height = 'auto';
+            ta.style.height = Math.min(ta.scrollHeight, 200) + 'px';
+        },
+
+        threadChatAvatarColor(userId) {
+            const palette = ['#3b82f6','#10b981','#f59e0b','#ec4899','#8b5cf6','#06b6d4','#ef4444','#84cc16'];
+            return palette[(userId || 0) % palette.length];
         },
 
         // 候補を選択 → 入力欄に "@名前 " を挿入
@@ -1529,6 +2377,8 @@ function emailApp() {
         async loadThread(id) {
             this.selectedThreadId = id;
             this.expandedEmailIds = [];
+            // 別スレッドを選択したらバッジ抑制フラグをクリア (この新スレッドの未読を表示するため)
+            this._chatReadJustNow = false;
             try {
                 const res = await fetch(`/threads/${id}`, { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1543,13 +2393,14 @@ function emailApp() {
                 this.threadMerges = data.merges || [];
                 this.pendingApprovals = data.pending_approvals || [];
                 if (this.threadEmails.length > 0) this.expandedEmailIds.push(this.threadEmails[0].id);
-                // チャットパネルが開いていれば、新スレッドのチャットを取得
+                // チャットパネルが開いていれば、新スレッドのチャットを取得 (既読化される)
                 if (this.chatOpen) {
+                    this._chatReadJustNow = true;
+                    const row = (this.threads || []).find(t => t.id === id);
+                    if (row) row.unread_chat_count = 0;
                     this.loadChatComments();
-                } else {
-                    // 件数バッジ用に裏で件数のみ取得
-                    this.loadChatComments().catch(() => {});
                 }
+                // チャットが閉じている間は裏での取得はしない (未読バッジは一覧由来の値のまま)
             } catch(e) {
                 console.error('スレッド読み込み失敗', e);
                 this.toast('スレッドの読み込みに失敗しました', 'error');
@@ -1595,6 +2446,26 @@ function emailApp() {
             const onMove = (me) => { this.threadWidth = Math.max(300, Math.min(700, startW + (me.clientX - startX))); };
             const onUp = () => { localStorage.setItem('threadWidth', this.threadWidth); document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
             document.addEventListener('mousemove', onMove); document.addEventListener('mouseup', onUp);
+        },
+
+        // スレッド内チャットパネルの幅をドラッグでリサイズ (左端ハンドル: 左ドラッグで広く、右ドラッグで狭く)
+        startResizeChatPanel(e) {
+            const startX = e.clientX, startW = this.chatPanelWidth;
+            const prevUserSelect = document.body.style.userSelect;
+            document.body.style.userSelect = 'none';
+            document.body.style.cursor = 'col-resize';
+            const onMove = (me) => {
+                this.chatPanelWidth = Math.max(280, Math.min(900, startW - (me.clientX - startX)));
+            };
+            const onUp = () => {
+                localStorage.setItem('chatPanelWidth', this.chatPanelWidth);
+                document.body.style.userSelect = prevUserSelect;
+                document.body.style.cursor = '';
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
         }
     }
 }
@@ -1606,6 +2477,81 @@ function emailApp() {
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
 .active { box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.1); }
+
+/* ===== スレッド内チャット (ライト + メッセージ行レイアウト) ===== */
+.thread-chat-panel { background-color:#ffffff; color:#111827; border-left:1px solid #e5e7eb; }
+.thread-chat-resize:hover, .thread-chat-resize:active { background-color:#3b82f6; }
+.thread-chat-header { background-color:#f9fafb; border-bottom:1px solid #e5e7eb; }
+.thread-chat-hash { color:#9ca3af; font-weight:700; font-size:18px; }
+.thread-chat-close { color:#6b7280; padding:6px; border-radius:6px; transition:all 0.15s; }
+.thread-chat-close:hover { background-color:#f3f4f6; color:#111827; }
+.thread-chat-messages { background-color:#ffffff; padding:12px 0; }
+.thread-chat-messages .msg-row {
+    padding: 8px 12px 8px 56px; position:relative; min-height:36px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.thread-chat-messages .msg-row:last-child { border-bottom:none; }
+.thread-chat-messages .msg-row:hover { background-color:#f3f4f6; }
+.thread-chat-messages .msg-row .avatar {
+    position:absolute; left:16px; top:4px;
+    width:34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:13px;
+}
+.thread-chat-messages .msg-row .ts-header { display:flex; align-items:baseline; gap:6px; margin-bottom:2px; }
+.thread-chat-messages .msg-row .author { color:#111827; font-weight:600; font-size:13px; }
+.thread-chat-messages .msg-row .ts { color:#9ca3af; font-size:11px; }
+.thread-chat-messages .msg-row .body { color:#1f2937; font-size:13px; line-height:1.5; white-space:pre-wrap; word-wrap:break-word; }
+.thread-chat-messages .msg-row .msg-actions {
+    position:absolute; right:8px; top:4px;
+    background:#ffffff; border:1px solid #e5e7eb; border-radius:4px;
+    color:#6b7280; padding:3px 7px; font-size:11px;
+}
+.thread-chat-messages .msg-row .msg-actions:hover { color:#dc2626; border-color:#fca5a5; background:#fef2f2; }
+.thread-chat-input-wrap { background-color:#f9fafb; padding:0 12px 12px; border-top:1px solid #e5e7eb; padding-top:10px; }
+.thread-chat-input-box {
+    background-color:#ffffff; border:1px solid #e5e7eb; border-radius:10px;
+    display:flex; align-items:flex-end; gap:6px; padding:8px 12px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.04);
+}
+.thread-chat-input-box:focus-within { border-color:#93c5fd; box-shadow:0 0 0 3px rgba(59,130,246,0.1); }
+.thread-chat-input-box textarea {
+    flex:1; background:transparent; border:none; outline:none; resize:none;
+    color:#111827; font-size:13px; line-height:1.4; max-height:200px;
+}
+.thread-chat-input-box textarea::placeholder { color:#9ca3af; }
+.thread-chat-send { color:#2563eb; background:transparent; border:none; padding:4px; }
+.thread-chat-send:not(:disabled):hover { color:#1d4ed8; }
+.thread-chat-kbd { background:#f3f4f6; border:1px solid #e5e7eb; padding:1px 4px; border-radius:3px; font-size:10px; color:#4b5563; }
+
+/* ===== /コレクション をグレーチップで可視化 (AI 要約モーダル用) ===== */
+.prompt-editor-container { position: relative; background-color: #ffffff; border-radius: 0.5rem; }
+.prompt-editor-highlight,
+.prompt-editor-input {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    font-size: 0.875rem;       /* text-sm */
+    line-height: 1.5;
+    padding: 0.5rem 0.75rem;   /* px-3 py-2 */
+}
+.prompt-editor-highlight {
+    position: absolute; inset: 0;
+    border: 1px solid transparent; border-radius: 0.5rem;
+    pointer-events: none; white-space: pre-wrap; word-wrap: break-word;
+    overflow-y: auto; color: #111827; background: transparent; z-index: 1;
+}
+.prompt-editor-input {
+    position: relative; z-index: 2;
+    background: transparent !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+    caret-color: #111827;
+}
+.prompt-editor-input::selection { background-color: rgba(99, 102, 241, 0.25); color: transparent; }
+.prompt-editor-highlight .col-tag {
+    background-color: #e5e7eb; color: #374151;
+    border-radius: 4px; padding: 1px 2px; margin: 0 -1px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+}
 
 /* アイコンボタン共通 (背景・ボーダーは Tailwind ユーティリティに任せる) */
 .icon-btn {

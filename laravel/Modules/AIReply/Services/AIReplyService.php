@@ -20,8 +20,12 @@ class AIReplyService
 
     /**
      * Generate a reply draft based on thread context and knowledge base.
+     *
+     * @param  EmailThread  $thread
+     * @param  ?string  $provider   AI プロバイダー (ollama|claude|gemini)。null なら AiSetting デフォルト
+     * @param  ?string  $model      モデル ID。null なら AiSetting デフォルト
      */
-    public function generate(EmailThread $thread)
+    public function generate(EmailThread $thread, ?string $provider = null, ?string $model = null)
     {
         $latestEmail = $thread->emails()->orderByDesc('received_at')->first();
         if (!$latestEmail) return null;
@@ -29,19 +33,26 @@ class AIReplyService
         // ▼ Phase 6-1: 顧客 (or 送信元ドメイン) から RAG コレクションを決定
         $collection = $this->collectionResolver->resolve($thread);
 
+        // ▼ provider / model のフォールバック
+        $aiSettings = \App\Models\AiSetting::getSettings();
+        $provider = $provider ?: $aiSettings->default_provider;
+        $model    = $model    ?: $aiSettings->default_model;
+
         // 1. ナレッジベースから関連情報を検索 (RAG)
         $query = $latestEmail->subject . " " . $latestEmail->plain_body;
-        $context = $this->ragApi->query($query, 5, null, null, $collection);
+        $context = $this->ragApi->query($query, 5, $provider, $model, $collection);
 
         // 2. プロンプトの構築 (指示書に基づいたセーフティルール含む)
         $prompt = $this->buildPrompt($latestEmail, $context);
 
         // 3. AI プロバイダ経由で生成 (collection を渡して Python 側で切替)
-        $aiResult = $this->ragApi->query($prompt, 5, null, null, $collection);
+        $aiResult = $this->ragApi->query($prompt, 5, $provider, $model, $collection);
 
         // 4. ログの保存 (collection を含めて記録)
-        $this->logGeneration($thread, $prompt, $aiResult, $collection);
+        $this->logGeneration($thread, $prompt, $aiResult, $collection, $provider, $model);
 
+        $aiResult['provider'] = $provider;
+        $aiResult['model']    = $model;
         return $aiResult;
     }
 
@@ -68,18 +79,31 @@ class AIReplyService
 最後に「確信度スコア: 0-100」を付与してください。";
     }
 
-    protected function logGeneration($thread, $prompt, $result, ?string $collection = null)
-    {
+    protected function logGeneration(
+        $thread,
+        $prompt,
+        $result,
+        ?string $collection = null,
+        ?string $provider = null,
+        ?string $model = null,
+    ) {
         $row = [
             'email_thread_id' => $thread->id,
             'user_id'         => Auth::id(),
-            'provider'        => 'default',
+            'provider'        => $provider ?: 'default',
             'prompt_summary'  => mb_substr($prompt, 0, 500),
             'generated_reply' => $result['answer'] ?? '',
             'confidence_score' => 85, // 実際はパースして取得
             'created_at'      => now(),
             'updated_at'      => now(),
         ];
+
+        // model カラムが存在する場合のみセット
+        try {
+            if ($model && Schema::hasColumn('ext_ai_logs', 'model')) {
+                $row['model'] = $model;
+            }
+        } catch (\Throwable) { /* noop */ }
 
         // Phase 6-3 で ext_ai_logs に collection カラムが追加される。あれば書き込む。
         try {

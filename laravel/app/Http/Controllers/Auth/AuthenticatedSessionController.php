@@ -27,6 +27,10 @@ class AuthenticatedSessionController extends Controller
         $credentials = $request->validate([
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+        ], [
+            'email.required' => 'メールアドレスを入力してください。',
+            'email.email'    => 'メールアドレスの形式が正しくありません。',
+            'password.required' => 'パスワードを入力してください。',
         ]);
 
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
@@ -36,7 +40,7 @@ class AuthenticatedSessionController extends Controller
         }
 
         return back()->withErrors([
-            'email' => __('auth.failed'),
+            'email' => 'メールアドレスまたはパスワードが正しくありません。',
         ])->onlyInput('email');
     }
 

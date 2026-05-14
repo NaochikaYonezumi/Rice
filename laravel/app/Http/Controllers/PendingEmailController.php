@@ -22,9 +22,13 @@ class PendingEmailController extends Controller
         $status = $request->query('status', PendingEmail::STATUS_PENDING);
         $query = PendingEmail::where('status', $status);
 
-        // 自分が承認者として指定された案件のみ表示するフィルタ
+        // 自分が承認者として指定された案件 + 承認者未指定の案件を表示するフィルタ
+        // (承認者未定義は誰でも承認できる案件として「あなた宛」に含める)
         if ($request->boolean('for_me')) {
-            $query->where('target_approver_user_id', auth()->id());
+            $query->where(function ($q) {
+                $q->where('target_approver_user_id', auth()->id())
+                  ->orWhereNull('target_approver_user_id');
+            });
         }
 
         // 自分が依頼者 (作成者) の案件のみ表示するフィルタ
@@ -66,21 +70,28 @@ class PendingEmailController extends Controller
                 'approved_at'             => $p->approved_at?->format('Y/m/d H:i'),
                 'approved_by_name'        => $p->approver?->name,
                 'memo'             => $p->memo,
-                'attachments'      => collect($p->attachment_paths ?? [])->map(function ($a) {
+                'attachments'      => collect($p->attachment_paths ?? [])->map(function ($a, $i) use ($p) {
                     // 旧形式 (path文字列) と新形式 (連想配列) の両対応
                     if (is_string($a)) {
                         $path = $a;
                         $filename = basename($a);
                         $bytes = Storage::disk('private')->exists($path) ? Storage::disk('private')->size($path) : 0;
+                        $mime = Storage::disk('private')->exists($path)
+                            ? (Storage::disk('private')->mimeType($path) ?: 'application/octet-stream')
+                            : 'application/octet-stream';
                     } else {
                         $path = $a['path'] ?? '';
                         $filename = $a['filename'] ?? basename($path);
                         $bytes = $a['size']
                             ?? (Storage::disk('private')->exists($path) ? Storage::disk('private')->size($path) : 0);
+                        $mime = $a['mime_type'] ?? 'application/octet-stream';
                     }
                     return [
-                        'filename' => $filename,
-                        'size'     => $this->humanSize((int) $bytes),
+                        'index'     => $i,
+                        'filename'  => $filename,
+                        'size'      => $this->humanSize((int) $bytes),
+                        'mime_type' => $mime,
+                        'download_url' => route('pending.attachment.download', ['pending' => $p->id, 'index' => $i]),
                     ];
                 })->values(),
                 'in_reply_to'      => $p->inReplyToEmail ? [
@@ -209,6 +220,9 @@ class PendingEmailController extends Controller
                 ]);
             });
 
+            // 承認 → 送信完了したので、このスレッドに残る他の承認待ちがなければステータスを inbox に戻す
+            PendingEmail::syncThreadStatus($pending->inReplyToEmail?->thread_id);
+
             return response()->json(['status' => 'ok']);
         } catch (\Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
@@ -243,6 +257,9 @@ class PendingEmailController extends Controller
                 ? '【取り下げ】 ' . now()->format('Y/m/d H:i')
                 : '【取り下げ】 ' . now()->format('Y/m/d H:i') . "\n— 元のメモ —\n" . $pending->memo,
         ]);
+
+        // 取り下げ後、このスレッドに残る他の承認待ちがなければステータスを inbox に戻す
+        PendingEmail::syncThreadStatus($pending->inReplyToEmail?->thread_id);
 
         return response()->json([
             'status'  => 'ok',
@@ -285,8 +302,12 @@ class PendingEmailController extends Controller
             ], 422);
         }
         $rejecterName = auth()->user()->name ?? '承認者';
+        $rejecterId   = auth()->id();
+        $threadId     = $pending->inReplyToEmail?->thread_id;
+        $inReplyEmailId = $pending->in_reply_to_email_id;
+        $pendingSubject = $pending->subject;
 
-        \Illuminate\Support\Facades\DB::transaction(function () use ($pending, $reason, $rejecterName) {
+        \Illuminate\Support\Facades\DB::transaction(function () use ($pending, $reason, $rejecterName, $rejecterId, $threadId, $inReplyEmailId, $pendingSubject) {
             // (B) 却下された内容を「下書き」として再生成 → 依頼者が再編集できる
             //     却下情報 (rejected_by/at/reason) は下書きにも保持し、UI でバナー表示する
             $memoLines = [];
@@ -306,7 +327,7 @@ class PendingEmailController extends Controller
             $newDraft->approved_at              = null;
             $newDraft->approved_by_user_id      = null;
             // 却下情報は構造化して新ドラフトにも保持 (UI 表示用)
-            $newDraft->rejected_by_user_id      = auth()->id();
+            $newDraft->rejected_by_user_id      = $rejecterId;
             $newDraft->rejected_at              = now();
             $newDraft->rejection_reason         = $reason !== '' ? $reason : null;
             // 元レコードは削除するため source_rejected_id は不要 (リファレンスを残さない)
@@ -316,6 +337,24 @@ class PendingEmailController extends Controller
             // (A) 却下と同時に下書きとして再生成されたため、元の承認依頼レコードは削除
             //     → 却下済一覧 (status=rejected) には残さず、下書き一覧で再編集できる状態にする
             $pending->delete();
+
+            // (E) 却下理由をスレッド内チャットに通常のメッセージとして残す
+            //     - in_reply_to が無い (新規メール) 場合はスレッドが無いので何もしない
+            //     - in_reply_to_email_id があれば email_id にも紐付けて per-email チャットにも表示
+            if ($threadId) {
+                $chatLines = ['❌ 承認依頼を却下しました'];
+                if ($pendingSubject) {
+                    $chatLines[] = '件名: ' . $pendingSubject;
+                }
+                $chatLines[] = '却下者: ' . $rejecterName;
+                $chatLines[] = '理由: ' . ($reason !== '' ? $reason : '(理由なし)');
+                \App\Models\ThreadComment::create([
+                    'thread_id' => $threadId,
+                    'email_id'  => $inReplyEmailId,
+                    'user_id'   => $rejecterId,
+                    'content'   => implode("\n", $chatLines),
+                ]);
+            }
         });
 
         // (C) 依頼者へ通知
@@ -326,10 +365,44 @@ class PendingEmailController extends Controller
             }
         }
 
+        // (D) このスレッドに残る他の承認待ちがなければステータスを inbox に戻す
+        PendingEmail::syncThreadStatus($threadId);
+
         return response()->json([
             'status'  => 'ok',
             'message' => '却下しました。下書きとして再編集可能になっています。',
         ]);
+    }
+
+    /**
+     * 承認待ち添付のダウンロード。
+     * - 作成者 / 指定された承認者 / 承認者未定義 のいずれかなら閲覧可能
+     */
+    public function downloadAttachment(PendingEmail $pending, int $index)
+    {
+        $userId = auth()->id();
+        $assignedTo = $pending->target_approver_user_id;
+        $canView = $pending->created_by_user_id === $userId
+            || $assignedTo === $userId
+            || $assignedTo === null;
+        if (!$canView) {
+            abort(403, 'この承認依頼の添付ファイルを閲覧する権限がありません。');
+        }
+
+        $list = $pending->attachment_paths ?? [];
+        if (!isset($list[$index])) {
+            abort(404, '添付ファイルが見つかりません。');
+        }
+        $info = $this->normalizeAttachment($list[$index]);
+        if (!$info || !Storage::disk('private')->exists($info['path'])) {
+            abort(404, '添付ファイルの実体が見つかりません。');
+        }
+
+        return Storage::disk('private')->download(
+            $info['path'],
+            $info['filename'],
+            ['Content-Type' => $info['mime_type']],
+        );
     }
 
     /**

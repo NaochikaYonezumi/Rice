@@ -23,24 +23,56 @@
                 </div>
             @endif
 
+            @if(session('status'))
+                <div class="alert alert-success text-sm">
+                    {{ session('status') }}
+                </div>
+            @endif
+
+            @if($errors->any())
+                <div class="alert alert-danger text-sm mb-3">
+                    <i class="fas fa-exclamation-circle mr-1"></i>
+                    <strong>ログインできませんでした</strong>
+                    <ul class="mb-0 mt-1 pl-3" style="list-style: disc;">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <form action="{{ route('login') }}" method="post">
                 @csrf
-                <div class="input-group mb-3">
-                    <input type="email" name="email" class="form-control" placeholder="メールアドレス" required autofocus>
+                <div class="input-group mb-1">
+                    <input type="email" name="email" value="{{ old('email') }}"
+                           class="form-control @error('email') is-invalid @enderror"
+                           placeholder="メールアドレス" required autofocus>
                     <div class="input-group-append">
                         <div class="input-group-text">
                             <span class="fas fa-envelope"></span>
                         </div>
                     </div>
                 </div>
-                <div class="input-group mb-3">
-                    <input type="password" name="password" class="form-control" placeholder="パスワード" required>
+                @error('email')
+                    <p class="text-danger text-sm mb-2 mt-0">{{ $message }}</p>
+                @else
+                    <div class="mb-3"></div>
+                @enderror
+                <div class="input-group mb-1">
+                    <input type="password" name="password"
+                           class="form-control @error('password') is-invalid @enderror"
+                           placeholder="パスワード" required>
                     <div class="input-group-append">
                         <div class="input-group-text">
                             <span class="fas fa-lock"></span>
                         </div>
                     </div>
                 </div>
+                @error('password')
+                    <p class="text-danger text-sm mb-2 mt-0">{{ $message }}</p>
+                @else
+                    <div class="mb-3"></div>
+                @enderror
                 <div class="row">
                     <div class="col-8">
                         <div class="icheck-primary">

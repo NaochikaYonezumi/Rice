@@ -5,6 +5,7 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\DraftController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\SocialiteController;
+use App\Http\Controllers\AiTaskController;
 use App\Http\Controllers\ChatController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerGroupController;
@@ -93,6 +94,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/emails/ai-compose', [EmailController::class, 'askAiCompose'])->name('emails.ai_compose');
     Route::post('/threads/{thread}/ai-summary', [EmailController::class, 'summarizeThread'])->name('threads.ai_summary');
     Route::post('/emails/{email}/ai', [EmailController::class, 'askAi'])->name('emails.ai');
+    Route::get('/ai-tasks/recent', [AiTaskController::class, 'recent'])->name('ai_tasks.recent');
+    Route::get('/ai-tasks/{task}', [AiTaskController::class, 'show'])->name('ai_tasks.show');
     Route::post('/emails/{email}/reply', [EmailController::class, 'reply'])->name('emails.reply');
     Route::post('/emails/compose', [EmailController::class, 'compose'])->name('emails.compose');
     Route::post('/emails/fetch', [EmailController::class, 'fetch'])->name('emails.fetch');
@@ -106,6 +109,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/pending-emails/{pending}/approve', [PendingEmailController::class, 'approve'])->name('pending.approve');
     Route::post('/pending-emails/{pending}/reject', [PendingEmailController::class, 'reject'])->name('pending.reject');
     Route::post('/pending-emails/{pending}/withdraw', [PendingEmailController::class, 'withdraw'])->name('pending.withdraw');
+    Route::get('/pending-emails/{pending}/attachments/{index}/download', [PendingEmailController::class, 'downloadAttachment'])
+        ->whereNumber('index')->name('pending.attachment.download');
 
     // 通知
     Route::get('/notifications', function () {
@@ -154,6 +159,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // AI 関連
     Route::get('/knowledge', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'index'])->name('knowledge.index');
     Route::post('/knowledge/crawl', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'crawl'])->name('knowledge.crawl');
+    Route::post('/knowledge/upload', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'uploadFile'])->name('knowledge.upload');
+    Route::get('/knowledge/from-email/{email}', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'previewEmail'])->name('knowledge.from_email.preview');
+    Route::post('/knowledge/from-email/{email}', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'storeFromEmail'])->name('knowledge.from_email.store');
+    Route::get('/knowledge/sources/statuses', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'statuses'])->name('knowledge.statuses');
+    Route::get('/knowledge/sources/{source}', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'show'])->name('knowledge.show');
+    Route::put('/knowledge/sources/{source}/content', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'updateContent'])->name('knowledge.update_content');
+    Route::put('/knowledge/sources/{source}/collection', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'updateCollection'])->name('knowledge.update_collection');
+    Route::post('/knowledge/sources/bulk-collection', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'bulkUpdateCollection'])->name('knowledge.bulk_collection');
+    Route::post('/knowledge/sources/{source}/refresh', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'refresh'])->name('knowledge.refresh');
+    Route::delete('/knowledge/sources/{source}', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'destroy'])->name('knowledge.destroy');
     // Phase 6-1: RAG コレクション一覧 (顧客編集 UI などから利用)
     Route::get('/api/knowledge/collections', [\Modules\Knowledge\Http\Controllers\KnowledgeController::class, 'collections'])->name('knowledge.collections');
     Route::get('/reports', [\Modules\Workflow\Http\Controllers\ReportController::class, 'index'])->name('reports.index');
@@ -175,6 +190,42 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/settings/ai/default-prompt', [SettingsController::class, 'getDefaultPrompt'])->name('settings.ai.default-prompt.get');
     Route::post('/settings/ai/default-prompt', [SettingsController::class, 'saveDefaultPrompt'])->name('settings.ai.default-prompt.save');
+
+    // チャットピン / リアクション
+    Route::post('/api/chats/pin',                    [\App\Http\Controllers\ChatExtrasController::class, 'togglePin'])->name('chats.pin');
+    Route::get('/api/comments/{comment}/reactions',  [\App\Http\Controllers\ChatExtrasController::class, 'reactionsList'])->name('chats.reactions.list');
+    Route::post('/api/comments/{comment}/reactions', [\App\Http\Controllers\ChatExtrasController::class, 'toggleReaction'])->name('chats.reactions.toggle');
+
+    // チャット添付ファイル
+    Route::get('/chat-attachments/{attachment}/download', [\App\Http\Controllers\ChatAttachmentController::class, 'download'])->name('chat_attachments.download');
+    Route::get('/chat-attachments/{attachment}/inline',   [\App\Http\Controllers\ChatAttachmentController::class, 'inline'])->name('chat_attachments.inline');
+
+    // スタンドアロンチャットルーム
+    Route::get('/api/chat-rooms',                    [\App\Http\Controllers\ChatRoomController::class, 'index'])->name('chat_rooms.index');
+    Route::post('/api/chat-rooms',                   [\App\Http\Controllers\ChatRoomController::class, 'store'])->name('chat_rooms.store');
+    Route::delete('/api/chat-rooms/{room}',          [\App\Http\Controllers\ChatRoomController::class, 'destroy'])->name('chat_rooms.destroy');
+    Route::get('/api/chat-rooms/{room}/messages',    [\App\Http\Controllers\ChatRoomController::class, 'messages'])->name('chat_rooms.messages');
+    Route::post('/api/chat-rooms/{room}/messages',   [\App\Http\Controllers\ChatRoomController::class, 'postMessage'])->name('chat_rooms.post_message');
+    Route::get('/chats/rooms',                       function () { return view('chats.rooms'); })->name('chats.rooms');
+
+    // 個人用シグネチャ
+    Route::get('/api/user/signatures',                [\App\Http\Controllers\UserAssetsController::class, 'indexSignatures'])->name('user.signatures.index');
+    Route::post('/api/user/signatures',               [\App\Http\Controllers\UserAssetsController::class, 'storeSignature'])->name('user.signatures.store');
+    Route::put('/api/user/signatures/{signature}',    [\App\Http\Controllers\UserAssetsController::class, 'updateSignature'])->name('user.signatures.update');
+    Route::delete('/api/user/signatures/{signature}', [\App\Http\Controllers\UserAssetsController::class, 'destroySignature'])->name('user.signatures.destroy');
+
+    // 個人用テンプレート
+    Route::get('/api/user/templates',                 [\App\Http\Controllers\UserAssetsController::class, 'indexTemplates'])->name('user.templates.index');
+    Route::post('/api/user/templates',                [\App\Http\Controllers\UserAssetsController::class, 'storeTemplate'])->name('user.templates.store');
+    Route::put('/api/user/templates/{template}',      [\App\Http\Controllers\UserAssetsController::class, 'updateTemplate'])->name('user.templates.update');
+    Route::delete('/api/user/templates/{template}',   [\App\Http\Controllers\UserAssetsController::class, 'destroyTemplate'])->name('user.templates.destroy');
+
+    // 個人用 AI スキル (ユーザー毎)
+    Route::get('/settings/ai-skills',                [\App\Http\Controllers\UserAiSkillController::class, 'index'])->name('settings.ai_skills.index');
+    Route::post('/settings/ai-skills',               [\App\Http\Controllers\UserAiSkillController::class, 'store'])->name('settings.ai_skills.store');
+    Route::put('/settings/ai-skills/{skill}',        [\App\Http\Controllers\UserAiSkillController::class, 'update'])->name('settings.ai_skills.update');
+    Route::delete('/settings/ai-skills/{skill}',     [\App\Http\Controllers\UserAiSkillController::class, 'destroy'])->name('settings.ai_skills.destroy');
+    Route::post('/settings/ai-skills/reset',         [\App\Http\Controllers\UserAiSkillController::class, 'reset'])->name('settings.ai_skills.reset');
 
     /*
     |--------------------------------------------------------------------------

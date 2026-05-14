@@ -20,11 +20,32 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'name',
+        'display_name',
+        'signature',
         'email',
         'password',
         'role',
         'email_verified_at',
     ];
+
+    /**
+     * 個別設定された署名 → 全体設定の agent_signature → 簡易フォールバック
+     */
+    public function resolvedSignature(): string
+    {
+        if (!empty($this->signature)) return $this->signature;
+        try {
+            $ai = \App\Models\AiSetting::getSettings();
+            if (!empty($ai->agent_signature)) return $ai->agent_signature;
+        } catch (\Throwable) {}
+        $display = $this->display_name ?: $this->name;
+        return "---\nPaperCutサポート窓口\n{$display}";
+    }
+
+    public function resolvedDisplayName(): string
+    {
+        return $this->display_name ?: $this->name ?: 'ユーザー';
+    }
 
     /**
      * Hidden attributes for arrays/JSON.

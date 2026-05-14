@@ -69,4 +69,30 @@ class PendingEmail extends Model
     {
         return \Illuminate\Support\Str::limit($this->body, 80);
     }
+
+    /**
+     * 指定スレッドに紐づく PendingEmail (status=pending) の有無に応じて
+     * EmailThread.status を inbox <-> pending 間で同期する。
+     *
+     * - 承認待ちが存在し、現在 inbox なら → pending に
+     * - 承認待ちが 1 件もなく、現在 pending なら → inbox に戻す
+     * - 既に hold / completed / no_action 等にユーザーが移していれば触らない
+     */
+    public static function syncThreadStatus(?int $threadId): void
+    {
+        if (!$threadId) return;
+        /** @var EmailThread|null $thread */
+        $thread = EmailThread::find($threadId);
+        if (!$thread) return;
+
+        $hasPending = self::whereHas('inReplyToEmail', fn($q) => $q->where('thread_id', $threadId))
+            ->where('status', self::STATUS_PENDING)
+            ->exists();
+
+        if ($hasPending && $thread->status === EmailThread::STATUS_INBOX) {
+            $thread->update(['status' => EmailThread::STATUS_AWAITING_APPROVAL]);
+        } elseif (!$hasPending && $thread->status === EmailThread::STATUS_AWAITING_APPROVAL) {
+            $thread->update(['status' => EmailThread::STATUS_INBOX]);
+        }
+    }
 }

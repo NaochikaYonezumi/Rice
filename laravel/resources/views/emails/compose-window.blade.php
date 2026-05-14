@@ -156,7 +156,42 @@
                         <input type="text" x-model="form.subject" class="w-full pt-7 pb-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all font-bold">
                     </div>
                     <div>
-                        <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">本文</label>
+                        <div class="flex items-center mb-1.5">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex-1">本文</label>
+                            {{-- テンプレート挿入 --}}
+                            <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                                <button type="button" @click="open = !open; if(open) loadTemplates()" class="text-[10px] text-blue-600 hover:underline mr-3">📝 テンプレート挿入</button>
+                                <div x-show="open" x-cloak class="absolute right-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-10 min-w-[220px] max-h-[300px] overflow-y-auto">
+                                    <template x-for="t in templates" :key="t.id">
+                                        <button type="button" @click="applyTemplate(t); open = false"
+                                                class="block w-full text-left px-3 py-2 text-xs hover:bg-blue-50">
+                                            <strong x-text="t.name"></strong>
+                                            <span x-show="t.subject" class="block text-gray-400 truncate" x-text="t.subject"></span>
+                                        </button>
+                                    </template>
+                                    <template x-if="templates.length === 0">
+                                        <p class="px-3 py-2 text-xs text-gray-400">テンプレ未登録 (プロフィールから追加)</p>
+                                    </template>
+                                </div>
+                            </div>
+                            {{-- 署名挿入 --}}
+                            <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                                <button type="button" @click="open = !open; if(open) loadSignatures()" class="text-[10px] text-emerald-600 hover:underline">✍️ 署名挿入</button>
+                                <div x-show="open" x-cloak class="absolute right-0 top-full mt-1 bg-white border rounded-lg shadow-lg z-10 min-w-[220px] max-h-[300px] overflow-y-auto">
+                                    <template x-for="s in signatures" :key="s.id">
+                                        <button type="button" @click="applySignature(s); open = false"
+                                                class="block w-full text-left px-3 py-2 text-xs hover:bg-emerald-50">
+                                            <strong x-text="s.name"></strong>
+                                            <span x-show="s.is_default" class="ml-1 text-[9px] text-amber-600">★</span>
+                                            <span class="block text-gray-400 truncate" x-text="s.body.substring(0, 60)"></span>
+                                        </button>
+                                    </template>
+                                    <template x-if="signatures.length === 0">
+                                        <p class="px-3 py-2 text-xs text-gray-400">署名未登録 (プロフィールから追加)</p>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
                         <textarea x-model="form.body" rows="14" placeholder="返信内容を入力してください..."
                                   class="w-full text-sm border border-gray-200 bg-white rounded-xl p-4 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 outline-none leading-relaxed resize-y text-gray-700 min-h-[280px]"></textarea>
                     </div>
@@ -273,6 +308,46 @@
 
                 {{-- 本体スクロール領域 --}}
                 <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4" style="min-height:0;">
+                    {{-- AI モデルピッカー --}}
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1" style="color:#6b7280;">
+                            <i class="fas fa-cog text-[9px]"></i>AIモデル
+                            <span x-show="aiPickerLoading" class="ml-1" style="color:#9ca3af;">
+                                <i class="fas fa-circle-notch fa-spin"></i>
+                            </span>
+                        </label>
+                        <div class="flex items-center gap-1 flex-wrap">
+                            <div class="flex rounded-lg border border-gray-200 overflow-hidden text-[10px]" style="background-color:#ffffff;">
+                                <button type="button" @click="setAiProvider('ollama')"
+                                        :class="aiProvider === 'ollama' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
+                                        class="px-2 py-1 transition-colors">Ollama</button>
+                                <button type="button" @click="setAiProvider('claude')"
+                                        :class="aiProvider === 'claude' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
+                                        :title="!aiHasClaudeKey ? 'APIキー未設定' : ''"
+                                        class="px-2 py-1 transition-colors border-l border-gray-200">Claude</button>
+                                <button type="button" @click="setAiProvider('gemini')"
+                                        :class="aiProvider === 'gemini' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
+                                        :title="!aiHasGeminiKey ? 'APIキー未設定' : ''"
+                                        class="px-2 py-1 transition-colors border-l border-gray-200">Gemini</button>
+                            </div>
+                            <select x-model="aiModel"
+                                    class="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white">
+                                <template x-if="aiCurrentModels.length === 0">
+                                    <option value="">モデルなし</option>
+                                </template>
+                                <template x-for="m in aiCurrentModels" :key="m.id || m">
+                                    <option :value="m.id || m" x-text="m.name || m"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <template x-if="aiProvider === 'claude' && !aiHasClaudeKey">
+                            <p class="text-[10px]" style="color:#d97706;">⚠ Claude APIキー未設定</p>
+                        </template>
+                        <template x-if="aiProvider === 'gemini' && !aiHasGeminiKey">
+                            <p class="text-[10px]" style="color:#d97706;">⚠ Gemini APIキー未設定</p>
+                        </template>
+                    </div>
+
                     {{-- スキル選択 --}}
                     <div class="space-y-2">
                         <label class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">スキル</label>
@@ -292,10 +367,47 @@
 
                     {{-- 追加指示 --}}
                     <div class="space-y-2">
-                        <label class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">追加の指示 (任意)</label>
-                        <textarea x-model="aiUserPrompt" rows="3" placeholder="例: もっと簡潔に、箇条書きで..."
-                                  class="w-full text-xs rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-100 resize-none"
-                                  style="color:#111827;background-color:#ffffff;border:1px solid #e5e7eb;"></textarea>
+                        <div class="flex items-center justify-between">
+                            <label class="text-[10px] font-extrabold uppercase tracking-widest" style="color:#6b7280;">追加の指示 (任意)</label>
+                            <span class="text-[10px]" style="color:#6366f1;"><kbd class="px-1 bg-white border border-gray-200 rounded text-[9px]">/</kbd> でコレクション挿入</span>
+                        </div>
+                        <div class="relative prompt-editor-container">
+                            <div x-ref="aiPromptHighlight" class="prompt-editor-highlight" aria-hidden="true"
+                                 x-html="renderPromptHighlight(aiUserPrompt)"></div>
+                            <textarea x-ref="aiPromptArea"
+                                      x-model="aiUserPrompt"
+                                      @input="onAiPromptInput($event); syncAiHighlightScroll()"
+                                      @scroll="syncAiHighlightScroll()"
+                                      @keydown="onAiPromptKeyDown($event)"
+                                      @blur="setTimeout(() => aiSlash.open = false, 150)"
+                                      rows="3" placeholder="例: /(コレクション名) を参照して丁寧に返信。もっと簡潔に。"
+                                      class="w-full text-xs rounded-lg p-3 outline-none focus:ring-2 focus:ring-indigo-100 resize-none prompt-editor-input"
+                                      style="background-color:#ffffff;border:1px solid #e5e7eb;"></textarea>
+
+                            {{-- スラッシュコマンド候補 --}}
+                            <div x-show="aiSlash.open" x-cloak
+                                 class="absolute left-0 right-0 z-30 mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto"
+                                 style="top: 100%;">
+                                <div class="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                                    <span><i class="fas fa-folder text-indigo-400 mr-1"></i>ナレッジコレクション</span>
+                                    <span class="text-[9px] text-gray-300" x-show="aiSlash.loading">読み込み中...</span>
+                                </div>
+                                <template x-for="(c, idx) in filteredAiCollections" :key="c.name + idx">
+                                    <button type="button"
+                                            @mousedown.prevent="insertAiCollection(c.name)"
+                                            @mouseenter="aiSlash.activeIdx = idx"
+                                            :class="idx === aiSlash.activeIdx ? 'bg-indigo-50 text-indigo-700' : 'text-gray-700 hover:bg-gray-50'"
+                                            class="w-full text-left px-3 py-2 text-xs flex items-center gap-2">
+                                        <i class="fas fa-folder text-indigo-400 text-[10px]"></i>
+                                        <span class="flex-1 font-mono" x-text="c.name"></span>
+                                        <span class="text-[10px] text-gray-400" x-text="c.source === 'rag-api' ? 'rag' : 'db'"></span>
+                                    </button>
+                                </template>
+                                <template x-if="!aiSlash.loading && filteredAiCollections.length === 0">
+                                    <p class="px-3 py-3 text-xs text-gray-400 text-center">該当するコレクションがありません</p>
+                                </template>
+                            </div>
+                        </div>
                     </div>
 
                     {{-- マスキング --}}
@@ -597,7 +709,7 @@ function composeWindowApp() {
         thread:  @json($thread),
         emails:  @json($emails),
         approvers: @json($approvers ?? []),
-        aiSkills: @json(config('ai_skills.skills', [])),
+        aiSkills: @json($userAiSkills ?? config('ai_skills.skills', [])),
         // 下書き編集モード用
         draftId: @json($draftId ?? null),
         draftMemo: @json($draftMemo ?? null),
@@ -623,11 +735,25 @@ function composeWindowApp() {
         approverSearch: '',
         sendConfirmOpen: false,
         aiPanelOpen: false,
-        aiSkill: 'reply',
+        aiSkill: @json(collect($userAiSkills ?? [])->filter(fn($s) => ($s['is_default_reply'] ?? false))->keys()->first() ?? 'reply'),
         aiUserPrompt: '',
+        // スラッシュコマンド (ナレッジコレクション挿入)
+        aiCollections: [],
+        aiCollectionsLoaded: false,
+        aiSlash: { open: false, query: '', startPos: 0, activeIdx: 0, loading: false },
+        // テンプレート / 署名
+        templates: [],
+        signatures: [],
+        templatesLoaded: false,
+        signaturesLoaded: false,
         aiAnalysis: null,
         aiLoading: false,
         maskPii: true,
+        // AI モデルピッカー
+        aiPickerLoading: false, aiPickerLoaded: false,
+        aiProvider: 'ollama', aiModel: '',
+        aiOllamaModels: [], aiClaudeModels: [], aiGeminiModels: [],
+        aiHasClaudeKey: false, aiHasGeminiKey: false,
 
         // 左ペイン (スレッド) の幅。localStorage に保存。
         leftPaneWidth: (() => {
@@ -700,6 +826,62 @@ function composeWindowApp() {
                     e.returnValue = '';
                 }
             });
+
+            // ?ai_task=ID で起動された場合、保存済み AI タスクの結果を即ロード
+            try {
+                const url = new URL(window.location.href);
+                const aiTaskId = url.searchParams.get('ai_task');
+                if (aiTaskId) {
+                    this.loadAiModels();
+                    this.resumeAiTask(parseInt(aiTaskId, 10));
+                }
+            } catch (_) {}
+        },
+
+        // 既存の AI タスクを取得して AI パネルに表示する
+        async resumeAiTask(taskId) {
+            this.aiPanelOpen = true;
+            this.aiLoading = true;
+            this.aiAnalysis = null;
+            try {
+                const res = await fetch(`/ai-tasks/${taskId}`, { headers: { Accept: 'application/json' } });
+                if (!res.ok) {
+                    this.toast('AI タスクを読み込めませんでした', 'error');
+                    this.aiLoading = false;
+                    return;
+                }
+                const data = await res.json();
+                if (data.status === 'done') {
+                    this.simulateStreaming({
+                        answer: data.answer,
+                        skill_used: data.skill_used,
+                        sources: data.sources,
+                    });
+                    this.toast('AI生成結果を読み込みました', 'success');
+                } else if (data.status === 'error') {
+                    this.aiLoading = false;
+                    this.toast('このタスクは失敗していました: ' + (data.error_message || ''), 'error');
+                } else {
+                    // 処理中の場合、その task_id で再ポーリング (compose-window を一旦閉じて開き直したケース)
+                    const finalData = await this._pollAiTask(taskId);
+                    if (finalData && finalData.status === 'done') {
+                        this.simulateStreaming({
+                            answer: finalData.answer,
+                            skill_used: data.skill_used,
+                            sources: finalData.sources,
+                        });
+                        this.toast('AI生成が完了しました', 'success');
+                    } else if (finalData) {
+                        this.toast('AI生成に失敗: ' + (finalData.error_message || ''), 'error');
+                        this.aiLoading = false;
+                    } else {
+                        this.aiLoading = false;
+                    }
+                }
+            } catch (e) {
+                this.toast('読み込みエラー: ' + (e.message || ''), 'error');
+                this.aiLoading = false;
+            }
         },
 
         buildDraftKey() {
@@ -741,6 +923,157 @@ function composeWindowApp() {
             setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3500);
         },
 
+        _notifyDesktop(title, body) {
+            try {
+                if (!('Notification' in window)) return;
+                if (document.hasFocus()) return;
+                if (Notification.permission === 'granted') {
+                    new Notification(title, { body, tag: 'rice-ai-' + Date.now() });
+                } else if (Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(p => {
+                        if (p === 'granted') new Notification(title, { body, tag: 'rice-ai-' + Date.now() });
+                    });
+                }
+            } catch (_) {}
+        },
+
+        // ===== AI追加指示テキストエリアのスラッシュコマンド =====
+        get filteredAiCollections() {
+            const q = (this.aiSlash.query || '').toLowerCase();
+            if (!q) return this.aiCollections;
+            return this.aiCollections.filter(c => (c.name || '').toLowerCase().includes(q));
+        },
+
+        async loadAiCollections() {
+            if (this.aiCollectionsLoaded) return;
+            this.aiSlash.loading = true;
+            try {
+                const res = await fetch('/api/knowledge/collections', { headers: { Accept: 'application/json' } });
+                if (res.ok) {
+                    const data = await res.json();
+                    this.aiCollections = data.collections || [];
+                }
+            } catch (_) {}
+            finally {
+                this.aiCollectionsLoaded = true;
+                this.aiSlash.loading = false;
+            }
+        },
+
+        onAiPromptInput(e) {
+            const ta = e.target;
+            const pos = ta.selectionStart;
+            const value = ta.value;
+            let validIdx = -1;
+            for (let i = pos - 1; i >= 0; i--) {
+                const ch = value[i];
+                if (/\s/.test(ch)) break;
+                if (ch === '/') {
+                    const prev = value[i - 1];
+                    if (i === 0 || /\s/.test(prev)) validIdx = i;
+                    break;
+                }
+            }
+            if (validIdx === -1) { this.aiSlash.open = false; return; }
+            this.aiSlash.startPos = validIdx;
+            this.aiSlash.query    = value.slice(validIdx + 1, pos);
+            this.aiSlash.activeIdx = 0;
+            this.aiSlash.open = true;
+            this.loadAiCollections();
+        },
+
+        onAiPromptKeyDown(e) {
+            if (!this.aiSlash.open) return;
+            const list = this.filteredAiCollections;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                this.aiSlash.activeIdx = Math.min(this.aiSlash.activeIdx + 1, Math.max(list.length - 1, 0));
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                this.aiSlash.activeIdx = Math.max(this.aiSlash.activeIdx - 1, 0);
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                if (list[this.aiSlash.activeIdx]) {
+                    e.preventDefault();
+                    this.insertAiCollection(list[this.aiSlash.activeIdx].name);
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                this.aiSlash.open = false;
+            }
+        },
+
+        insertAiCollection(name) {
+            const ta = this.$refs.aiPromptArea;
+            if (!ta) return;
+            const value = ta.value;
+            const pos = ta.selectionStart;
+            const before = value.slice(0, this.aiSlash.startPos);
+            const after  = value.slice(pos);
+            const insertion = '/' + name + ' ';
+            const newValue = before + insertion + after;
+            this.aiUserPrompt = newValue;
+            this.$nextTick(() => {
+                const newPos = before.length + insertion.length;
+                try { ta.focus(); ta.setSelectionRange(newPos, newPos); } catch (_) {}
+                this.syncAiHighlightScroll();
+            });
+            this.aiSlash.open = false;
+        },
+
+        // /コレクション をハイライト
+        renderPromptHighlight(text) {
+            const esc = (s) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const tokenRegex = /(^|[\s])\/([^\s\/\\#?&]+)/gu;
+            let result = '', lastIndex = 0;
+            for (const m of (text || '').matchAll(tokenRegex)) {
+                const start = m.index + m[1].length;
+                result += esc((text || '').slice(lastIndex, start));
+                const token = m[2];
+                result += '<span class="col-tag">/' + esc(token) + '</span>';
+                lastIndex = start + 1 + token.length;
+            }
+            result += esc((text || '').slice(lastIndex));
+            if (result.endsWith('\n')) result += ' ';
+            return result;
+        },
+        syncAiHighlightScroll() {
+            const ta = this.$refs.aiPromptArea;
+            const hi = this.$refs.aiPromptHighlight;
+            if (!ta || !hi) return;
+            hi.scrollTop = ta.scrollTop;
+            hi.scrollLeft = ta.scrollLeft;
+        },
+
+        // ===== テンプレート挿入 =====
+        async loadTemplates() {
+            if (this.templatesLoaded) return;
+            try {
+                const r = await fetch('/api/user/templates', { headers:{Accept:'application/json'} });
+                if (r.ok) this.templates = (await r.json()).templates || [];
+            } catch (_) {}
+            this.templatesLoaded = true;
+        },
+        applyTemplate(t) {
+            if (t.subject && !this.form.subject) this.form.subject = t.subject;
+            else if (t.subject) this.form.subject = (this.form.subject || '') + (this.form.subject ? ' ' : '') + t.subject;
+            this.form.body = (this.form.body ? this.form.body + '\n\n' : '') + (t.body || '');
+            this.toast('テンプレート「' + t.name + '」を挿入しました', 'success');
+        },
+
+        // ===== 署名挿入 =====
+        async loadSignatures() {
+            if (this.signaturesLoaded) return;
+            try {
+                const r = await fetch('/api/user/signatures', { headers:{Accept:'application/json'} });
+                if (r.ok) this.signatures = (await r.json()).signatures || [];
+            } catch (_) {}
+            this.signaturesLoaded = true;
+        },
+        applySignature(s) {
+            this.form.body = (this.form.body ? this.form.body.replace(/\n+$/,'') + '\n\n' : '') + (s.body || '');
+            this.toast('署名「' + s.name + '」を挿入しました', 'success');
+        },
+
         formatBytes(bytes) {
             if (bytes < 1024) return `${bytes} B`;
             if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -780,6 +1113,42 @@ function composeWindowApp() {
 
         toggleAi() {
             this.aiPanelOpen = !this.aiPanelOpen;
+            if (this.aiPanelOpen) this.loadAiModels();
+        },
+        get aiCurrentModels() {
+            if (this.aiProvider === 'claude') return this.aiClaudeModels;
+            if (this.aiProvider === 'gemini') return this.aiGeminiModels;
+            return this.aiOllamaModels;
+        },
+        async loadAiModels(force = false) {
+            if (this.aiPickerLoaded && !force) return;
+            this.aiPickerLoading = true;
+            try {
+                const res = await fetch('{{ route("chat.models") }}', {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!res.ok) throw new Error('models endpoint error');
+                const data = await res.json();
+                this.aiOllamaModels = (data.ollama || []).map(m => typeof m === 'string' ? { id: m, name: m } : m);
+                this.aiClaudeModels = data.claude || [];
+                this.aiGeminiModels = data.gemini || [];
+                this.aiHasClaudeKey = !!data.has_claude_key;
+                this.aiHasGeminiKey = !!data.has_gemini_key;
+                this.aiPickerLoaded = true;
+                if (!this.aiModel) {
+                    const list = this.aiCurrentModels;
+                    if (list.length > 0) this.aiModel = list[0].id || list[0];
+                }
+            } catch (e) {
+                // silent
+            } finally {
+                this.aiPickerLoading = false;
+            }
+        },
+        setAiProvider(p) {
+            this.aiProvider = p;
+            const list = this.aiCurrentModels;
+            this.aiModel = list.length > 0 ? (list[0].id || list[0]) : '';
         },
         async askAi() {
             if (!this.canAskAi) { this.toast('AI を呼び出せる状態ではありません', 'error'); return; }
@@ -787,28 +1156,72 @@ function composeWindowApp() {
             try {
                 const isCompose = this.mode === 'compose';
                 const url = isCompose ? '/emails/ai-compose' : `/emails/${this.email.id}/ai`;
+                const basePayload = {
+                    prompt:   this.aiUserPrompt,
+                    skill:    this.aiSkill,
+                    mask_pii: this.maskPii,
+                    provider: this.aiProvider || null,
+                    model:    this.aiModel    || null,
+                };
                 const payload = isCompose
-                    ? {
-                        prompt:   this.aiUserPrompt,
-                        skill:    this.aiSkill,
-                        mask_pii: this.maskPii,
-                        subject:  this.form.subject,
-                        body:     this.form.body,
-                        to:       this.form.to,
-                    }
-                    : { prompt: this.aiUserPrompt, skill: this.aiSkill, mask_pii: this.maskPii };
+                    ? { ...basePayload, subject: this.form.subject, body: this.form.body, to: this.form.to }
+                    : basePayload;
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                if (!res.ok) throw new Error(`AI Server Error (${res.status})`);
-                const data = await res.json();
-                this.simulateStreaming(data);
+                const initial = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    this.toast('AI生成の開始に失敗しました: ' + (initial.message || res.status), 'error');
+                    this.aiLoading = false;
+                    return;
+                }
+                // タスクを受け取ったら完了までポーリング
+                const finalData = await this._pollAiTask(initial.task_id);
+                if (!finalData) { this.aiLoading = false; return; }
+                if (finalData.status === 'error') {
+                    const code = finalData.error_code;
+                    const msg  = finalData.error_message || 'AI処理でエラーが発生しました';
+                    let prefix = '';
+                    if (code === 'insufficient_credits') prefix = '【クレジット不足】';
+                    else if (code === 'invalid_api_key') prefix = '【APIキー無効】';
+                    else if (code === 'rate_limited')    prefix = '【レート制限】';
+                    else if (code === 'model_not_found') prefix = '【モデル未存在】';
+                    else if (code === 'rag_api_unreachable') prefix = '【RAG API 未起動】';
+                    this.toast(prefix + 'AI生成に失敗しました: ' + msg, 'error');
+                    this._notifyDesktop('AI生成 失敗', prefix + msg);
+                    this.aiLoading = false;
+                    return;
+                }
+                this.simulateStreaming({
+                    answer: finalData.answer,
+                    skill_used: initial.skill_used,
+                    sources: initial.sources,
+                });
+                this.toast('AI生成が完了しました' + (initial.skill_used ? ' (' + initial.skill_used + ')' : ''), 'success');
+                this._notifyDesktop('AI返信 完了', initial.skill_used ? initial.skill_used + ' で生成されました' : '返信案が生成されました');
             } catch (e) {
                 this.toast('AI生成に失敗しました: ' + (e.message || ''), 'error');
                 this.aiLoading = false;
             }
+        },
+
+        // AiTask を done/error までポーリング (最大 180s)
+        async _pollAiTask(taskId, maxWaitMs = 180000, intervalMs = 1500) {
+            const started = Date.now();
+            while (Date.now() - started < maxWaitMs) {
+                try {
+                    const res = await fetch(`/ai-tasks/${taskId}`, { headers: { Accept: 'application/json' } });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.status === 'done' || data.status === 'error') return data;
+                    }
+                } catch (_) { /* 一時的なネットワークエラーは継続 */ }
+                await new Promise(r => setTimeout(r, intervalMs));
+            }
+            this.toast('タイムアウト: AI 処理に時間がかかっています', 'error');
+            return null;
         },
         simulateStreaming(data) {
             const fullText = data.answer || '';
@@ -1013,6 +1426,49 @@ function composeWindowApp() {
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ===== プロンプト編集: /コレクション をグレーチップとして可視化 ===== */
+.prompt-editor-container { position: relative; background-color: #ffffff; border-radius: 0.5rem; }
+.prompt-editor-highlight,
+.prompt-editor-input {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    font-size: 0.75rem;            /* text-xs */
+    line-height: 1.5;
+    padding: 0.75rem;              /* p-3 */
+    letter-spacing: normal;
+    word-spacing: normal;
+    tab-size: 4;
+}
+.prompt-editor-highlight {
+    position: absolute;
+    inset: 0;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    pointer-events: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-y: auto;
+    color: #111827;
+    background: transparent;
+    z-index: 1;
+}
+.prompt-editor-input {
+    position: relative;
+    z-index: 2;
+    background: transparent !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+    caret-color: #111827;
+}
+.prompt-editor-input::selection { background-color: rgba(99, 102, 241, 0.25); color: transparent; }
+.prompt-editor-highlight .col-tag {
+    background-color: #e5e7eb;
+    color: #374151;
+    border-radius: 4px;
+    padding: 1px 2px;
+    margin: 0 -1px;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.04);
+}
 
 /* スレッド ↔ ドラフト の境界リサイズハンドル */
 .resize-handle {

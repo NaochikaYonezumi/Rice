@@ -365,12 +365,16 @@
                                 <i class="fas fa-paperclip mr-1"></i>添付ファイル (<span x-text="selectedEmail.attachments.length"></span>)
                             </p>
                             <div class="flex flex-wrap gap-2">
-                                <template x-for="att in selectedEmail.attachments" :key="att.filename">
-                                    <span class="inline-flex items-center gap-2 text-xs font-semibold bg-gray-50 border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg">
-                                        <i class="fas fa-file"></i>
+                                <template x-for="att in selectedEmail.attachments" :key="att.index">
+                                    <a :href="att.download_url"
+                                       :download="att.filename"
+                                       class="inline-flex items-center gap-2 text-xs font-semibold bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 text-gray-700 hover:text-blue-700 px-3 py-1.5 rounded-lg transition-colors"
+                                       :title="'ダウンロード: ' + att.filename">
+                                        <i class="fas" :class="attachmentIcon(att.mime_type, att.filename)"></i>
                                         <span x-text="att.filename"></span>
                                         <span class="text-[10px] text-gray-400" x-text="'(' + att.size + ')'"></span>
-                                    </span>
+                                        <i class="fas fa-download text-[10px] opacity-60"></i>
+                                    </a>
                                 </template>
                             </div>
                         </div>
@@ -444,6 +448,19 @@
 <script>
 function approvalApp() {
     return {
+        // MIME / 拡張子から FontAwesome のアイコンクラスを返す
+        attachmentIcon(mime, filename) {
+            const m = (mime || '').toLowerCase();
+            const ext = (filename || '').split('.').pop().toLowerCase();
+            if (m.startsWith('image/')) return 'fa-file-image';
+            if (m === 'application/pdf' || ext === 'pdf') return 'fa-file-pdf';
+            if (m.includes('word') || ['doc','docx'].includes(ext)) return 'fa-file-word';
+            if (m.includes('excel') || m.includes('spreadsheet') || ['xls','xlsx','csv'].includes(ext)) return 'fa-file-excel';
+            if (m.includes('powerpoint') || m.includes('presentation') || ['ppt','pptx'].includes(ext)) return 'fa-file-powerpoint';
+            if (m.startsWith('text/') || ['txt','md','log'].includes(ext)) return 'fa-file-alt';
+            if (m.includes('zip') || m.includes('compressed') || ['zip','tar','gz','rar','7z'].includes(ext)) return 'fa-file-archive';
+            return 'fa-file';
+        },
         loading: false,
         allEmails: [],
         selectedId: null,

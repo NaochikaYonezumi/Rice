@@ -1,10 +1,25 @@
 fastapi
 uvicorn
+python-multipart
 requests
 beautifulsoup4
 llama-index
 llama-index-vector-stores-postgres
+llama-index-embeddings-huggingface
+llama-index-llms-ollama
+llama-index-llms-anthropic
+llama-index-llms-google-genai
 psycopg2-binary
 pgvector
 crawl4ai
 python-dotenv
+# document_parser.py が使うファイルパーサ
+pymupdf
+pdfplumber
+python-docx
+python-pptx
+openpyxl
+xlrd
+odfpy
+striprtf
+ebooklib

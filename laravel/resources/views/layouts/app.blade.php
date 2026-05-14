@@ -76,12 +76,43 @@
         .main-sidebar:hover .nav-icon {
             margin-right: 0.5rem !important;
         }
-        /* ブランドリンク: アイコンを中央に */
+        /* ブランドリンク */
         .main-sidebar .brand-link {
-            padding-left: 0;
-            padding-right: 0;
-            text-align: center;
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 1.15rem 0.5rem !important;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.15s;
+            background: linear-gradient(180deg, rgba(59,130,246,0.08), rgba(59,130,246,0));
         }
+        .main-sidebar:hover .brand-link {
+            justify-content: flex-start;
+            padding-left: 1rem !important;
+        }
+        .main-sidebar .brand-link:hover { background-color: rgba(255,255,255,0.06); }
+        .main-sidebar .brand-icon {
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            color: #ffffff;
+            border-radius: 10px;
+            display: inline-flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 20px;
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(59,130,246,0.5);
+            letter-spacing: -0.02em;
+        }
+        .main-sidebar .brand-text {
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            font-size: 22px;
+            letter-spacing: 0.03em;
+            white-space: nowrap;
+            opacity: 0; transition: opacity 0.15s;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.25);
+        }
+        .main-sidebar:hover .brand-text { opacity: 1; }
 
         /* モバイル: ホバーが効かないので常時折り畳み (タップで展開する場合は body.sidebar-open など別実装が必要) */
         @media (max-width: 991px) {
@@ -244,8 +275,9 @@
 
     <!-- Main Sidebar Container -->
     <aside class="main-sidebar sidebar-dark-primary elevation-4">
-        <a href="/" class="brand-link">
-            <span class="brand-text font-weight-light">Rice</span>
+        <a href="/" class="brand-link" title="Rice ホーム">
+            <span class="brand-icon">R</span>
+            <span class="brand-text">Rice</span>
         </a>
 
         @php
@@ -310,9 +342,9 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a href="{{ route('chat.index') }}" class="nav-link {{ request()->routeIs('chat.*') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-comments"></i>
-                            <p>Rice Chat</p>
+                        <a href="{{ route('settings.ai_skills.index') }}" class="nav-link {{ request()->routeIs('settings.ai_skills.*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-magic"></i>
+                            <p>AIスキル</p>
                         </a>
                     </li>
                     @if(auth()->user() && auth()->user()->isAdmin())
@@ -339,18 +371,6 @@
                         <a href="{{ route('settings.sso') }}" class="nav-link {{ request()->routeIs('settings.sso*') ? 'active' : '' }}">
                             <i class="nav-icon fas fa-key"></i>
                             <p>SSO設定</p>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ route('master.statuses') }}" class="nav-link {{ request()->routeIs('master.statuses*') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-tasks"></i>
-                            <p>ステータス管理</p>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="{{ route('master.tags') }}" class="nav-link {{ request()->routeIs('master.tags*') ? 'active' : '' }}">
-                            <i class="nav-icon fas fa-tags"></i>
-                            <p>タグ管理</p>
                         </a>
                     </li>
                     @endif
@@ -521,7 +541,11 @@ function userMenu() {
         userMenuLinkFor(n) {
             const k = n.data?.kind;
             if (k === 'rejected')     return '/drafts';
-            if (k === 'chat_mention' && n.data?.thread_id) return '/?thread=' + n.data.thread_id;
+            if (k === 'chat_mention' && n.data?.thread_id) {
+                // チャット一覧の該当スレッドを開き、コメント ID があればその行までスクロール
+                const cid = n.data?.comment_id;
+                return '/chats#thread-' + n.data.thread_id + (cid ? ('&comment=' + cid) : '');
+            }
             return '{{ route('approvals.index') }}';
         },
     };

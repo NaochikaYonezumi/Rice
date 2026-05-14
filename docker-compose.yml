@@ -58,13 +58,14 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - app-network
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # NOTE: GPU が使える環境では下記の deploy ブロックを追加して NVIDIA を有効化
+    #   deploy:
+    #     resources:
+    #       reservations:
+    #         devices:
+    #           - driver: nvidia
+    #             count: all
+    #             capabilities: [gpu]
 
   postgres:
     image: ankane/pgvector:latest

@@ -5,9 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\EmailAttachment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\Storage;
 
 class AttachmentController extends Controller
 {
+    /**
+     * 添付ファイルを local ディスクからダウンロードさせる。
+     * EmailFetcher と PendingEmailController が disk_path を local 上に保存する設計。
+     */
+    public function download(EmailAttachment $attachment): StreamedResponse
+    {
+        abort_unless(Storage::disk('local')->exists($attachment->disk_path), 404);
+
+        return Storage::disk('local')->download(
+            $attachment->disk_path,
+            $attachment->filename
+        );
+    }
+
     public function index(Request $request)
     {
         if (!$request->expectsJson()) {

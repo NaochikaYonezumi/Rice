@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 
 class RagApiService
 {
@@ -27,7 +27,9 @@ class RagApiService
         if (in_array($provider, ['claude', 'gemini'], true)) {
             try {
                 $settings = \App\Models\AiSetting::getSettings();
-            } catch (\Throwable) {}
+            } catch (\Throwable $e) {
+                Log::warning('RagApiService: AiSetting lookup failed', ['provider' => $provider, 'error' => $e->getMessage()]);
+            }
         }
 
         if ($provider === 'claude' && $settings) {
@@ -62,13 +64,6 @@ class RagApiService
 
         $response->throw();
 
-        return $response->json();
-    }
-
-    public function health(): array
-    {
-        $response = Http::timeout(5)->get("{$this->baseUrl}/health");
-        $response->throw();
         return $response->json();
     }
 

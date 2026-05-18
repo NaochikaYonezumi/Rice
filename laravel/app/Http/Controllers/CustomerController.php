@@ -22,8 +22,6 @@ class CustomerController extends Controller
         $validated = $request->validate([
             'name'        => 'required|string|max:255',
             'email'       => 'nullable|email|max:255|unique:customers',
-            'domain'      => 'nullable|string|max:255',
-            'notes'       => 'nullable|string',
             'is_personal' => 'sometimes|boolean',
         ]);
 
@@ -54,8 +52,6 @@ class CustomerController extends Controller
         $validated = $request->validate([
             'name'   => 'required|string|max:255',
             'email'  => 'nullable|email|max:255|unique:customers,email,' . $customer->id,
-            'domain' => 'nullable|string|max:255',
-            'notes'  => 'nullable|string',
         ]);
 
         $customer->update($validated);

@@ -60,7 +60,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
     Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');
     Route::get('/emails/search', [EmailController::class, 'search'])->name('emails.search');
-    Route::get('/emails/{email}', [EmailController::class, 'show'])->name('emails.show');
     Route::get('/threads/{thread}', [EmailController::class, 'thread'])->name('threads.show');
     Route::post('/threads/{thread}/assign-customer', [CustomerController::class, 'assign'])->name('threads.assign-customer');
     Route::post('/threads/{thread}/customers', [CustomerController::class, 'attachThread'])->name('threads.customers.attach');
@@ -89,7 +88,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // 添付ファイル
     Route::get('/attachments', [AttachmentController::class, 'index'])->name('attachments.index');
-    Route::get('/attachments/{attachment}', [EmailController::class, 'downloadAttachment'])->name('attachments.download');
+    Route::get('/attachments/{attachment}', [AttachmentController::class, 'download'])->name('attachments.download');
 
     // 承認待ちメール (API)
     Route::get('/pending-emails', [PendingEmailController::class, 'index'])->name('pending.index');
@@ -140,8 +139,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/scrape/url/{scrapedUrl}', [ScrapeController::class, 'destroyUrl'])->name('scrape.url.destroy');
     Route::delete('/scrape/collection/{collection}', [ScrapeController::class, 'destroy'])->name('scrape.destroy');
 
-    Route::get('/settings/ai/default-prompt', [SettingsController::class, 'getDefaultPrompt'])->name('settings.ai.default-prompt.get');
-    Route::post('/settings/ai/default-prompt', [SettingsController::class, 'saveDefaultPrompt'])->name('settings.ai.default-prompt.save');
 
     /*
     |--------------------------------------------------------------------------

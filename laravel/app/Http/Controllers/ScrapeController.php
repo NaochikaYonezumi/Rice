@@ -6,6 +6,7 @@ use App\Models\ScrapedUrl;
 use App\Services\RagApiService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 
 class ScrapeController extends Controller
 {
@@ -62,7 +63,9 @@ class ScrapeController extends Controller
     {
         try {
             $this->ragApi->deleteSource($scrapedUrl->url, $scrapedUrl->collection);
-        } catch (\Exception) {}
+        } catch (\Exception $e) {
+            Log::warning('ScrapeController.destroyUrl: RAG deleteSource failed', ['url' => $scrapedUrl->url, 'error' => $e->getMessage()]);
+        }
 
         $scrapedUrl->delete();
         return response()->json(['status' => 'deleted']);

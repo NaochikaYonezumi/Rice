@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
 {
-    protected $fillable = ['name', 'email', 'domain', 'notes', 'group_id', 'sort_order', 'is_personal', 'owner_user_id'];
+    protected $fillable = ['name', 'email', 'group_id', 'sort_order', 'is_personal', 'owner_user_id'];
 
     protected $casts = [
         'is_personal' => 'boolean',

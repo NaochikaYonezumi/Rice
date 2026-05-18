@@ -400,6 +400,7 @@ function tagApp() {
 
         // 顧客追加
         customerModalOpen: false,
+        customerSaving: false,
         newCustomerName: '',
         newCustomerEmail: '',
         newCustomerIsPersonal: false,
@@ -407,7 +408,7 @@ function tagApp() {
         async addCustomer() {
             if (!this.newCustomerName) return;
             try {
-                this.noteSaving = true;
+                this.customerSaving = true;
                 const res = await fetch('/customers', {
                     method: 'POST',
                     headers: {
@@ -429,7 +430,7 @@ function tagApp() {
                 }
             } catch (_) {
             } finally {
-                this.noteSaving = false;
+                this.customerSaving = false;
             }
         },
 
@@ -440,7 +441,6 @@ function tagApp() {
         threadMerges: [],
         expandedEmailIds: [],
         loadingThread: false,
-        threadSortOrder: 'desc',
         threadPanelWidth: parseInt(localStorage.getItem('threadPanelWidth')) || 600,
 
         startResizeThread(e) {
@@ -537,7 +537,7 @@ function tagApp() {
                 const res = await fetch(`/threads/${threadId}`, { headers: { 'Accept': 'application/json' } });
                 const data = await res.json();
                 this.selectedThread = data.thread;
-                this.threadEmails = this.sortEmails(data.emails, this.threadSortOrder);
+                this.threadEmails = this.sortEmails(data.emails, 'desc');
                 this.threadMerges = data.merges || [];
                 this.expandedEmailIds = data.emails.map(e => e.id);
             } catch (_) {
@@ -565,22 +565,6 @@ function tagApp() {
             this.composeEmailRef = email;
             this.composeTo = email.from_address;
             this.composeCc = '';
-            this.composeSubject = email.subject.match(/^Re:/i) ? email.subject : 'Re: ' + email.subject;
-            this.composeBody = '';
-            this.composeFiles = [];
-            this.composeFilesPreview = [];
-            this.composeError = '';
-            this.composeSent = false;
-            this.rightTab = 'compose';
-        },
-
-        openReplyAll(email) {
-            this.composeType = 'reply_all';
-            this.composeEmailRef = email;
-            this.composeTo = email.from_address;
-            const ccList = [email.to_address, ...(email.cc ? email.cc.split(',').map(s => s.trim()) : [])]
-                .filter(addr => addr && addr !== email.from_address);
-            this.composeCc = [...new Set(ccList)].join(', ');
             this.composeSubject = email.subject.match(/^Re:/i) ? email.subject : 'Re: ' + email.subject;
             this.composeBody = '';
             this.composeFiles = [];

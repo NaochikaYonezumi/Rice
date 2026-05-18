@@ -6,8 +6,8 @@ use App\Models\AiSetting;
 use App\Models\MailSetting;
 use App\Models\SsoSetting;
 use App\Services\RagApiService;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class SettingsController extends Controller
 {
@@ -53,22 +53,11 @@ class SettingsController extends Controller
         $models = [];
         try {
             $models = $ragApi->getModels();
-        } catch (\Throwable) {}
+        } catch (\Throwable $e) {
+            Log::warning('SettingsController.ai: RAG getModels failed', ['error' => $e->getMessage()]);
+        }
 
         return view('settings.ai', compact('settings', 'models'));
-    }
-
-    public function getDefaultPrompt(): JsonResponse
-    {
-        $settings = AiSetting::getSettings();
-        return response()->json(['prompt' => $settings->default_reply_prompt ?? '']);
-    }
-
-    public function saveDefaultPrompt(Request $request): JsonResponse
-    {
-        $settings = AiSetting::getSettings();
-        $settings->update(['default_reply_prompt' => $request->input('prompt', '')]);
-        return response()->json(['status' => 'ok']);
     }
 
     public function updateAi(Request $request)

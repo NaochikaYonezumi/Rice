@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
@@ -66,9 +67,12 @@ class ChatController extends Controller
                 $settings = \App\Models\AiSetting::getSettings();
                 $data['has_claude_key'] = !empty($settings->anthropic_api_key);
                 $data['has_gemini_key'] = !empty($settings->gemini_api_key);
-            } catch (\Throwable) {}
+            } catch (\Throwable $e) {
+                Log::warning('ChatController.models: AiSetting lookup failed', ['error' => $e->getMessage()]);
+            }
             return response()->json($data);
         } catch (\Exception $e) {
+            Log::warning('ChatController.models: RAG models fetch failed', ['error' => $e->getMessage()]);
             return response()->json(['ollama' => [], 'claude' => [], 'gemini' => [], 'has_claude_key' => false, 'has_gemini_key' => false]);
         }
     }

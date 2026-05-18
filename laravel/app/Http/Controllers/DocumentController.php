@@ -7,6 +7,7 @@ use App\Services\RagApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class DocumentController extends Controller
@@ -74,7 +75,9 @@ class DocumentController extends Controller
 
         try {
             $this->ragApi->deleteCollection($document->collection);
-        } catch (\Exception) {}
+        } catch (\Exception $e) {
+            Log::warning('DocumentController.destroy: RAG deleteCollection failed', ['collection' => $document->collection, 'error' => $e->getMessage()]);
+        }
 
         $document->delete();
         return response()->json(['status' => 'deleted']);

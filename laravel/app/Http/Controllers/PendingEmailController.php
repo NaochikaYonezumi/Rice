@@ -24,9 +24,10 @@ class PendingEmailController extends Controller
         if ($request->has('customer_id')) {
             $query->whereHas('inReplyToEmail.thread', function($q) use ($request) {
                 if ($request->customer_id === 'none') {
-                    $q->whereNull('customer_id');
+                    $q->whereNull('customer_id')->whereDoesntHave('customers');
                 } else {
-                    $q->where('customer_id', $request->customer_id);
+                    // pivot 経由 (代表ルームも pivot に含まれる)
+                    $q->whereHas('customers', fn($cq) => $cq->where('customers.id', $request->customer_id));
                 }
             });
         }

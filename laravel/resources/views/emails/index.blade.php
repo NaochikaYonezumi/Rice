@@ -99,17 +99,17 @@
                 </div>
             </template>
 
-            {{-- ステータスタブ --}}
-            <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
-                <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
+            {{-- ステータスタブ (Material 3 light / dark) --}}
+            <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 dark:bg-[#1F1B16] dark:border-[#322F2A] flex items-center gap-2">
+                <div class="flex items-center gap-1 bg-gray-200/50 dark:bg-[#322F2A]/60 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
                     <template x-for="tab in ['inbox', 'hold', 'completed', 'pending']">
-                        <button @click="setLeftTab(tab)" 
-                                :class="leftTab === tab ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'" 
-                                class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate" 
+                        <button @click="setLeftTab(tab)"
+                                :class="leftTab === tab ? 'bg-white shadow text-blue-600 dark:bg-[#2E2A24] dark:text-[#A8C7FA] dark:shadow-none' : 'text-gray-500 hover:text-gray-800 dark:text-[#A1A09A] dark:hover:text-[#EDEDEC]'"
+                                class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate"
                                 x-text="statusLabels[tab]"></button>
                     </template>
                 </div>
-                <button @click="toggleSort()" class="p-2 text-gray-400 hover:text-blue-600">
+                <button @click="toggleSort()" class="p-2 text-gray-400 hover:text-blue-600 dark:text-[#A1A09A] dark:hover:text-[#A8C7FA]">
                     <i class="fas" :class="sortOrder === 'desc' ? 'fa-sort-amount-down' : 'fa-sort-amount-up'"></i>
                 </button>
             </div>
@@ -253,6 +253,38 @@
                                 <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">担当:</span>
                                 <span class="bg-blue-50 text-blue-600 text-[10px] font-black px-2 py-0.5 rounded-lg border border-blue-100" x-text="selectedThread.assignee?.name"></span>
                             </div>
+                            {{-- ルーム (Customer) チップ : 1スレッド N ルーム --}}
+                            <div x-show="selectedThread && !composeMode" class="mt-2 flex items-center gap-2 flex-wrap">
+                                <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest">ルーム:</span>
+                                <template x-for="c in (selectedThread?.customers || [])" :key="c.id">
+                                    <span class="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-[#1F1B2E] dark:text-[#C8C0FA] dark:border-[#36324A] text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                                        <span x-text="c.name"></span>
+                                        <button @click="detachCustomer(c.id)" class="text-indigo-300 hover:text-red-500 dark:text-[#7F77A8] dark:hover:text-red-400" title="このルームから外す"><i class="fas fa-times-circle"></i></button>
+                                    </span>
+                                </template>
+                                <div class="relative" x-data="{ open: false, query: '' }" @click.away="open = false">
+                                    <button @click="open = !open"
+                                        class="text-[10px] font-black bg-white text-indigo-600 border border-indigo-100 hover:bg-indigo-50 dark:bg-transparent dark:text-[#C8C0FA] dark:border-[#36324A] dark:hover:bg-[#1F1B2E] px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                        <i class="fas fa-plus text-[8px]"></i> ルーム追加
+                                    </button>
+                                    <div x-show="open" x-transition class="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-[#1F1B16] border border-gray-200 dark:border-[#322F2A] rounded-2xl shadow-2xl z-[120] overflow-hidden py-2">
+                                        <input type="text" x-model="query" placeholder="ルーム名で絞り込み..."
+                                            class="w-full px-3 py-1.5 text-[11px] font-bold bg-gray-50 dark:bg-[#2E2A24] dark:text-[#EDEDEC] border-b border-gray-100 dark:border-[#322F2A] outline-none">
+                                        <div class="max-h-48 overflow-y-auto custom-scrollbar">
+                                            <template x-for="c in allCustomers.filter(c => !(selectedThread.customers || []).some(x => x.id === c.id) && (!query || c.name.toLowerCase().includes(query.toLowerCase())))" :key="c.id">
+                                                <button @click="attachCustomer(c.id); open = false; query = ''"
+                                                    class="w-full text-left px-3 py-2 text-[10px] font-bold text-gray-700 dark:text-[#EDEDEC] hover:bg-indigo-50 dark:hover:bg-[#1F1B2E] flex items-center justify-between transition-colors">
+                                                    <span x-text="c.name"></span>
+                                                    <i class="fas fa-plus text-[8px] text-indigo-400"></i>
+                                                </button>
+                                            </template>
+                                            <template x-if="allCustomers.filter(c => !(selectedThread.customers || []).some(x => x.id === c.id) && (!query || c.name.toLowerCase().includes(query.toLowerCase()))).length === 0">
+                                                <p class="text-center py-3 text-[10px] text-gray-400 italic">該当するルームがありません</p>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -264,17 +296,17 @@
                         <template x-if="selectedThread && !composeMode">
                             <div class="max-w-4xl 2xl:max-w-6xl mx-auto space-y-6">
                                 
-                                {{-- マージ情報表示 --}}
+                                {{-- マージ情報表示 (Material 3 Tertiary Container : light / dark) --}}
                                 <template x-for="merge in threadMerges" :key="merge.id">
-                                    <div class="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top duration-300">
+                                    <div class="bg-amber-50 border border-amber-100 dark:bg-[#3D2E00]/60 dark:border-[#5D4A2E]/70 p-4 rounded-2xl flex items-center justify-between animate-in slide-in-from-top duration-300">
                                         <div class="flex items-center gap-3">
-                                            <div class="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600 shadow-inner"><i class="fas fa-object-group fa-xs"></i></div>
+                                            <div class="w-8 h-8 bg-amber-100 dark:bg-[#5D4A2E]/80 rounded-xl flex items-center justify-center text-amber-600 dark:text-[#FFDDB0] shadow-inner"><i class="fas fa-object-group fa-xs"></i></div>
                                             <div>
-                                                <p class="text-[10px] font-black text-amber-900 uppercase tracking-widest">マージ済みスレッド</p>
-                                                <p class="text-sm font-bold text-amber-800" x-text="merge.source_subject"></p>
+                                                <p class="text-[10px] font-black text-amber-900 dark:text-[#FFDDB0] uppercase tracking-widest">マージ済みスレッド</p>
+                                                <p class="text-sm font-bold text-amber-800 dark:text-[#F6E4C1]" x-text="merge.source_subject"></p>
                                             </div>
                                         </div>
-                                        <button @click="unmergeThread(merge.id)" class="text-[10px] font-black bg-white text-amber-600 border border-amber-200 px-4 py-2 rounded-xl hover:bg-amber-600 hover:text-white transition-all shadow-sm uppercase tracking-widest">
+                                        <button @click="unmergeThread(merge.id)" class="text-[10px] font-black bg-white text-amber-600 border border-amber-200 hover:bg-amber-600 hover:text-white dark:bg-transparent dark:text-[#FFDDB0] dark:border-[#5D4A2E] dark:hover:bg-[#5D4A2E] dark:hover:text-[#FFDDB0] px-4 py-2 rounded-xl transition-all shadow-sm uppercase tracking-widest">
                                             解除
                                         </button>
                                     </div>
@@ -308,7 +340,7 @@
                                                     <div class="flex items-center gap-2">
                                                         <template x-if="email.thread_id !== selectedThreadId">
                                                             <div class="flex items-center gap-2">
-                                                                <span class="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-1 rounded-md uppercase border border-amber-100">マージ元操作</span>
+                                                                <span class="text-[10px] font-black text-amber-600 bg-amber-50 border-amber-100 dark:text-[#FFDDB0] dark:bg-[#3D2E00]/60 dark:border-[#5D4A2E]/70 px-2 py-1 rounded-md uppercase border">マージ元操作</span>
                                                                 <button @click="updateSingleEmailStatus(email.thread_id, 'completed')" class="text-[10px] bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded-xl hover:bg-green-600 hover:text-white transition-all font-black uppercase shadow-sm">完了</button>
                                                                 <button @click="updateSingleEmailStatus(email.thread_id, 'hold')" class="text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-3 py-1.5 rounded-xl hover:bg-amber-500 hover:text-white transition-all font-black uppercase shadow-sm">保留</button>
                                                                 <button @click="togglePin(email.thread_id)" class="text-[10px] bg-gray-50 text-gray-700 border border-gray-200 px-3 py-1.5 rounded-xl hover:bg-gray-600 hover:text-white transition-all font-black uppercase shadow-sm">ピン</button>
@@ -592,6 +624,7 @@ function emailApp() {
         mergeModalOpen: false, mergeTargetId: null,
         threads: [], threadsLoading: false, syncError: null, attachmentError: null,
         users: [], // 招待管理から一元化されたユーザーリスト
+        allCustomers: [], // ルーム追加 UI で使う全顧客リスト
         selectedFiles: [],
         replyToAddress: '', replyCc: '', replyBcc: '', replySubject: '', replyBody: '', replyFromAddress: '',
         replyAiPanelOpen: false, aiSkill: 'reply', 
@@ -602,9 +635,13 @@ function emailApp() {
         pollIntervalId: null, pollFailCount: 0, basePollDelay: 60000, maxPollDelay: 300000, currentPollDelay: 60000,
 
         async init() {
+            // ルームが変わったら一覧をリロード (ルームスコープでスレッドを絞り込む)
+            window.addEventListener('room-changed', () => this.loadThreads());
+
             await Promise.all([
                 this.loadThreads(),
-                this.loadUsers()
+                this.loadUsers(),
+                this.loadCustomers()
             ]);
             window.addEventListener('resize', () => this.updateVirtualViewport());
             this.$nextTick(() => this.updateVirtualViewport());
@@ -644,27 +681,66 @@ function emailApp() {
             } catch(e) { console.error('ユーザーリストの取得に失敗'); }
         },
 
+        async loadCustomers() {
+            try {
+                const res = await fetch('/customers');
+                this.allCustomers = await res.json();
+            } catch(e) { console.error('ルーム一覧の取得に失敗'); }
+        },
+
+        async attachCustomer(customerId) {
+            if (!this.selectedThread) return;
+            try {
+                const res = await fetch(`/threads/${this.selectedThread.id}/customers`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    body: JSON.stringify({ customer_id: customerId })
+                });
+                if (!res.ok) throw new Error('attach failed');
+                const data = await res.json();
+                this.selectedThread.customers = data.customers || [];
+            } catch(e) { alert('ルームの追加に失敗しました'); }
+        },
+
+        async detachCustomer(customerId) {
+            if (!this.selectedThread) return;
+            try {
+                const res = await fetch(`/threads/${this.selectedThread.id}/customers/${customerId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
+                });
+                if (!res.ok) throw new Error('detach failed');
+                const data = await res.json();
+                this.selectedThread.customers = data.customers || [];
+            } catch(e) { alert('ルームの解除に失敗しました'); }
+        },
+
         async loadThreads(isBackground = false) {
             if (!isBackground) {
                 this.threadsLoading = true;
             }
-            const params = new URLSearchParams({ 
-                all_status: this.allStatusMode ? '1' : '0', 
+            const params = new URLSearchParams({
+                all_status: this.allStatusMode ? '1' : '0',
                 is_pinned: this.pinnedOnlyMode ? '1' : '0',
-                status: this.leftTab, 
-                sort_order: this.sortOrder 
+                status: this.leftTab,
+                sort_order: this.sortOrder
             });
             if (this.assigneeFilterId !== 'all') {
                 params.append('assigned_user_id', this.assigneeFilterId);
+            }
+            // 「選択中ルーム」グローバルストアを優先してスコープ
+            const activeRoomId = this.$store.room.id ?? null;
+            if (activeRoomId) {
+                params.append('customer_id', activeRoomId);
             }
 
             try {
                 const res = await fetch('/emails/search?' + params.toString());
                 this.threads = await res.json();
                 this.handleScroll();
-            } finally { 
+            } finally {
                 if (!isBackground) {
-                    this.threadsLoading = false; 
+                    this.threadsLoading = false;
                 }
             }
         },

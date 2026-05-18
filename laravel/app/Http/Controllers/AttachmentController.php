@@ -23,10 +23,12 @@ class AttachmentController extends Controller
 
         $query = EmailAttachment::with('email.thread')
             ->when($customerId === 'none', function($query) {
-                $query->whereHas('email.thread', fn($q) => $q->whereNull('customer_id'));
+                // 代表ルームも pivot 所属もないスレッドの添付
+                $query->whereHas('email.thread', fn($q) => $q->whereNull('customer_id')->whereDoesntHave('customers'));
             })
             ->when($customerId && $customerId !== 'none', function($query) use ($customerId) {
-                $query->whereHas('email.thread', fn($q) => $q->where('customer_id', $customerId));
+                // pivot 経由 (代表ルームも pivot に含まれる) で対象スレッドを抽出
+                $query->whereHas('email.thread.customers', fn($q) => $q->where('customers.id', $customerId));
             })
             ->when($q, function($query) use ($q) {
                 $query->where(function($sub) use ($q) {

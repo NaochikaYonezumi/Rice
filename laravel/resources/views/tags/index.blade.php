@@ -70,7 +70,8 @@
                             class="w-full text-left px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors border-b border-gray-50"
                             :class="selectedId === c.name ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''">
                             <div class="flex items-center gap-2 min-w-0">
-                                <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <i x-show="c.is_personal" class="fas fa-lock text-[10px] text-indigo-500 shrink-0" title="個人ルーム"></i>
+                                <svg x-show="!c.is_personal" class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                 </svg>
                                 <span class="text-sm font-medium text-gray-800 truncate" x-text="c.name"></span>
@@ -353,6 +354,22 @@
                         <input type="email" x-model="newCustomerEmail" placeholder="info@example.com"
                             class="w-full text-sm border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
                     </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-2">公開範囲</label>
+                        <div class="flex items-center gap-2 bg-gray-50 p-1 rounded-xl">
+                            <button type="button" @click="newCustomerIsPersonal = false"
+                                :class="!newCustomerIsPersonal ? 'bg-white shadow text-blue-600' : 'text-gray-500'"
+                                class="flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2">
+                                <i class="fas fa-users"></i> 共有ルーム
+                            </button>
+                            <button type="button" @click="newCustomerIsPersonal = true"
+                                :class="newCustomerIsPersonal ? 'bg-white shadow text-indigo-600' : 'text-gray-500'"
+                                class="flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2">
+                                <i class="fas fa-lock"></i> 個人ルーム
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1.5" x-text="newCustomerIsPersonal ? '※ あなただけが利用できるルームです。' : '※ 全ユーザが利用できるルームです。'"></p>
+                    </div>
                 </div>
                 <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
                     <button @click="customerModalOpen = false" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-200 rounded-xl transition-colors">キャンセル</button>
@@ -385,6 +402,7 @@ function tagApp() {
         customerModalOpen: false,
         newCustomerName: '',
         newCustomerEmail: '',
+        newCustomerIsPersonal: false,
 
         async addCustomer() {
             if (!this.newCustomerName) return;
@@ -396,11 +414,16 @@ function tagApp() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     },
-                    body: JSON.stringify({ name: this.newCustomerName, email: this.newCustomerEmail }),
+                    body: JSON.stringify({
+                        name: this.newCustomerName,
+                        email: this.newCustomerEmail,
+                        is_personal: this.newCustomerIsPersonal,
+                    }),
                 });
                 if (res.ok) {
                     this.newCustomerName = '';
                     this.newCustomerEmail = '';
+                    this.newCustomerIsPersonal = false;
                     this.customerModalOpen = false;
                     await this.reloadData();
                 }
@@ -495,6 +518,14 @@ function tagApp() {
             this.contentTab = 'emails';
             this.selectedThread = null; // リセット
             this.noteSaved = false;
+
+            // 顧客 (=ルーム) を選んだ場合はグローバルストアにも反映
+            // → メール/添付/チャットに移動しても選択が維持される
+            if (customerId) {
+                const c = this.customerData.find(x => x.id === customerId);
+                this.$store.room.select({ id: customerId, name: name, is_personal: !!c?.is_personal });
+            }
+
             await this.loadWikis(name);
         },
 

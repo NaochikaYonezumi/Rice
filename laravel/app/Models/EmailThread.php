@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class EmailThread extends Model
 {
@@ -22,9 +23,17 @@ class EmailThread extends Model
         'is_pinned' => 'boolean',
     ];
 
+    /** 代表ルーム (1 件のみ。後方互換のため customer_id をそのまま使う) */
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /** 所属する全ルーム (代表ルーム含む。N:M) */
+    public function customers(): BelongsToMany
+    {
+        return $this->belongsToMany(Customer::class, 'customer_email_thread')
+            ->withTimestamps();
     }
 
     public function assignee(): BelongsTo

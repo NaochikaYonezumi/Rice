@@ -187,7 +187,7 @@ class EmailController extends Controller
         $sortKey = $request->input('sort_key', 'last_email_at');
         $sortOrder = $request->input('sort_order', 'desc');
 
-        $threads = EmailThread::with('latestEmail', 'customer', 'assignee')->withCount('threadMerges')
+        $threads = EmailThread::with('latestEmail', 'customer', 'customers', 'assignee')->withCount('threadMerges')
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->orderBy($sortKey, $sortOrder);
 
@@ -212,12 +212,21 @@ class EmailController extends Controller
             });
         }
         if ($cid) {
-            if ($cid === 'none') $threads->whereNull('customer_id');
-            else $threads->where('customer_id', $cid);
+            if ($cid === 'none') {
+                // 代表ルーム未設定かつ pivot にも所属がない
+                $threads->whereNull('customer_id')
+                    ->whereDoesntHave('customers');
+            } else {
+                // 代表ルーム OR pivot 経由いずれかに含まれる
+                $threads->whereHas('customers', fn($q) => $q->where('customers.id', $cid));
+            }
         }
         if ($gid) {
-            if ($gid === 'none') $threads->whereHas('customer', fn($c) => $c->whereNull('group_id'));
-            else $threads->whereHas('customer', fn($c) => $c->where('group_id', $gid));
+            if ($gid === 'none') {
+                $threads->whereDoesntHave('customers', fn($c) => $c->whereNotNull('group_id'));
+            } else {
+                $threads->whereHas('customers', fn($c) => $c->where('group_id', $gid));
+            }
         }
         foreach ($tags as $tag) {
             $threads->whereJsonContains('tags', $tag);
@@ -234,6 +243,7 @@ class EmailController extends Controller
             'tags' => $t->tags ?? [],
             'customer_id' => $t->customer_id,
             'customer' => $t->customer ? ['name' => $t->customer->name] : null,
+            'customers' => $t->customers->map(fn($c) => ['id' => $c->id, 'name' => $c->name])->values(),
             'latest_email' => $t->latestEmail ? [
                 'from_label' => $t->latestEmail->from_label,
                 'from_address' => $t->latestEmail->from_address,
@@ -265,7 +275,7 @@ class EmailController extends Controller
 
     public function thread(EmailThread $thread): JsonResponse
     {
-        $thread->load(['customer', 'assignee']);
+        $thread->load(['customer', 'customers' => fn($q) => $q->orderBy('name'), 'assignee']);
 
         $threadIds = [$thread->id];
         $mergedSourceIds = \App\Models\ThreadMerge::where('target_thread_id', $thread->id)->pluck('source_thread_id_original')->toArray();
@@ -290,14 +300,29 @@ class EmailController extends Controller
                 'url' => route('attachments.download', $a->id),
             ])->values(),
         ]);
-        
+
         $merges = $thread->threadMerges()->get()->map(fn($m) => [
             'id' => $m->id,
             'source_subject' => $m->source_subject,
             'created_at' => $m->created_at?->format('Y/m/d H:i'),
         ]);
 
-        return response()->json(['thread' => $thread, 'emails' => $emails, 'merges' => $merges]);
+        // thread を軽量フォーマットで返す (customers は {id, name} のみ)
+        $threadPayload = [
+            'id'               => $thread->id,
+            'subject'          => $thread->subject,
+            'status'           => $thread->status,
+            'is_pinned'        => $thread->is_pinned,
+            'tags'             => $thread->tags ?? [],
+            'last_email_at'    => $thread->last_email_at?->format('Y/m/d H:i'),
+            'assigned_user_id' => $thread->assigned_user_id,
+            'assignee'         => $thread->assignee ? ['id' => $thread->assignee->id, 'name' => $thread->assignee->name] : null,
+            'customer_id'      => $thread->customer_id,
+            'customer'         => $thread->customer ? ['id' => $thread->customer->id, 'name' => $thread->customer->name] : null,
+            'customers'        => $thread->customers->map(fn($c) => ['id' => $c->id, 'name' => $c->name])->values(),
+        ];
+
+        return response()->json(['thread' => $threadPayload, 'emails' => $emails, 'merges' => $merges]);
     }
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
@@ -326,8 +351,20 @@ class EmailController extends Controller
         ]);
 
         $customerId = $request->customer_id === 'none' ? null : $request->customer_id;
-        
+
         EmailThread::whereIn('id', $request->thread_ids)->update(['customer_id' => $customerId]);
+
+        // pivot 同期: customer_id 指定時はその顧客を attach (既存兼属は維持)。
+        // 'none' (= null) 指定時は「ルーム未設定にする」意図なので、ピボットも全クリアする。
+        if ($customerId) {
+            foreach (EmailThread::whereIn('id', $request->thread_ids)->get() as $t) {
+                $t->customers()->syncWithoutDetaching([$customerId]);
+            }
+        } else {
+            foreach (EmailThread::whereIn('id', $request->thread_ids)->get() as $t) {
+                $t->customers()->detach();
+            }
+        }
 
         return response()->json([
             'success' => true,

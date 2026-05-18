@@ -2,7 +2,7 @@
 @section('title', 'Rice Chat')
 
 @section('content')
-<div class="flex flex-col h-full" x-data="riceChat()" x-init="loadModels()">
+<div class="flex flex-col h-full" x-data="riceChat()" x-init="init()">
 
     {{-- ヘッダー + モデル選択 --}}
     <div class="px-6 py-3 border-b border-gray-200 bg-white flex items-center gap-4 shrink-0">
@@ -110,6 +110,46 @@ function riceChat() {
         hasGeminiKey: false,
         loadingModels: true,
 
+        async init() {
+            // ルーム変更を購読 — チャット履歴をルーム単位で読み直す
+            window.addEventListener('room-changed', () => this.loadHistory());
+            await Promise.all([this.loadModels(), this.loadHistory()]);
+        },
+
+        get activeRoomId() {
+            return this.$store?.room?.id ?? null;
+        },
+        get activeRoomName() {
+            return this.$store?.room?.name ?? null;
+        },
+
+        async loadHistory() {
+            try {
+                this.messages = [];
+                this._msgId = 0;
+                const params = new URLSearchParams();
+                if (this.activeRoomId) params.set('customer_id', this.activeRoomId);
+                const res = await fetch('/chat/history?' + params.toString());
+                if (!res.ok) return;
+                const rows = await res.json();
+                rows.forEach(r => {
+                    this._msgId++;
+                    this.messages.push({ id: 'u' + this._msgId, role: 'user', text: r.question, status: 'done' });
+                    this._msgId++;
+                    const modelLabel = (r.provider && r.model) ? `${r.provider} / ${r.model}` : null;
+                    this.messages.push({
+                        id: 'b' + this._msgId,
+                        role: 'bot',
+                        text: r.answer || (r.status === 'pending' ? '回答を生成中...' : ''),
+                        status: r.status === 'done' ? 'done' : (r.status === 'error' ? 'error' : 'pending'),
+                        sources: r.sources || [],
+                        modelLabel
+                    });
+                });
+                this.$nextTick(() => this._scrollBottom());
+            } catch (e) { console.error('チャット履歴の取得に失敗', e); }
+        },
+
         get currentModels() {
             if (this.provider === 'claude') return this.claudeModels;
             if (this.provider === 'gemini') return this.geminiModels;
@@ -169,6 +209,7 @@ function riceChat() {
                         question: q,
                         provider: this.provider,
                         model: this.selectedModel || null,
+                        customer_id: this.activeRoomId || null,
                     }),
                 });
                 const data = await res.json();

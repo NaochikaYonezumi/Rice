@@ -13,7 +13,7 @@
         <div class="flex-1 overflow-y-auto py-2">
             <div class="space-y-0.5 px-2">
                 {{-- すべてのファイル --}}
-                <button @click="activeCustomerId = null; load()"
+                <button @click="selectCustomer(null); load()"
                     :class="activeCustomerId === null ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-blue-50'"
                     class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between mb-4 group">
                     <span>すべてのファイル</span>
@@ -31,10 +31,13 @@
                 <template x-if="!customersLoading">
                     <div class="space-y-0.5">
                         <template x-for="c in filteredCustomers" :key="c.id">
-                            <button @click="activeCustomerId = c.id; load()"
+                            <button @click="selectCustomer(c); load()"
                                 :class="activeCustomerId === c.id ? 'bg-blue-600 text-white shadow-md' : 'text-gray-600 hover:bg-blue-50 hover:text-blue-700'"
                                 class="w-full text-left px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-between group">
-                                <span class="truncate pr-2" x-text="c.name"></span>
+                                <span class="truncate pr-2 flex items-center gap-1">
+                                    <i x-show="c.is_personal" class="fas fa-lock text-[8px] opacity-60" title="個人ルーム"></i>
+                                    <span x-text="c.name"></span>
+                                </span>
                                 <span class="text-[10px] opacity-60" x-text="c.emails?.length || 0"></span>
                             </button>
                         </template>
@@ -156,9 +159,9 @@
             <template x-if="!loading && attachments.length > 0 && viewMode === 'grid'">
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-8">
                     <template x-for="att in attachments" :key="att.id">
-                        <div class="group bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm hover:shadow-2xl hover:border-blue-200 transition-all cursor-pointer"
+                        <div class="group bg-white rounded-[2rem] border border-gray-100 overflow-hidden shadow-sm transition-all cursor-pointer hover:shadow-2xl hover:border-amber-200 hover:bg-amber-50/40 dark:bg-[#1F1B16] dark:border-[#322F2A] dark:hover:border-[#5D4A2E] dark:hover:bg-[#3D2E00]/30"
                             @click="openPreview(att)">
-                            <div class="aspect-square bg-gray-50/50 flex items-center justify-center overflow-hidden relative">
+                            <div class="aspect-square bg-gray-50/50 dark:bg-[#1A1814] flex items-center justify-center overflow-hidden relative">
                                 <template x-if="att.is_image">
                                     <img :src="att.url" :alt="att.filename" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110">
                                 </template>
@@ -166,15 +169,15 @@
                                     <div class="text-6xl filter drop-shadow-md" x-text="mimeIcon(att.mime_type)"></div>
                                 </template>
                                 <a :href="att.url" :download="att.filename" @click.stop
-                                    class="absolute top-3 right-3 bg-white/95 hover:bg-blue-600 hover:text-white text-gray-800 rounded-full p-2.5 opacity-0 group-hover:opacity-100 transition-all shadow-xl">
+                                    class="absolute top-3 right-3 bg-white/95 text-gray-800 hover:bg-amber-500 hover:text-white dark:bg-[#2E2A24]/95 dark:text-[#EDEDEC] dark:hover:bg-[#5D4A2E] dark:hover:text-[#FFDDB0] rounded-full p-2.5 opacity-0 group-hover:opacity-100 transition-all shadow-xl">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                 </a>
                             </div>
                             <div class="p-5">
-                                <p class="text-xs font-black text-gray-900 truncate mb-1" x-text="att.filename" :title="att.filename"></p>
+                                <p class="text-xs font-black text-gray-900 dark:text-[#EDEDEC] truncate mb-1" x-text="att.filename" :title="att.filename"></p>
                                 <div class="flex items-center justify-between">
-                                    <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter" x-text="att.size"></span>
-                                    <span class="text-[10px] text-blue-600 font-black truncate max-w-[60px]" x-text="att.from_label"></span>
+                                    <span class="text-[9px] text-gray-400 dark:text-[#A1A09A] font-black uppercase tracking-tighter" x-text="att.size"></span>
+                                    <span class="text-[10px] text-blue-600 dark:text-[#A8C7FA] font-black truncate max-w-[60px]" x-text="att.from_label"></span>
                                 </div>
                             </div>
                         </div>
@@ -182,25 +185,25 @@
                 </div>
             </template>
 
-            {{-- リスト表示 --}}
+            {{-- リスト表示 (Material 3 light / dark, hover : tertiary amber) --}}
             <template x-if="!loading && attachments.length > 0 && viewMode === 'list'">
-                <div class="bg-white rounded-[2.5rem] border border-gray-100 overflow-hidden shadow-sm">
+                <div class="bg-white dark:bg-[#1F1B16] rounded-[2.5rem] border border-gray-100 dark:border-[#322F2A] overflow-hidden shadow-sm">
                     <table class="w-full text-sm">
                         <thead>
-                            <tr class="border-b border-gray-50 bg-gray-50/50">
+                            <tr class="border-b border-gray-50 bg-gray-50/50 dark:border-[#322F2A] dark:bg-[#1A1814]">
                                 <th class="px-6 py-5 w-16"></th>
-                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Filename</th>
-                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Subject / From</th>
-                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Date / Size</th>
+                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 dark:text-[#A1A09A] uppercase tracking-widest">Filename</th>
+                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 dark:text-[#A1A09A] uppercase tracking-widest">Subject / From</th>
+                                <th class="text-left px-4 py-5 text-[10px] font-black text-gray-400 dark:text-[#A1A09A] uppercase tracking-widest">Date / Size</th>
                                 <th class="px-6 py-5 w-20"></th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-50">
+                        <tbody class="divide-y divide-gray-50 dark:divide-[#322F2A]">
                             <template x-for="att in attachments" :key="att.id">
-                                <tr class="hover:bg-blue-50/20 transition-colors group">
+                                <tr class="transition-colors group hover:bg-amber-50/40 dark:hover:bg-[#3D2E00]/30">
                                     <td class="px-6 py-5 text-center">
                                         <template x-if="att.is_image">
-                                            <div class="w-12 h-12 rounded-2xl overflow-hidden border border-gray-100 bg-gray-50 inline-block shadow-sm">
+                                            <div class="w-12 h-12 rounded-2xl overflow-hidden border border-gray-100 dark:border-[#322F2A] bg-gray-50 dark:bg-[#1A1814] inline-block shadow-sm">
                                                 <img :src="att.url" :alt="att.filename" class="w-full h-full object-cover cursor-pointer" @click="openPreview(att)">
                                             </div>
                                         </template>
@@ -209,21 +212,21 @@
                                         </template>
                                     </td>
                                     <td class="px-4 py-5">
-                                        <button @click="openPreview(att)" class="text-sm font-black text-gray-800 hover:text-blue-600 truncate block text-left transition-colors mb-1" x-text="att.filename"></button>
-                                        <span class="text-[9px] text-gray-400 font-black uppercase tracking-tighter" x-text="mimeLabel(att.mime_type)"></span>
+                                        <button @click="openPreview(att)" class="text-sm font-black text-gray-800 dark:text-[#EDEDEC] hover:text-amber-700 dark:hover:text-[#FFDDB0] truncate block text-left transition-colors mb-1" x-text="att.filename"></button>
+                                        <span class="text-[9px] text-gray-400 dark:text-[#A1A09A] font-black uppercase tracking-tighter" x-text="mimeLabel(att.mime_type)"></span>
                                     </td>
                                     <td class="px-4 py-5">
                                         <template x-if="att.thread_id">
-                                            <a :href="'/?thread=' + att.thread_id" class="text-xs text-blue-600 hover:underline font-black block truncate max-w-[300px] mb-1" x-text="att.email_subject"></a>
+                                            <a :href="'/?thread=' + att.thread_id" class="text-xs text-blue-600 dark:text-[#A8C7FA] hover:underline font-black block truncate max-w-[300px] mb-1" x-text="att.email_subject"></a>
                                         </template>
-                                        <span class="text-[10px] text-gray-500 font-bold" x-text="att.from_label"></span>
+                                        <span class="text-[10px] text-gray-500 dark:text-[#A1A09A] font-bold" x-text="att.from_label"></span>
                                     </td>
                                     <td class="px-4 py-5">
-                                        <span class="text-xs text-gray-900 block font-bold mb-1" x-text="att.received_at"></span>
-                                        <span class="text-[10px] text-gray-400 font-black uppercase tracking-tighter" x-text="att.size"></span>
+                                        <span class="text-xs text-gray-900 dark:text-[#EDEDEC] block font-bold mb-1" x-text="att.received_at"></span>
+                                        <span class="text-[10px] text-gray-400 dark:text-[#A1A09A] font-black uppercase tracking-tighter" x-text="att.size"></span>
                                     </td>
                                     <td class="px-6 py-5 text-right">
-                                        <a :href="att.url" :download="att.filename" class="inline-flex p-3 bg-gray-50 text-gray-400 hover:bg-blue-600 hover:text-white rounded-2xl transition-all shadow-sm">
+                                        <a :href="att.url" :download="att.filename" class="inline-flex p-3 rounded-2xl transition-all shadow-sm bg-gray-50 text-gray-400 hover:bg-amber-500 hover:text-white dark:bg-[#322F2A] dark:text-[#A1A09A] dark:hover:bg-[#5D4A2E] dark:hover:text-[#FFDDB0]">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                                         </a>
                                     </td>
@@ -298,7 +301,21 @@ function attachmentApp() {
         previewFile: null,
 
         async init() {
+            // 「選択中ルーム」グローバルストアと同期 (画面遷移しても外れない)
+            this.activeCustomerId = this.$store.room.id ?? null;
+            window.addEventListener('room-changed', (e) => {
+                this.activeCustomerId = e.detail?.id ?? null;
+                this.load();
+            });
             await Promise.all([this.load(), this.loadCustomers()]);
+        },
+
+        selectCustomer(c) {
+            if (c == null) {
+                this.$store.room.clear();
+            } else {
+                this.$store.room.select(c);
+            }
         },
 
         async load() {

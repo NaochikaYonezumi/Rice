@@ -155,12 +155,7 @@ class EmailFetcher
             if (!$thread) {
                 // スレッドを新規作成する場合、顧客がいれば自動で紐付け
                 $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
-                $thread = EmailThread::create([
-                    'subject'       => $normalized,
-                    'status'        => 'inbox',
-                    'last_email_at' => now(),
-                    'customer_id'   => $customer?->id,
-                ]);
+                $thread = $this->createThreadWithCustomer($normalized, $customer);
             }
         }
 
@@ -215,12 +210,31 @@ class EmailFetcher
         $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
 
         // 新規スレッド作成
-        return EmailThread::create([
-            'subject'       => $normalized,
+        return $this->createThreadWithCustomer($normalized, $customer);
+    }
+
+    /**
+     * 新規 EmailThread を作成し、顧客がいれば代表ルームとして customer_id を設定するとともに
+     * N:M ピボット (customer_email_thread) にも同じ顧客を attach する。
+     *
+     * 代表ルーム (customer_id) とピボットを必ず一緒に更新するためのヘルパー。
+     * これを介さずに EmailThread::create(['customer_id' => ...]) すると、
+     * ピボットが空になり、ルーム別一覧 (whereHas('customers')) に新着が出ない原因になる。
+     */
+    protected function createThreadWithCustomer(string $subject, ?\App\Models\Customer $customer): EmailThread
+    {
+        $thread = EmailThread::create([
+            'subject'       => $subject,
             'status'        => 'inbox',
             'last_email_at' => now(),
             'customer_id'   => $customer?->id,
         ]);
+
+        if ($customer) {
+            $thread->customers()->syncWithoutDetaching([$customer->id]);
+        }
+
+        return $thread;
     }
 
     protected function handleAttachments($message, $email)

@@ -10,19 +10,25 @@ use Illuminate\Http\Request;
 
 class CustomerController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        return response()->json(Customer::orderBy('name')->get());
+        return response()->json(
+            Customer::visibleTo($request->user())->orderBy('name')->get()
+        );
     }
 
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name'   => 'required|string|max:255',
-            'email'  => 'nullable|email|max:255|unique:customers',
-            'domain' => 'nullable|string|max:255',
-            'notes'  => 'nullable|string',
+            'name'        => 'required|string|max:255',
+            'email'       => 'nullable|email|max:255|unique:customers',
+            'domain'      => 'nullable|string|max:255',
+            'notes'       => 'nullable|string',
+            'is_personal' => 'sometimes|boolean',
         ]);
+
+        $validated['is_personal']    = $validated['is_personal'] ?? false;
+        $validated['owner_user_id']  = $validated['is_personal'] ? $request->user()?->id : null;
 
         $customer = Customer::create($validated);
 
@@ -31,10 +37,13 @@ class CustomerController extends Controller
             $threadIds = Email::where('from_address', $customer->email)
                 ->pluck('thread_id')
                 ->unique();
-            
+
             EmailThread::whereIn('id', $threadIds)
                 ->whereNull('customer_id')
                 ->update(['customer_id' => $customer->id]);
+
+            // pivot にも同期 (代表 + 兼属 両方を反映)
+            $customer->emailThreads()->syncWithoutDetaching($threadIds->all());
         }
 
         return response()->json($customer);
@@ -53,6 +62,9 @@ class CustomerController extends Controller
         return response()->json($customer);
     }
 
+    /**
+     * 代表ルームを設定する。customer_id を更新し、pivot にも追加する (既存の兼属は維持)。
+     */
     public function assign(Request $request, EmailThread $thread): JsonResponse
     {
         $validated = $request->validate([
@@ -60,15 +72,68 @@ class CustomerController extends Controller
         ]);
 
         $thread->update(['customer_id' => $validated['customer_id']]);
-        return response()->json(['status' => 'ok', 'customer' => $thread->customer]);
+
+        if ($validated['customer_id']) {
+            $thread->customers()->syncWithoutDetaching([$validated['customer_id']]);
+        }
+
+        return response()->json([
+            'status'    => 'ok',
+            'customer'  => $thread->fresh()->customer,
+            'customers' => $thread->customers()->orderBy('name')->get(['customers.id', 'customers.name']),
+        ]);
+    }
+
+    /**
+     * スレッドに兼属ルームを追加する (代表ルーム customer_id は維持)。
+     */
+    public function attachThread(Request $request, EmailThread $thread): JsonResponse
+    {
+        $validated = $request->validate([
+            'customer_id' => 'required|exists:customers,id',
+        ]);
+
+        $thread->customers()->syncWithoutDetaching([$validated['customer_id']]);
+
+        // 代表ルーム未設定の場合は今回の追加を代表にする
+        if (! $thread->customer_id) {
+            $thread->update(['customer_id' => $validated['customer_id']]);
+        }
+
+        return response()->json([
+            'status'    => 'ok',
+            'customers' => $thread->customers()->orderBy('name')->get(['customers.id', 'customers.name']),
+        ]);
+    }
+
+    /**
+     * スレッドから兼属ルームを外す。代表ルームを外した場合は、残った兼属の中から代表を選び直す。
+     */
+    public function detachThread(Request $request, EmailThread $thread, Customer $customer): JsonResponse
+    {
+        $thread->customers()->detach($customer->id);
+
+        if ((int) $thread->customer_id === $customer->id) {
+            $next = $thread->customers()->orderBy('customer_email_thread.id')->first();
+            $thread->update(['customer_id' => $next?->id]);
+        }
+
+        return response()->json([
+            'status'    => 'ok',
+            'customers' => $thread->customers()->orderBy('name')->get(['customers.id', 'customers.name']),
+        ]);
     }
     
-    public function data(): JsonResponse
+    public function data(Request $request): JsonResponse
     {
+        $user = $request->user();
         $data = [];
-        
-        // 顧客未設定のメールを最優先で取得
-        $unassignedThreads = EmailThread::whereNull('customer_id')->with('emails')->get();
+
+        // 顧客未設定のメールを最優先で取得 (代表ルームも pivot 兼属もない)
+        $unassignedThreads = EmailThread::whereNull('customer_id')
+            ->whereDoesntHave('customers')
+            ->with('emails')
+            ->get();
         $unassignedEmails = [];
         foreach ($unassignedThreads as $t) {
             foreach ($t->emails as $e) {
@@ -89,8 +154,11 @@ class CustomerController extends Controller
             'emails' => $unassignedEmails,
         ];
 
-        // 顧客別のメール一覧データを生成
-        $customers = Customer::with(['emailThreads.emails'])->orderBy('name')->get();
+        // 顧客別のメール一覧データを生成 (ログインユーザに見えるルームだけ)
+        $customers = Customer::visibleTo($user)
+            ->with(['emailThreads.emails'])
+            ->orderBy('name')
+            ->get();
         
         foreach ($customers as $c) {
             $emails = [];
@@ -108,9 +176,10 @@ class CustomerController extends Controller
                 }
             }
             $data[] = [
-                'id' => $c->id,
-                'name' => $c->name,
-                'emails' => $emails,
+                'id'          => $c->id,
+                'name'        => $c->name,
+                'is_personal' => $c->is_personal,
+                'emails'      => $emails,
             ];
         }
 

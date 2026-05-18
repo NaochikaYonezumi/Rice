@@ -27,6 +27,32 @@
         <!-- Right navbar links -->
         <ul class="navbar-nav ml-auto">
             @auth
+            {{-- 選択中ルームを保ったまま メール/チャット/添付 を行き来できるピル群 --}}
+            <li class="nav-item d-inline-flex align-items-center"
+                style="gap:6px;margin-right:8px;"
+                x-data="roomNavBar()">
+                <a :href="urlFor('/')"
+                   @click.prevent="navTo('/')"
+                   class="d-inline-flex align-items-center"
+                   :style="pillStyle('mail')"
+                   title="メールへ">
+                    <i class="fas fa-envelope" style="font-size:11px;margin-right:4px;"></i><span>メール</span>
+                </a>
+                <a :href="urlFor('/chat')"
+                   @click.prevent="navTo('/chat')"
+                   class="d-inline-flex align-items-center"
+                   :style="pillStyle('chat')"
+                   title="チャットへ">
+                    <i class="fas fa-comments" style="font-size:11px;margin-right:4px;"></i><span>チャット</span>
+                </a>
+                <a :href="urlFor('/attachments')"
+                   @click.prevent="navTo('/attachments')"
+                   class="d-inline-flex align-items-center"
+                   :style="pillStyle('att')"
+                   title="添付ファイルへ">
+                    <i class="fas fa-paperclip" style="font-size:11px;margin-right:4px;"></i><span>添付</span>
+                </a>
+            </li>
             <li class="nav-item d-none d-sm-inline-block">
                 <span class="nav-link">{{ auth()->user()->name }}</span>
             </li>
@@ -125,6 +151,37 @@
             </div>
         </section>
 
+        {{-- グローバル「選択中ルーム」バナー : 3 画面で共有される localStorage 駆動。
+             URL?room_id= 経由で来た場合は name が空なので、/customers から補完する。 --}}
+        <div x-data="{
+                async syncName() {
+                    if (!this.$store.room.id || this.$store.room.name) return;
+                    try {
+                        const res = await fetch('/customers');
+                        if (!res.ok) return;
+                        const list = await res.json();
+                        const c = list.find(x => x.id === this.$store.room.id);
+                        if (c) this.$store.room.select({ id: c.id, name: c.name, is_personal: c.is_personal });
+                    } catch (_) {}
+                }
+             }"
+             x-init="syncName()"
+             x-show="$store.room.id"
+             x-cloak
+             class="px-4 py-2 bg-indigo-50 border-b border-indigo-100 dark:bg-[#1F1B2E] dark:border-[#36324A] flex items-center gap-2 text-xs">
+            <span class="text-[9px] font-black text-indigo-400 dark:text-[#7F77A8] uppercase tracking-widest">選択中ルーム:</span>
+            <span class="inline-flex items-center gap-1.5 bg-white text-indigo-700 border border-indigo-200 dark:bg-[#2E2A24] dark:text-[#C8C0FA] dark:border-[#36324A] text-[10px] font-black px-2.5 py-0.5 rounded-full">
+                <i class="fas fa-door-open text-[9px]"></i>
+                <span x-text="$store.room.name || '(読み込み中…)'"></span>
+                <span x-show="$store.room.isPersonal" class="ml-1 text-[8px] text-indigo-400 dark:text-[#7F77A8] uppercase tracking-widest">個人</span>
+            </span>
+            <button @click="$store.room.clear()"
+                class="ml-1 text-indigo-300 hover:text-red-500 dark:text-[#7F77A8] dark:hover:text-red-400"
+                title="ルーム選択を解除">
+                <i class="fas fa-times-circle"></i>
+            </button>
+        </div>
+
         <section class="content">
             <div class="container-fluid">
                 @yield('content')
@@ -142,6 +199,54 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/js/adminlte.min.js"></script>
+
+{{-- ルーム遷移ピル群の Alpine コンポーネント。$store.room と現在 URL から表示と遷移先を決める。 --}}
+<script>
+function roomNavBar() {
+    return {
+        get roomId()   { return this.$store?.room?.id ?? null; },
+        get roomName() { return this.$store?.room?.name ?? null; },
+
+        // 現在ページが mail / chat / att / other のどれか
+        get current() {
+            const p = window.location.pathname;
+            if (p === '/' || p.startsWith('/emails')) return 'mail';
+            if (p.startsWith('/chat'))               return 'chat';
+            if (p.startsWith('/attachments'))         return 'att';
+            return null;
+        },
+
+        // 遷移先 URL。room が選択されていれば ?room_id= を付与し、別タブ / 履歴経由でも引き継ぐ
+        urlFor(path) {
+            if (!this.roomId) return path;
+            const u = new URL(path, window.location.origin);
+            u.searchParams.set('room_id', this.roomId);
+            return u.pathname + u.search;
+        },
+
+        // クリック時: localStorage と URL の双方を確実に揃えてから遷移
+        navTo(path) {
+            window.location.href = this.urlFor(path);
+        },
+
+        // ピルの色。アクティブ画面は濃色、非アクティブは淡色、ルーム未選択時はグレー
+        pillStyle(key) {
+            const base = 'text-decoration:none;font-size:11px;font-weight:700;padding:4px 10px;border-radius:9999px;line-height:1.2;cursor:pointer;';
+            const isActive = this.current === key;
+            const palette = {
+                mail: { active: 'background:#b45309;color:#fff;border:1px solid #b45309;',
+                        idle:   'background:#fffbeb;color:#b45309;border:1px solid #fde68a;' },
+                chat: { active: 'background:#1d4ed8;color:#fff;border:1px solid #1d4ed8;',
+                        idle:   'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;' },
+                att:  { active: 'background:#047857;color:#fff;border:1px solid #047857;',
+                        idle:   'background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;' },
+            };
+            return base + (isActive ? palette[key].active : palette[key].idle);
+        },
+    };
+}
+</script>
+
 @yield('js')
 </body>
 </html>

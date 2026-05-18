@@ -63,6 +63,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/emails/{email}', [EmailController::class, 'show'])->name('emails.show');
     Route::get('/threads/{thread}', [EmailController::class, 'thread'])->name('threads.show');
     Route::post('/threads/{thread}/assign-customer', [CustomerController::class, 'assign'])->name('threads.assign-customer');
+    Route::post('/threads/{thread}/customers', [CustomerController::class, 'attachThread'])->name('threads.customers.attach');
+    Route::delete('/threads/{thread}/customers/{customer}', [CustomerController::class, 'detachThread'])->name('threads.customers.detach');
     Route::post('/emails/bulk-assign-customer', [EmailController::class, 'bulkAssignCustomer'])->name('emails.bulk-assign-customer');
     Route::put('/threads/{thread}/tags', [EmailController::class, 'updateTags'])->name('threads.tags');
     Route::put('/threads/{thread}/status', [EmailController::class, 'updateStatus'])->name('threads.status');
@@ -129,6 +131,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
     Route::get('/chat/models', [ChatController::class, 'models'])->name('chat.models');
+    Route::get('/chat/history', [ChatController::class, 'history'])->name('chat.history');
     Route::post('/query', [ChatController::class, 'query'])->name('chat.query');
     Route::get('/query/{id}/result', [ChatController::class, 'result'])->name('chat.result');
 

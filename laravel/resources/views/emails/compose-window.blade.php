@@ -1,9 +1,200 @@
 @extends('layouts.fullpage')
-@section('title', $mode === 'compose' ? '新規メッセージ作成' : ($mode === 'reply_all' ? '全員に返信' : '返信'))
+@section('title', $mode === 'compose' ? '新規メッセージ作成' : ($mode === 'forward' ? '転送' : ($mode === 'reply_all' ? '全員に返信' : '返信')))
+
+@section('css')
+{{-- 本文入力エリアを綺麗な日本語フォントで表示するため Noto Sans JP を読み込む.
+     プリコネクト → display=swap で初期描画を遅らせない. --}}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+    /* Alpine の x-cloak (初期化前要素を隠す) — Tailwind v4 デフォルトに無いため明示定義 */
+    [x-cloak] { display: none !important; }
+
+    /* compose-window ヘッダーは常にクリック可能であること (AI パネル等が誤って上に乗らないように) */
+    .compose-window-header { position: relative; z-index: 30; }
+
+    /* ===== 本文エディタのフォント =====
+       旧 font-mono は等幅で日本語の見栄えが悪かったので、Noto Sans JP に変更。
+       メール本文は読み手も Gmail / Outlook の通常 sans フォントで読むので、
+       書き手側もそれに近い見た目で確認できた方がレイアウトの違和感が減る. */
+    textarea[x-ref="bodyTextarea"] {
+        font-family: "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo",
+                     -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-feature-settings: "palt" 1; /* 自然なプロポーショナル詰め */
+        letter-spacing: 0.01em;
+    }
+
+    /* ===== ダークモード上書き (compose-window) =====
+       layouts.fullpage の基本セットだけでは textarea / 各フォーム要素まで完全に行き届かないので、
+       本画面で使う具体的なセレクタにも個別に当てる。 */
+    html.theme-dark textarea[x-ref="bodyTextarea"],
+    html.theme-dark .compose-window-header,
+    html.theme-dark main,
+    html.theme-dark aside {
+        background-color: #1e1f22 !important;
+        color: #e5e7eb !important;
+    }
+    html.theme-dark textarea[x-ref="bodyTextarea"] {
+        background-color: #2b2d31 !important;
+        border-color: #3f4147 !important;
+    }
+    html.theme-dark .compose-window-header { border-bottom-color: #3f4147 !important; }
+
+    /* ----- 却下バナー (赤系) ----- */
+    html.theme-dark .bg-red-50 {
+        background-color: #3a1a1f !important;
+        color: #fca5a5 !important;
+    }
+    html.theme-dark .border-red-100,
+    html.theme-dark .border-red-200 { border-color: #7f1d1d !important; }
+    html.theme-dark .border-red-400 { border-color: #ef4444 !important; }
+    html.theme-dark .text-red-600,
+    html.theme-dark .text-red-700,
+    html.theme-dark .text-red-800,
+    html.theme-dark .text-red-900 { color: #fca5a5 !important; }
+
+    /* ----- 承認者カード / モーダル (黄系) ----- */
+    html.theme-dark .bg-amber-50,
+    html.theme-dark .bg-amber-50\/40 {
+        background-color: #2d2716 !important;
+        color: #fde68a !important;
+    }
+    html.theme-dark .border-amber-100,
+    html.theme-dark .border-amber-200 { border-color: #78350f !important; }
+    html.theme-dark .text-amber-700,
+    html.theme-dark .text-amber-800,
+    html.theme-dark .text-amber-700\/80 { color: #fbbf24 !important; }
+
+    /* ----- 添付チップ / 入力フォーム (緑 / 青) ----- */
+    html.theme-dark .bg-emerald-50 {
+        background-color: #102b1f !important;
+        color: #6ee7b7 !important;
+    }
+    html.theme-dark .border-emerald-100,
+    html.theme-dark .border-emerald-200 { border-color: #065f46 !important; }
+    html.theme-dark .bg-blue-50,
+    html.theme-dark .bg-indigo-50,
+    html.theme-dark .bg-violet-50,
+    html.theme-dark .bg-purple-50 {
+        background-color: #1e293b !important;
+        color: #93c5fd !important;
+    }
+    html.theme-dark .border-blue-100,
+    html.theme-dark .border-blue-200,
+    html.theme-dark .border-indigo-200 { border-color: #1e40af !important; }
+    html.theme-dark .text-blue-400 { color: #93c5fd !important; }
+
+    /* ----- 「承認者を選択してください」のホバー / ボタン背景 ----- */
+    html.theme-dark .hover\:bg-amber-50:hover { background-color: #3a3217 !important; }
+    html.theme-dark .hover\:bg-blue-50:hover { background-color: #1e293b !important; }
+    html.theme-dark .hover\:bg-emerald-50:hover { background-color: #14352a !important; }
+    html.theme-dark .hover\:bg-red-50:hover { background-color: #3a1a1f !important; }
+    html.theme-dark .hover\:bg-gray-50:hover,
+    html.theme-dark .hover\:bg-gray-100:hover { background-color: #313338 !important; }
+
+    /* ----- 下書きヘッダの AI アシスタントボタン (ヘッダ右上) ----- */
+    /* :style で動的に色指定されているため、 inline style を尊重しつつ
+       ダーク時の白背景だけ #2b2d31 に倒す (ボタンの inline style より優先する !important) */
+    html.theme-dark header.compose-window-header button[\\:style*="background-color:#ffffff"],
+    html.theme-dark .btn-action,
+    html.theme-dark .btn-action-reply,
+    html.theme-dark .btn-action-replyall {
+        background-color: #2b2d31 !important;
+        color: #e5e7eb !important;
+        border-color: #3f4147 !important;
+    }
+
+    /* ----- 左ペイン (返信元メールの本文表示) ----- */
+    html.theme-dark aside .bg-white,
+    html.theme-dark article.bg-white {
+        background-color: #2b2d31 !important;
+        color: #e5e7eb !important;
+        border-color: #3f4147 !important;
+    }
+    html.theme-dark aside .border-gray-100,
+    html.theme-dark aside .border-gray-200 { border-color: #3f4147 !important; }
+    /* 過去メール (details) のヘッダ */
+    html.theme-dark details.bg-white { background-color: #2b2d31 !important; }
+    html.theme-dark details summary { color: #e5e7eb !important; }
+
+    /* ----- フッターの「閉じる」「下書き保存」ボタン領域 ----- */
+    html.theme-dark .rice-btn-primary { background-color: #2563eb !important; color: #fff !important; }
+    html.theme-dark .rice-btn-secondary {
+        background-color: #2b2d31 !important;
+        color: #e5e7eb !important;
+        border-color: #3f4147 !important;
+    }
+
+    /* ----- 各種モーダル (背景の dimmer は黒+透過なので問題なし。中身だけ調整) ----- */
+    html.theme-dark .rice-modal,
+    html.theme-dark .rice-modal-body,
+    html.theme-dark .rice-modal-head,
+    html.theme-dark .rice-modal-foot {
+        background-color: #2b2d31 !important;
+        color: #e5e7eb !important;
+        border-color: #3f4147 !important;
+    }
+
+    /* ----- AI アシスタントパネル: 派手なインディゴ (#4f46e5) を抑えてダーク基調に -----
+       要望:「AIアシスタントの色味 明るすぎる」
+       inline style での指定が多いので attribute selector で個別に上書き. */
+    html.theme-dark [style*="background-color:#4f46e5"],
+    html.theme-dark [style*="background-color: #4f46e5"] {
+        background-color: #1e293b !important;
+        color: #cbd5e1 !important;
+        box-shadow: none !important;
+        border-color: #334155 !important;
+    }
+    html.theme-dark [style*="background-color:#4338ca"],
+    html.theme-dark [style*="background-color: #4338ca"] {
+        background-color: #283448 !important;
+    }
+    html.theme-dark [style*="color:#4f46e5"],
+    html.theme-dark [style*="color: #4f46e5"] { color: #93c5fd !important; }
+    html.theme-dark [style*="color:#6366f1"],
+    html.theme-dark [style*="color: #6366f1"] { color: #93c5fd !important; }
+    html.theme-dark [style*="color:#818cf8"],
+    html.theme-dark [style*="color: #818cf8"] { color: #9ca3af !important; }
+    html.theme-dark [style*="color:#3730a3"],
+    html.theme-dark [style*="color: #3730a3"] { color: #c7d2fe !important; }
+    /* インディゴ薄色背景 (パネルヘッダ / ヒントバナー) */
+    html.theme-dark [style*="background-color:#eef2ff"],
+    html.theme-dark [style*="background-color: #eef2ff"],
+    html.theme-dark [style*="background-color:#ede9fe"] {
+        background-color: #1f2433 !important;
+        color: #cbd5e1 !important;
+    }
+    /* ヒント帯 rgba(238,242,255,0.7) も同様 */
+    html.theme-dark [style*="background-color:rgba(238,242,255"] {
+        background-color: rgba(30,41,59,0.7) !important;
+        color: #93c5fd !important;
+    }
+    /* AI アシスタント本体 (右パネル全体の背景 #eef2ff) */
+    html.theme-dark [style*="background-color:#eef2ff"] { background-color: #1a1c20 !important; }
+    /* AI パネル左の縦罫 (#c7d2fe / #e0e7ff) */
+    html.theme-dark [style*="border-left:1px solid #c7d2fe"],
+    html.theme-dark [style*="border-bottom:1px solid #e0e7ff"],
+    html.theme-dark [style*="border:1px solid #e0e7ff"],
+    html.theme-dark [style*="border:1px solid #c7d2fe"] { border-color: #3f4147 !important; }
+    /* skill カードの強い影 */
+    html.theme-dark [style*="box-shadow:0 4px 14px rgba(79,70,229"] { box-shadow: 0 1px 4px rgba(0,0,0,0.5) !important; }
+    /* AI 結果カード (#0f172a) は元から暗いのでそのまま OK */
+
+    /* ----- ナレッジページのコレクションラベル等 (薄色バッジが見えにくい問題) ----- */
+    html.theme-dark [style*="background:#dbeafe"],
+    html.theme-dark [style*="background: #dbeafe"],
+    html.theme-dark [style*="background-color:#dbeafe"],
+    html.theme-dark [style*="background-color: #dbeafe"] {
+        background-color: rgba(88,101,242,0.25) !important;
+        color: #c7d2fe !important;
+    }
+</style>
+@endsection
 
 @section('content')
 <div class="flex h-screen w-screen overflow-hidden bg-white text-gray-800 font-sans"
-     x-data="composeWindowApp()" x-init="init()" x-cloak>
+     x-data="composeWindowApp()" x-cloak>
 
     {{-- 左ペイン: スレッド表示 / 空状態 (リサイズ可能) --}}
     <aside class="h-full overflow-y-auto bg-gray-50 custom-scrollbar shrink-0"
@@ -26,6 +217,33 @@
             </div>
         </template>
 
+        {{-- 予約中バナー (予約送信のメールを開いた時. 内容確認 + 取消ボタン).
+             下書き保存 (save_as_draft=1) すると backend 側で status=draft に戻るが、
+             サーバを叩く前に明示的に取り消したい場合のための [予約取消] ボタンを用意する. --}}
+        <template x-if="draftIsScheduled">
+            <div class="m-4 p-4 bg-indigo-50 border-l-4 border-indigo-400 rounded-lg shadow-sm">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-clock text-indigo-600"></i>
+                    <p class="text-xs font-bold text-indigo-800">このメールは予約送信中です</p>
+                </div>
+                <div class="text-xs text-indigo-700 space-y-1">
+                    <p><span class="font-bold">送信予定:</span> <span x-text="draftScheduledLabel"></span></p>
+                </div>
+                <p class="text-[10px] text-indigo-700 mt-2 leading-relaxed">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    内容を変更して「下書き保存」または「承認を依頼」を押すと、予約は自動的に取り消されます。
+                    取り消さずに日時だけ変更したい場合は「予約送信」ボタンで再保存してください。
+                </p>
+                <div class="mt-3 flex items-center gap-2">
+                    <button type="button" @click="cancelScheduleFromBanner()" :disabled="cancellingSchedule"
+                            class="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-700 bg-white border border-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-all disabled:opacity-50">
+                        <i class="fas" :class="cancellingSchedule ? 'fa-spinner fa-spin' : 'fa-ban'"></i>
+                        予約を取消して下書きに戻す
+                    </button>
+                </div>
+            </div>
+        </template>
+
         <template x-if="mode === 'compose' && !rejectionInfo">
             <div class="flex flex-col items-center justify-center h-full px-8 text-center">
                 <div class="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center text-gray-300 mb-6">
@@ -45,7 +263,8 @@
         <template x-if="mode !== 'compose' && email">
             <div class="p-6 space-y-5">
                 <header class="space-y-2 pb-4 border-b border-gray-200">
-                    <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider" x-text="mode === 'reply_all' ? '全員に返信' : '返信'"></p>
+                    <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider"
+                       x-text="mode === 'forward' ? '転送' : (mode === 'reply_all' ? '全員に返信' : '返信')"></p>
                     <h1 class="text-lg font-bold text-gray-900 leading-snug" x-text="thread?.subject || email.subject"></h1>
                     <div class="flex flex-wrap items-center gap-3 text-xs text-gray-500">
                         <span class="flex items-center gap-1.5"><i class="fas fa-user-circle text-gray-400"></i><span class="font-semibold text-gray-700" x-text="email.from_label || email.from_address"></span></span>
@@ -103,10 +322,11 @@
 
     {{-- 右ペイン: ドラフトフォーム --}}
     <main class="flex-1 min-w-0 h-full flex flex-col bg-white">
-        <header class="shrink-0 px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between">
+        <header class="compose-window-header shrink-0 px-6 py-4 border-b border-gray-200 bg-white flex items-center justify-between"
+                style="position:relative;z-index:30;background-color:#ffffff;">
             <div class="flex items-center gap-3 min-w-0">
                 <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md shrink-0">
-                    <i class="fas" :class="mode === 'compose' ? 'fa-pen-fancy' : 'fa-reply'"></i>
+                    <i class="fas" :class="mode === 'compose' ? 'fa-pen-fancy' : (mode === 'forward' ? 'fa-share' : 'fa-reply')"></i>
                 </div>
                 <div class="min-w-0">
                     <h2 class="text-base font-bold text-gray-800 truncate" x-text="headerLabel"></h2>
@@ -114,11 +334,13 @@
                 </div>
             </div>
             <div class="flex items-center gap-2 shrink-0">
+                {{-- AI アシスタントボタン: 旧色は白背景 + 鮮やかインディゴ文字で「明るすぎる / 浮く」フィードバック.
+                     落ち着いた slate / indigo の中間色に調整. open 時もインディゴ濃色に振って彩度を抑える. --}}
                 <button @click="toggleAi()"
                         class="px-4 py-2 rounded-lg border text-xs font-bold transition-all flex items-center gap-2 shadow-sm"
                         :style="aiPanelOpen
-                            ? 'background-color:#4f46e5;color:#ffffff;border:1px solid #4f46e5;'
-                            : 'background-color:#ffffff;color:#4f46e5;border:1px solid #c7d2fe;'">
+                            ? 'background-color:#4338ca;color:#ffffff;border:1px solid #3730a3;'
+                            : 'background-color:#f1f5f9;color:#4338ca;border:1px solid #cbd5e1;'">
                     <i class="fas fa-magic"></i> AIアシスタント
                 </button>
                 <button @click="attemptClose()" class="text-gray-400 hover:text-red-500 transition-colors p-2" title="閉じる">
@@ -192,8 +414,19 @@
                                 </div>
                             </div>
                         </div>
-                        <textarea x-model="form.body" rows="14" placeholder="返信内容を入力してください..."
-                                  class="w-full text-sm border border-gray-200 bg-white rounded-xl p-4 focus:ring-2 focus:ring-blue-200 focus:border-blue-300 outline-none leading-relaxed resize-y text-gray-700 min-h-[280px]"></textarea>
+                        {{--
+                            本文エディタ (プレーン textarea).
+                            旧: Quill リッチエディタで HTML を出していたが、HTML 形式の文章作成は
+                            使わないとの要望によりプレーンテキストに統一。
+                            - form.body  : 入力テキスト
+                            - form.body_html : サーバ送信時に空文字で送る (= text/plain のみ送信)
+                        --}}
+                        <textarea x-ref="bodyTextarea"
+                                  x-model="form.body"
+                                  rows="14"
+                                  placeholder="返信内容を入力してください..."
+                                  class="w-full bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all p-4 leading-relaxed"
+                                  style="min-height:280px;resize:vertical;line-height:1.8;font-size:14px;color:#1f2937;background:#ffffff;"></textarea>
                     </div>
 
                     {{-- 承認者の指定 (カード型UI) --}}
@@ -256,6 +489,26 @@
                                     <button type="button" @click="removeExistingAttachment(i)" class="hover:text-red-500" title="この添付を削除"><i class="fas fa-times-circle"></i></button>
                                 </span>
                             </template>
+                            {{--
+                                転送モード時のみ表示: 元メールから引き継ぐ添付の選択チップ群.
+                                初期状態は全てチェック済み. クリックでチェックを外せる.
+                                チェックを外したものは submit 時に inherit_attachment_ids[] から除外され、
+                                pending ストレージへもコピーされない.
+                            --}}
+                            <template x-if="mode === 'forward'">
+                                <template x-for="att in inheritedAttachments" :key="'inh-' + att.id">
+                                    <span class="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border cursor-pointer"
+                                          :class="inheritAttachmentIds.includes(att.id)
+                                              ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                              : 'bg-gray-50 text-gray-400 border-gray-200 line-through'"
+                                          @click="const i = inheritAttachmentIds.indexOf(att.id); if (i >= 0) inheritAttachmentIds.splice(i, 1); else inheritAttachmentIds.push(att.id);"
+                                          :title="inheritAttachmentIds.includes(att.id) ? '転送に含める (クリックで除外)' : '転送に含めない (クリックで含める)'">
+                                        <i class="fas" :class="inheritAttachmentIds.includes(att.id) ? 'fa-paperclip text-amber-500 text-[10px]' : 'fa-ban text-gray-300 text-[10px]'"></i>
+                                        <span x-text="att.filename" class="max-w-[220px] truncate"></span>
+                                        <span class="text-amber-500" x-text="att.size ? formatBytes(att.size) : ''"></span>
+                                    </span>
+                                </template>
+                            </template>
                             {{-- 新規アップロード分 --}}
                             <template x-for="(f, i) in selectedFiles" :key="i">
                                 <span class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-100">
@@ -271,10 +524,13 @@
 
         </div>
 
-        {{-- AIパネル (右側スライドオーバー) — フォームを圧迫しないようウィンドウ右にオーバレイ --}}
+        {{-- AIパネル (右側スライドオーバー) — フォームを圧迫しないようウィンドウ右にオーバレイ。
+             Tailwind v4 JIT で未生成の arbitrary value (z-[1500]) を使うと CSS が当たらず、
+             非表示時にも画面上にうっすら残ってヘッダー要素のクリックを奪うことがあったため
+             全プロパティをインライン style で固定指定する。 --}}
         <div x-show="aiPanelOpen" x-cloak
-             class="fixed inset-0 z-[1500] flex"
-             style="background-color:rgba(15,23,42,0.35);"
+             style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1500;background-color:rgba(15,23,42,0.35);"
+             x-bind:style="aiPanelOpen ? 'display:flex;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1500;background-color:rgba(15,23,42,0.35);' : 'display:none;'"
              @click.self="aiPanelOpen = false"
              @keydown.escape.window="aiPanelOpen = false">
             <div class="ml-auto h-full flex flex-col"
@@ -475,9 +731,76 @@
                 </button>
             </div>
             <div class="flex items-center gap-2">
+                {{--
+                    ★ 予約送信ポップオーバ.
+                       タップで datetime-local 入力欄を出して「予約」ボタンで pending-emails/{id}/schedule を呼ぶ.
+                       送信前に下書き保存しておく必要があるため、まだ id が無い場合は先に保存してから予約.
+                --}}
+                {{--
+                    予約送信ポップオーバ (date picker only). 日時セットで form.scheduled_for を埋め、
+                    実送信ボタンは右側の「予約送信」(緑) ボタンに任せる. 「この日時で予約」もそこを叩く.
+                    予約送信 = 自己送信 (管理者承認不要). 過去日時の場合は即時送信.
+                --}}
+                <div class="relative" x-data="{ open: false }">
+                    <button type="button" @click="open = !open"
+                            class="bg-white border border-amber-200 text-amber-700 px-3 py-2.5 rounded-lg text-sm font-bold hover:bg-amber-50 transition-all flex items-center gap-2"
+                            title="送信日時を指定 (管理者承認なしで指定日時に自動送信)">
+                        <i class="fas fa-clock"></i>
+                        <span x-show="!scheduledForLabel">予約日時</span>
+                        <span x-show="scheduledForLabel" x-text="'予約: ' + scheduledForLabel"></span>
+                    </button>
+                    <div x-show="open" @click.outside="open = false" x-cloak
+                         class="absolute bottom-full mb-2 right-0 bg-white rounded-xl border border-gray-200 shadow-2xl p-4 w-80 z-[100]">
+                        <p class="text-[11px] font-bold text-gray-700 mb-2">送信日時を指定</p>
+                        <input type="datetime-local" x-model="form.scheduled_for"
+                               :min="scheduledForMinValue"
+                               class="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                        <p class="text-[10px] text-emerald-700 mt-1.5 font-bold">
+                            <i class="fas fa-check-circle mr-1"></i>予約送信は管理者承認なしで指定日時に自動送信されます。
+                        </p>
+                        <p class="text-[10px] text-gray-500 mt-1 leading-relaxed">
+                            送信前に <code class="bg-gray-100 px-1 rounded">下書き / 予約送信</code> 一覧から
+                            「予約取消」で本文を見直したり中止することもできます。
+                        </p>
+                        <div class="flex items-center gap-2 mt-3">
+                            <button type="button" @click="form.scheduled_for = ''; open = false;"
+                                    class="text-xs text-gray-500 hover:text-gray-700 underline">予約解除</button>
+                            <button type="button" @click="scheduleSend().then(() => { if (!sending) open = false; })"
+                                    :disabled="!form.scheduled_for || sending"
+                                    class="ml-auto bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i class="fas fa-paper-plane mr-1"></i>この日時で予約送信
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <button type="button" @click="attemptClose()" class="bg-white border border-gray-200 text-gray-600 px-4 py-2.5 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all">閉じる</button>
+                {{--
+                    自己送信ボタン (= 承認フロー非経由).
+                    - 通常は管理者ポリシーが SEND_POLICY_APPROVAL_REQUIRED の場合は非表示.
+                    - 例外: 予約送信 (form.scheduled_for あり) は「ユーザが個別に送信する」扱いなのでポリシー無視で常に出す.
+                      実送信前に本人が取消できる猶予があるため自己責任で許可している (backend selfSend も同様の判断).
+                --}}
+                <button type="button" @click="sendNow()" :disabled="!form.body || sending"
+                        x-show="!isApprovalRequired || form.scheduled_for"
+                        class="bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow hover:bg-emerald-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        :title="form.scheduled_for ? ('指定日時 (' + scheduledForLabel + ') に自動送信 (管理者承認なし・取消可能)') : '承認を経由せず今すぐ自分で送信'">
+                    <span x-show="!sending && !form.scheduled_for">今すぐ送信</span>
+                    <span x-show="!sending && form.scheduled_for">この日時で予約送信</span>
+                    <span x-show="sending">送信中...</span>
+                    <i class="fas fa-paper-plane" x-show="!sending && !form.scheduled_for"></i>
+                    <i class="fas fa-clock" x-show="!sending && form.scheduled_for"></i>
+                    <i class="fas fa-spinner animate-spin" x-show="sending"></i>
+                </button>
+                {{--
+                    承認を依頼するボタン.
+                    予約送信 (form.scheduled_for あり) の場合は非表示にする.
+                    理由: 予約 = ユーザの個別送信なので承認フローには載せない.
+                          時刻指定は承認後に承認者が決める仕様 (approval-side で「予約のまま承認」を選べる).
+                --}}
                 <button type="button" @click="submitDraft()" :disabled="!form.body || sending"
-                        class="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        x-show="!form.scheduled_for"
+                        class="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="承認者に依頼してから送信 (承認後の送信時刻は承認者が決定)">
                     <span x-show="!sending">承認を依頼する</span>
                     <span x-show="sending">送信中...</span>
                     <i class="fas fa-paper-plane" x-show="!sending"></i>
@@ -710,11 +1033,27 @@ function composeWindowApp() {
         emails:  @json($emails),
         approvers: @json($approvers ?? []),
         aiSkills: @json($userAiSkills ?? config('ai_skills.skills', [])),
+        // 送信ポリシー (管理者設定. flexible = 自己送信OK / approval_required = 承認必須).
+        // サーバから埋め込み、API でも /api/send-policy で取れる. ボタンの出し分けに使う.
+        sendPolicy: @json($sendPolicy ?? 'flexible'),
+        get isApprovalRequired() { return this.sendPolicy === 'approval_required'; },
         // 下書き編集モード用
         draftId: @json($draftId ?? null),
         draftMemo: @json($draftMemo ?? null),
+        // 予約送信中の下書きを開いた時のフラグ + ラベル. 上部バナー表示に使う.
+        draftIsScheduled: @json($draftIsScheduled ?? false),
+        draftScheduledLabel: @json($draftScheduledLabel ?? null),
+        cancellingSchedule: false,
         // 下書きから引き継いだ既存添付 (削除すると keep_attachments[] から外れて送信時に削除される)
         existingAttachments: @json($draftAttachments ?? []),
+        // 転送モード時、元メールから引き継ぐ候補添付 (EmailAttachment) のリスト.
+        // {id, filename, mime_type, size, url}. 全て初期チェック済みで、ユーザが個別に外せる.
+        // チェック中の ID は inheritAttachmentIds 配列で管理 → submit 時に inherit_attachment_ids[] として送る.
+        inheritedAttachments: @json($inheritedAttachments ?? []),
+        inheritAttachmentIds: (function () {
+            const list = @json($inheritedAttachments ?? []);
+            return Array.isArray(list) ? list.map(a => a.id).filter(v => v != null) : [];
+        })(),
         rejectionInfo: @json($rejectionInfo ?? null),
         form: {
             from:    @json($defaultFrom),
@@ -722,9 +1061,17 @@ function composeWindowApp() {
             cc:      @json($replyCc),
             bcc:     @json($replyBcc),
             subject: @json($replySubject),
-            body:    @json($draftBody ?? ''),
+            // body = プレーンテキスト (互換 / 検証 / 既存ロジック用)
+            // body_html = リッチエディタの HTML (送信 multipart 用)
+            // 下書き編集時は draftBody / draftBodyHtml をサーバから初期値として渡される。
+            // 転送モード時はサーバ側で組み立てた引用本文を replyBody として受け取り、初期値にする.
+            body:      @json($draftBody ?? ($replyBody ?? '')),
+            body_html: @json($draftBodyHtml ?? ''),
             approver_id: '',
+            // 予約送信用 (タスク #112). datetime-local 入力. 空 = 即時 / 通常承認フロー.
+            scheduled_for: @json($draftScheduledFor ?? ''),
         },
+        // 旧 Quill 関連 state は残骸として残さない。テキストエリアは form.body と直接バインドされる。
         selectedFiles: [],
         attachmentError: null,
         sending: false,
@@ -746,6 +1093,8 @@ function composeWindowApp() {
         signatures: [],
         templatesLoaded: false,
         signaturesLoaded: false,
+        // 現在本文に挿入されている署名テキスト (差し替え時の検出用)
+        currentSignatureText: '',
         aiAnalysis: null,
         aiLoading: false,
         maskPii: true,
@@ -772,6 +1121,7 @@ function composeWindowApp() {
         get headerLabel() {
             if (this.mode === 'compose') return '新規メッセージ作成';
             if (this.mode === 'reply_all') return '全員に返信';
+            if (this.mode === 'forward')   return '転送';
             return '返信';
         },
         get pastEmails() {
@@ -819,6 +1169,13 @@ function composeWindowApp() {
             this.clearLocalDraft();
             this.initialBody = this.form.body;
 
+            // 本文エディタは <textarea x-model="form.body"> で Alpine 直接バインド (Quill 廃止).
+            // body_html は HTML 編集を廃止したため常に空文字を送る.
+            this.form.body_html = '';
+
+            // デフォルト署名を自動挿入 (本文がまだ署名を含んでいなければ)
+            this.insertDefaultSignature();
+
             // 未保存確認 (タブ閉じる/リロード)
             window.addEventListener('beforeunload', (e) => {
                 if (!this.sending && !this.sentCompleted && this.isDirty) {
@@ -837,6 +1194,41 @@ function composeWindowApp() {
                 }
             } catch (_) {}
         },
+
+        // ====== 本文エディタ操作ヘルパ (プレーン textarea 版) ======
+        //
+        // 旧: Quill リッチエディタを使っていたが、HTML 形式の文章作成は不要との要望に
+        //     合わせてプレーン textarea に統一。各ヘルパの API は維持しつつ、
+        //     裏で this.form.body を直接書き換えるだけ (textarea は x-model で連動)。
+        // body_html は送信時に互換維持で空文字を送る。
+
+        // 本文を丸ごと置き換える (signature / template / AI 等から呼ばれる)
+        setBodyText(text) {
+            this.form.body      = (text === undefined || text === null) ? '' : String(text);
+            this.form.body_html = '';
+        },
+        // HTML 渡しは「タグを剥がしてテキストに」する。互換 API 用 (実質 setBodyText と同じ)
+        setBodyHtml(html) {
+            const txt = String(html || '').replace(/<\s*br\s*\/?>/gi, "\n")
+                .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n").replace(/<[^>]*>/g, '')
+                .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+            this.setBodyText(txt);
+        },
+        // 末尾に追加 (テンプレ挿入 / AI 結果挿入 / 署名挿入)
+        appendBodyText(text) {
+            if (text === undefined || text === null || text === '') return;
+            this.form.body = (this.form.body || '') + String(text);
+            this.form.body_html = '';
+        },
+        appendBodyHtml(html) {
+            const txt = String(html || '').replace(/<\s*br\s*\/?>/gi, "\n")
+                .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, "\n").replace(/<[^>]*>/g, '')
+                .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+            this.appendBodyText(txt);
+        },
+        // 旧 Quill 用の互換スタブ (no-op)
+        _pushFormBodyToEditor() {},
+        _plainToSimpleHtml(text) { return String(text || ''); },
 
         // 既存の AI タスクを取得して AI パネルに表示する
         async resumeAiTask(taskId) {
@@ -910,7 +1302,7 @@ function composeWindowApp() {
                 if (d.cc)      this.form.cc      = d.cc;
                 if (d.bcc)     this.form.bcc     = d.bcc;
                 if (d.subject) this.form.subject = d.subject;
-                if (d.body)    this.form.body    = d.body;
+                if (d.body)    this.setBodyText(d.body);
             } catch (_) {}
         },
         clearLocalDraft() {
@@ -1053,11 +1445,38 @@ function composeWindowApp() {
             } catch (_) {}
             this.templatesLoaded = true;
         },
+        // テンプレート適用 (2026-05 仕様変更):
+        //   - 件名は変更しない (テンプレートは「本文の部分挿入」専用と再定義).
+        //   - 本文は textarea のカーソル位置に挿入する (上書きしない).
+        //   - カーソル取得不能 (textarea がまだ DOM に無い等) の場合は末尾追記にフォールバック.
         applyTemplate(t) {
-            if (t.subject && !this.form.subject) this.form.subject = t.subject;
-            else if (t.subject) this.form.subject = (this.form.subject || '') + (this.form.subject ? ' ' : '') + t.subject;
-            this.form.body = (this.form.body ? this.form.body + '\n\n' : '') + (t.body || '');
-            this.toast('テンプレート「' + t.name + '」を挿入しました', 'success');
+            const tbody = (t.body || '');
+            if (!tbody) {
+                this.toast('テンプレート「' + (t.name || '無題') + '」は本文が空です', 'error');
+                return;
+            }
+            const ta = this.$refs.bodyTextarea;
+            const current = this.form.body || '';
+            // textarea のフォーカス位置にスニペットとして挿入. 既存テキストは保持.
+            if (ta && typeof ta.selectionStart === 'number') {
+                const start = ta.selectionStart;
+                const end   = ta.selectionEnd ?? start;
+                const before = current.slice(0, start);
+                const after  = current.slice(end);
+                this.form.body      = before + tbody + after;
+                this.form.body_html = '';
+                // 挿入直後のカーソルを本文末尾 (挿入後の位置) に移動 → UX 上「続きが書きやすい」.
+                this.$nextTick(() => {
+                    if (!ta) return;
+                    const pos = before.length + tbody.length;
+                    try { ta.focus(); ta.setSelectionRange(pos, pos); } catch (_) {}
+                });
+            } else {
+                // フォールバック: 末尾追記.
+                const prefix = current ? '\n\n' : '';
+                this.appendBodyText(prefix + tbody);
+            }
+            this.toast('テンプレート「' + (t.name || '無題') + '」をカーソル位置に挿入しました', 'success');
         },
 
         // ===== 署名挿入 =====
@@ -1069,9 +1488,97 @@ function composeWindowApp() {
             } catch (_) {}
             this.signaturesLoaded = true;
         },
+        // 既存の署名を差し替える (なければ追加する)
+        // 注意: 署名はプレーンテキストとして扱う。Quill エディタに HTML として流し込むときは
+        // _plainToSimpleHtml を経由するので XSS リスクは無い。
         applySignature(s) {
-            this.form.body = (this.form.body ? this.form.body.replace(/\n+$/,'') + '\n\n' : '') + (s.body || '');
+            const newSig = (s.body || '');
+            // 既に挿入済みの署名を本文中から検出して差し替える
+            let nextBodyPlain;
+            if (this.currentSignatureText && this.form.body && this.form.body.includes(this.currentSignatureText)) {
+                nextBodyPlain = this.form.body.split(this.currentSignatureText).join(newSig);
+            } else {
+                // 未挿入なら末尾に追加 (引用がある場合は引用の直前に挟む)
+                nextBodyPlain = this._insertSignatureIntoBody(this.form.body || '', newSig);
+            }
+            // エディタ全体を新しい plain で置き換える (Quill に同期させるため setBodyText を使う)
+            this.setBodyText(nextBodyPlain);
+            this.currentSignatureText = newSig;
             this.toast('署名「' + s.name + '」を挿入しました', 'success');
+        },
+        // 引用 (`> ...` で始まる行) の直前に署名を入れる。引用がなければ末尾。
+        _insertSignatureIntoBody(body, sig) {
+            if (!sig) return body;
+            const lines = body.split('\n');
+            // 引用ブロック (連続する `>` 行) の開始位置を探す
+            let quoteStart = -1;
+            for (let i = 0; i < lines.length; i++) {
+                if (/^\s*>/.test(lines[i])) { quoteStart = i; break; }
+            }
+            if (quoteStart >= 0) {
+                const head = lines.slice(0, quoteStart).join('\n').replace(/\n+$/, '');
+                const tail = lines.slice(quoteStart).join('\n');
+                return (head ? head + '\n\n' : '') + sig + '\n\n' + tail;
+            }
+            const cleaned = (body || '').replace(/\n+$/, '');
+            return (cleaned ? cleaned + '\n\n' : '') + sig;
+        },
+        // 起動時にデフォルト署名を自動挿入。
+        // 挿入後はカーソルを本文先頭 (位置 0) に置く — ユーザは「署名の上に」自然に書き始められる。
+        //
+        // ★ 重要: 既存ドラフトの再オープン (draftId が立っている) では絶対に挿入しない。
+        //   旧実装は `body.includes(signature.body)` で重複チェックしていたが、改行や全角空白の
+        //   ちょっとした差で false になり、却下→再生成→再オープンのたびに署名が積み上がって
+        //   「メール本文に署名が複数並ぶ」事故が起きていた。
+        //   draftId == null の純粋な新規 reply/compose の時だけ挿入することで根本解決する。
+        async insertDefaultSignature() {
+            try {
+                await this.loadSignatures();
+                // (1) 既存ドラフト再オープン時は何もしない (=既に署名がある前提)
+                if (this.draftId) {
+                    // 現在使われている署名を currentSignatureText に登録しておく (差し替え機能用)
+                    const matched = (this.signatures || []).find(s => s.body && (this.form.body || '').includes(s.body));
+                    if (matched) this.currentSignatureText = matched.body;
+                    this._focusQuillAtStart();
+                    return;
+                }
+                // (2) 新規 reply/compose
+                const def = (this.signatures || []).find(s => s.is_default);
+                if (!def) return;
+                // 念のため: 既に本文中に「同一の署名テキストの先頭 12 文字」が含まれていれば
+                //   再挿入をスキップ (例: 内部下書きシステムが署名を埋め込んだ場合の二重挿入防止)。
+                const defHead = (def.body || '').replace(/\s+/g, '').slice(0, 12);
+                const bodyCompact = (this.form.body || '').replace(/\s+/g, '');
+                if (defHead && bodyCompact.includes(defHead)) {
+                    this.currentSignatureText = def.body || '';
+                    this._focusQuillAtStart();
+                    return;
+                }
+                const nextBodyPlain = this._insertSignatureIntoBody(this.form.body || '', def.body || '');
+                this.setBodyText(nextBodyPlain);
+                this.currentSignatureText = def.body || '';
+                // 挿入後はカーソルを本文先頭へ
+                this._focusQuillAtStart();
+            } catch (_) {}
+        },
+
+        // 本文 textarea のカーソルを位置 0 に置きフォーカス。
+        // signature / template 挿入後に「署名の上から書き始められる」体験のためのヘルパ。
+        // Quill 廃止後は単純な textarea 操作だが、互換性のため旧名のまま残す。
+        _focusQuillAtStart() {
+            this.$nextTick(() => {
+                try {
+                    const el = this.$refs.bodyTextarea;
+                    if (!el) return;
+                    el.focus();
+                    // setSelectionRange(0,0) でキャレットを本文先頭に
+                    if (typeof el.setSelectionRange === 'function') {
+                        el.setSelectionRange(0, 0);
+                    }
+                    // 念のためスクロールも先頭へ
+                    el.scrollTop = 0;
+                } catch (_) {}
+            });
         },
 
         formatBytes(bytes) {
@@ -1238,14 +1745,19 @@ function composeWindowApp() {
         },
         applyAiDraft() {
             if (!this.aiAnalysis?.answer) return;
-            this.form.body = (this.form.body ? this.form.body + '\n\n' : '') + this.aiAnalysis.answer;
+            // AI の回答は plain text 想定。エディタ末尾に挿入する。
+            const prefix = this.form.body ? '\n\n' : '';
+            this.appendBodyText(prefix + this.aiAnalysis.answer);
             this.toast('本文に反映しました', 'success');
         },
 
         // FormDataを構築
+        // body は互換のためのプレーンテキスト、body_html は Quill が出した HTML。
+        // サーバ側は body_html を主、body をフォールバックとして扱う。
         buildFormData(asDraft = false) {
             const fd = new FormData();
-            fd.append('body', this.form.body || (asDraft ? '(下書き)' : ''));
+            fd.append('body',      this.form.body      || (asDraft ? '(下書き)' : ''));
+            fd.append('body_html', this.form.body_html || '');
             fd.append('to', this.form.to || '');
             fd.append('from_address', this.form.from || '');
             fd.append('cc', this.form.cc || '');
@@ -1260,10 +1772,19 @@ function composeWindowApp() {
             //  「keep_attachments が空 = 全削除」と解釈する)
             this.existingAttachments.forEach(att => fd.append('keep_attachments[]', att.path));
             this.selectedFiles.forEach(f => fd.append('attachments[]', f));
+            // 転送モード: ユーザがチェックを残した「元メールから引き継ぐ添付」の ID を送信.
+            // controller 側はこれらをファイル実体ごと pending ストレージへコピーする.
+            if (this.mode === 'forward') {
+                (this.inheritAttachmentIds || []).forEach(id => fd.append('inherit_attachment_ids[]', id));
+            }
             return fd;
         },
 
         getSubmitUrl() {
+            // 転送モード: /emails/{id}/forward に送る. controller 側で subject + inherit_attachment_ids を解釈する.
+            if (this.mode === 'forward' && this.email && this.email.id) {
+                return `/emails/${this.email.id}/forward`;
+            }
             return (this.mode === 'compose' || !this.email)
                 ? '/emails/compose'
                 : `/emails/${this.email.id}/reply`;
@@ -1303,7 +1824,7 @@ function composeWindowApp() {
                         : '承認待ちとして送信しました', 'success');
                     // beforeunload を抑止するため、close する前にフラグを立てる
                     this.sentCompleted = true;
-                    this.form.body = '';
+                    this.setBodyText('');           // Quill エディタも空に
                     this.form.subject = '';
                     this.selectedFiles = [];
                     setTimeout(() => {
@@ -1314,6 +1835,136 @@ function composeWindowApp() {
                     this.toast('入力エラー: ' + errs, 'error');
                 } else {
                     this.toast('送信失敗: ' + (data.message || data.error || `HTTP ${res.status}`), 'error');
+                }
+            } catch (e) {
+                this.toast('通信エラー: ' + (e.message || ''), 'error');
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        // ===== 自己送信 (Self-Send) =====
+        // 「今すぐ送信」 / 「この日時で予約送信」ボタン押下時に呼ばれる.
+        // 承認フローを経由せず、作成者自身の判断で送信する.
+        // 管理者が send_policy = approval_required にしている場合はサーバ側が 403 を返す.
+        // 流れ:
+        //   1. 入力チェック (to / subject / body)
+        //   2. saveDraftToServer() で下書きを保存 → pending_id を得る
+        //   3. POST /pending-emails/{id}/self-send (scheduled_for 任意)
+        //      - scheduled_for 空: 即時送信 (mode=immediate)
+        //      - scheduled_for 未来: 予約に切替 (mode=scheduled)
+        //   4. 成功なら opener に通知して閉じる
+        // 予約中バナーから「予約を取消して下書きに戻す」を押した時のハンドラ.
+        // POST /pending-emails/{id}/unschedule → 成功で draftIsScheduled をクリアし
+        // 現在のウィンドウはそのまま編集続行 (form.scheduled_for もクリア).
+        async cancelScheduleFromBanner() {
+            if (!this.draftId || this.cancellingSchedule) return;
+            if (!confirm(`予約送信 (${this.draftScheduledLabel || ''}) を取り消して下書きに戻しますか？`)) return;
+            this.cancellingSchedule = true;
+            try {
+                const res = await fetch(`/pending-emails/${this.draftId}/unschedule`, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.status === 'error') {
+                    this.toast(data.message || '予約取消に失敗しました', 'error');
+                    return;
+                }
+                this.toast('予約を取り消し、下書きに戻しました', 'success');
+                this.draftIsScheduled = false;
+                this.draftScheduledLabel = null;
+                this.form.scheduled_for = '';
+                this.notifyOpener();
+            } catch (e) {
+                this.toast('予約取消に失敗しました: ' + (e.message || ''), 'error');
+            } finally {
+                this.cancellingSchedule = false;
+            }
+        },
+
+        async sendNow() {
+            if (this.sending) return;
+            if (!this.form.body) { this.toast('本文を入力してください', 'error'); return; }
+            if (!this.form.to)   { this.toast('宛先 (To) を入力してください', 'error'); return; }
+            if (!this.form.subject) { this.toast('件名を入力してください', 'error'); return; }
+
+            // 予約日時のバリデーション (任意)
+            let scheduledIso = '';
+            if (this.form.scheduled_for) {
+                const when = new Date(this.form.scheduled_for);
+                if (isNaN(when.getTime())) {
+                    this.toast('送信日時が不正です', 'error');
+                    return;
+                }
+                if (when.getTime() <= Date.now() - 60 * 1000) {
+                    this.toast('予約日時は現在以降を指定してください', 'error');
+                    return;
+                }
+                scheduledIso = this.form.scheduled_for;
+            }
+
+            this.sending = true;
+            try {
+                // (1) まず下書きとして保存して pending_id を得る
+                //    既に draftId がある場合は更新されるだけ.
+                const draftRes = await fetch(this.getSubmitUrl(), {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    body: this.buildFormData(true),
+                });
+                let draftData = {};
+                try { draftData = await draftRes.json(); } catch(_) {}
+                if (!draftRes.ok) {
+                    if (draftRes.status === 422 && draftData.errors) {
+                        const errs = Object.values(draftData.errors).flat().join('\n');
+                        this.toast('入力エラー: ' + errs, 'error');
+                    } else {
+                        this.toast('下書き保存に失敗しました: ' + (draftData.message || `HTTP ${draftRes.status}`), 'error');
+                    }
+                    this.sending = false;
+                    return;
+                }
+                const pendingId = this.draftId || draftData.id;
+                if (!pendingId) {
+                    this.toast('下書きID取得失敗 (保存はされています)', 'error');
+                    this.sending = false;
+                    return;
+                }
+                this.draftId = pendingId;
+
+                // (2) 自己送信エンドポイントを叩く
+                const fd = new FormData();
+                if (scheduledIso) fd.append('scheduled_for', scheduledIso);
+                const sendRes = await fetch(`/pending-emails/${pendingId}/self-send`, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': this.csrfToken, 'Accept': 'application/json' },
+                    body: fd,
+                });
+                let sendData = {};
+                try { sendData = await sendRes.json(); } catch(_) {}
+
+                if (sendRes.ok) {
+                    this.clearLocalDraft();
+                    this.notifyOpener();
+                    const msg = sendData.mode === 'scheduled'
+                        ? `${this.scheduledForLabel} に予約しました`
+                        : '送信しました';
+                    this.toast(msg, 'success');
+                    this.sentCompleted = true;
+                    this.setBodyText('');
+                    this.form.subject = '';
+                    this.selectedFiles = [];
+                    setTimeout(() => { try { window.close(); } catch(_) {} }, 400);
+                } else if (sendRes.status === 403) {
+                    // ポリシー (approval_required) で弾かれた
+                    this.toast(sendData.message || '管理者の設定により、送信には承認が必要です. 「承認を依頼」を使ってください.', 'error');
+                    // ポリシーを最新に更新してボタン表示を切替
+                    this.sendPolicy = 'approval_required';
+                } else if (sendRes.status === 422) {
+                    this.toast('送信できません: ' + (sendData.message || '入力内容に誤りがあります'), 'error');
+                } else {
+                    this.toast('送信失敗: ' + (sendData.message || sendData.error || `HTTP ${sendRes.status}`), 'error');
                 }
             } catch (e) {
                 this.toast('通信エラー: ' + (e.message || ''), 'error');
@@ -1346,6 +1997,43 @@ function composeWindowApp() {
             }
         },
 
+        // ===== 予約送信 (Scheduled Send) =====
+        // ★ 仕様 (2026-05 改定): 予約送信は「ユーザの個別送信」扱い. 管理者承認は不要.
+        //   - form.scheduled_for が未来日時なら sendNow() に委譲し、/pending-emails/{id}/self-send
+        //     経由で status=scheduled に遷移 (送信は cron が拾う).
+        //   - 管理者ポリシーが approval_required でも、予約送信は承認バイパスで OK
+        //     (backend selfSend が hasFutureSchedule 時にポリシーチェックをスキップ).
+        async scheduleSend() {
+            if (this.sending) return;
+            if (!this.form.scheduled_for) { this.toast('送信日時を指定してください', 'error'); return; }
+            const when = new Date(this.form.scheduled_for);
+            if (isNaN(when.getTime()) || when.getTime() <= Date.now() - 60 * 1000) {
+                this.toast('予約日時は現在以降を指定してください', 'error');
+                return;
+            }
+            if (!this.form.to) { this.toast('宛先が空のため予約できません', 'error'); return; }
+            if (!this.form.subject) { this.toast('件名が空のため予約できません', 'error'); return; }
+
+            // 予約送信 = 自己送信フロー. 承認依頼は経由しない (sendNow が /self-send を叩く).
+            await this.sendNow();
+        },
+        // 表示用ラベル ("M/D HH:MM"). form.scheduled_for が空なら空文字.
+        get scheduledForLabel() {
+            const s = this.form.scheduled_for;
+            if (!s) return '';
+            try {
+                const d = new Date(s);
+                if (isNaN(d.getTime())) return s;
+                return d.getMonth() + 1 + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+            } catch (_) { return s; }
+        },
+        // datetime-local の min 属性 (今から 1 分後)
+        get scheduledForMinValue() {
+            const d = new Date(Date.now() + 60 * 1000);
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        },
+
         notifyOpener() {
             try {
                 if (window.opener && !window.opener.closed) {
@@ -1366,7 +2054,7 @@ function composeWindowApp() {
             try {
                 await this.saveDraftToServer();
                 this.clearLocalDraft();
-                this.form.body = '';
+                this.setBodyText('');           // Quill エディタも空に
                 this.selectedFiles = [];
                 this.closeConfirmOpen = false;
                 this.sentCompleted = true; // beforeunload 抑止
@@ -1383,7 +2071,7 @@ function composeWindowApp() {
         },
         discardAndClose() {
             this.clearLocalDraft();
-            this.form.body = '';
+            this.setBodyText('');           // Quill エディタも空に
             this.selectedFiles = [];
             this.closeConfirmOpen = false;
             this.sentCompleted = true; // beforeunload 抑止
@@ -1499,3 +2187,5 @@ function composeWindowApp() {
 .resize-handle:hover::after { background: #ffffff; opacity: 1; }
 </style>
 @endsection
+
+{{-- Quill リッチエディタは廃止 (プレーン textarea に変更) のため CDN ロード不要 --}}

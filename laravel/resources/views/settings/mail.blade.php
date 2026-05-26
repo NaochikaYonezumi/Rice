@@ -180,6 +180,10 @@
 
 @section('js')
 <script>
+// layouts/app.blade.php の jQuery / Bootstrap / AdminLTE は defer 読み込みのため、
+// インラインスクリプトがパース到達した時点では $ が未定義。
+// DOMContentLoaded は defer スクリプトの実行後に発火するので、ここで待つ。
+document.addEventListener('DOMContentLoaded', function() {
 $(function() {
     function toggleProtocol() {
         var protocol = $('#inbox_protocol').val();
@@ -193,6 +197,7 @@ $(function() {
 
     $('#inbox_protocol').on('change', toggleProtocol);
     toggleProtocol();
+});
 });
 </script>
 @endsection

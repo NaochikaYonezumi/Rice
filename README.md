@@ -32,6 +32,24 @@ Notion風UIのメール管理 + RAG（AI回答）システム。
 bash scripts/setup.sh
 ```
 
+## Git Hooks (個人情報 / シークレット流出防止)
+
+`.githooks/pre-commit` で「DB ダンプ / `.env` / 顧客企業ドメイン / API キー
+っぽい文字列 / 添付実体」をステージング時に検出して commit を止めます。
+
+**新しく clone した直後に 1 度だけ実行:**
+
+```bash
+git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit
+```
+
+検出されるとエラーメッセージが出てコミットが拒否されます。
+緊急時は `git commit --no-verify` で迂回できますが、中身を目視確認してください。
+
+顧客企業ドメインを追加したい場合は `.githooks/pre-commit` 内の
+`DENY_DOMAINS=( ... )` 配列に足してください。
+
 ## POP3メール設定（Gmail例）
 
 `laravel/.env` に設定：

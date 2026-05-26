@@ -22,11 +22,16 @@
 set -euo pipefail
 
 # ---- 顧客企業ドメイン (= 公開リポジトリに出したくない実ドメイン) ----
-# 個別案件で社内クライアント名が混ざらないようにここに足していく.
-# 例: 顧客 acme 社の本物ドメインなら "acme.co.jp" を追加.
-DENY_DOMAINS=(
-    "example.com"
-)
+# 公開コミットしたくない実ドメインをここに足す.
+# 既定は空 (公開 OSS では空 / プライベートリポジトリでは社内ドメインを追記).
+#
+# ローカルだけで運用したい場合:
+#   git update-index --skip-worktree .githooks/pre-commit
+# で追跡を抑止すれば、ここの編集は commit に乗らない.
+#
+# 例: 顧客 acme 社のドメイン "acme.co.jp" を block したいなら:
+#   DENY_DOMAINS=("acme.co.jp")
+DENY_DOMAINS=()
 
 # ---- 検査対象: 今回 commit にステージングされたファイルのみ ----
 # diff --cached --name-only -z は NUL 区切り (スペース含むファイル名対応).

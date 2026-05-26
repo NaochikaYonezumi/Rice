@@ -27,102 +27,115 @@
 
 ## セットアップ手順 (新規 clone から初回ログインまで)
 
-> 検証環境: WSL2 (Ubuntu 20.04) + Docker Desktop (Linux engine).
-> macOS / Linux も同じ手順で動きます。
+> 検証環境: WSL2 (Ubuntu 20.04) + Docker Desktop (Linux engine). macOS / Linux も同じ手順で動きます。
+>
+> **必須セクション (★) を頭から順に実行すれば http://localhost で UI が立ち上がる** ところまでいけます。任意 (◯) はスキップ可。
 
-### 0. 必要なもの
+### 必須セクション (★ ここまでで Web UI 起動 + ログイン可能)
 
-| ツール | 役割 |
-|---|---|
-| git | clone |
-| Docker + Docker Compose **v2** | 全コンテナ管理 (laravel / mysql / postgres / ollama / rag-api) |
-| (オプション) ssh-agent / GitHub 用 SSH 鍵 | clone を SSH 経由でやる場合 |
+#### ★ 0. 前提ツール
 
-`docker compose` (スペース区切り = v2) を推奨。古い `docker-compose` (v1, Python 製) はビルド中の tempfile race condition で稀に落ちます。
-
-### 1. リポジトリを clone してブランチ切替
+すでに揃っているなら飛ばして OK。
 
 ```bash
-cd ~/projects
-git clone git@github.com:NaochikaYonezumi/Rice.git
+# Docker
+docker --version           # 20.10 以上を推奨
+docker compose version     # v2 必須 (出力に "v2.x" と出ること)
+
+# git
+git --version
+```
+
+`docker compose` (スペース区切り = v2) を使ってください。古い `docker-compose` (v1, Python 製) はビルド中に `/tmp/tmpxxxx not found` で稀に落ちます。
+
+#### ★ 1. リポジトリを clone してブランチ切替
+
+```bash
+cd ~/projects                                            # 作業フォルダへ
+git clone git@github.com:NaochikaYonezumi/Rice.git       # SSH 経由 (推奨)
+# もしくは https:
+# git clone https://github.com/NaochikaYonezumi/Rice.git
 cd Rice
 
-# 最新の機能 (ゴミ箱 / AND-OR ルール / 転送 等) が乗っているブランチへ
+# ⚠ 最新の機能 (ゴミ箱 / AND-OR / 転送 等) は feature/phase6-tests にのみ存在.
+#   main はまだ古いので必ず切り替える.
 git checkout feature/phase6-tests
 ```
 
-### 2. pre-commit hook を有効化 (機密情報の漏洩防止)
+確認: `git branch --show-current` が `feature/phase6-tests` を返せば OK。
+
+#### ★ 2. pre-commit hook を有効化
+
+機密情報 (.env / DB ダンプ / SSH 鍵 / API キー / 顧客ドメイン) の漏洩を防ぐフックを有効化します。
 
 ```bash
 git config core.hooksPath .githooks
 chmod +x .githooks/pre-commit
 ```
 
-`.githooks/pre-commit` がステージング時に以下を検出して commit を止めます:
+確認: `git config core.hooksPath` が `.githooks` を返せば OK。
 
-- `.env` / `.env.local` 等の env ファイル本体
-- `*.sql` / `*.dump` / `*.sqlite*` (DB ダンプ)
-- `laravel/storage/app/private/attachments/*` (添付実体)
-- API キー / トークン (`sk-ant-…` / `sk-…` / `AKIA[0-9A-Z]{16}` / `gh[psour]_…`)
-- `DB_PASSWORD=…` / `SMTP_PASSWORD=…` 等の hardcode された値
-- `DENY_DOMAINS` 配列に登録された顧客企業ドメイン (既定は空)
-
-緊急時は `git commit --no-verify` で迂回可能ですが、中身を必ず目視確認してください。
-
-社内ドメインを block したい場合 (個人運用):
-
-```bash
-# 個人設定として .githooks/pre-commit を編集し、git の追跡から外す
-git update-index --skip-worktree .githooks/pre-commit
-# 編集して DENY_DOMAINS=("acme.co.jp") のように記載
-```
-
-### 3. `.env` を作成
+#### ★ 3. `.env` を作成
 
 ```bash
 cp laravel/.env.example laravel/.env
 ```
 
-(必要なら APP_NAME, MAIL 設定等を編集。後から `設定 → メール` の管理画面でも変更可)
+(MAIL 設定や ANTHROPIC_API_KEY 等は後から `設定 → メール` 画面で変更可なので、最初はテンプレートのまま OK)
 
-### 4. Docker コンテナを起動
+#### ★ 4. Docker コンテナを起動 (初回はイメージビルド)
 
 ```bash
 docker compose up -d --build
 ```
 
-初回はイメージビルド (rag-api の Python 依存 + Laravel) で **5〜10 分** ほどかかります。完了したら以下が稼働:
+- **初回所要時間**: 5〜10 分 (rag-api の Python 依存と Laravel イメージのビルド)
+- バックグラウンド (-d) で 5 コンテナが起動: `laravel` / `mysql` / `postgres` / `ollama` / `rag-api`
 
-| サービス | ポート |
+確認:
+
+```bash
+docker compose ps
+```
+
+5 コンテナ全部が `Up` または `Up (healthy)` になっていれば OK。`mysql` が `starting` の場合は 30 秒ほど待ってから次に進む。
+
+| サービス | ポート (host から) |
 |---|---|
 | laravel (Web UI) | http://localhost (port 80) |
 | rag-api (FastAPI) | http://localhost:8000 |
 | ollama (ローカル LLM) | localhost:11434 |
-| mysql | (internal) |
 | postgres + pgvector | localhost:5432 |
+| mysql | (internal only) |
 
-### 5. Composer 依存をインストール
+#### ★ 5. Composer で PHP 依存をインストール
 
-Laravel コンテナの中に `vendor/` がまだ無いので:
+Laravel コンテナ内に `vendor/` がまだ無いので、 docker exec で composer を回す:
 
 ```bash
 docker compose exec laravel composer install
 ```
 
-`Generating optimized autoload files` が出れば完了。
+完了サイン: 末尾に `Generating optimized autoload files` が出る (1〜3 分)。
 
-### 6. Laravel 初期化 (APP_KEY + マイグレーション + シーダー)
+確認: `docker compose exec laravel ls -la vendor/autoload.php` でファイルが見えれば OK。
+
+#### ★ 6. Laravel 初期化 (鍵生成 + マイグレーション + 初期管理者投入)
+
+以下 4 つを順に実行 (どれも数秒で終わる):
 
 ```bash
-docker compose exec laravel php artisan key:generate
-docker compose exec laravel php artisan migrate
-docker compose exec laravel php artisan db:seed     # 初期管理者を作成
-docker compose exec laravel php artisan storage:link
+docker compose exec laravel php artisan key:generate        # APP_KEY を生成
+docker compose exec laravel php artisan migrate             # DB スキーマ作成
+docker compose exec laravel php artisan db:seed             # 初期管理者作成
+docker compose exec laravel php artisan storage:link        # public/storage シンボリックリンク
 ```
 
-### 7. フロントエンドのビルド
+確認: `migrate` の出力に `INFO  Running migrations.` と各テーブル名が並んで `DONE` で終われば OK。
 
-`vite 8 / tailwind 4` を使うため **Node 20+** が必要。host の Node が古い場合は使い捨ての Node 22 コンテナで:
+#### ★ 7. フロントエンド (CSS/JS) をビルド
+
+Vite 8 + Tailwind 4 を使うため **Node 20 以上** が必要。Laravel コンテナには npm が入っていないので、**使い捨ての Node 22 コンテナ** で実行します:
 
 ```bash
 cd laravel
@@ -131,57 +144,107 @@ docker run --rm -v "$PWD":/app -w /app node:22-alpine npm run build
 cd ..
 ```
 
-(host の Node を 20+ にアップデート済みなら `npm install && npm run build` でも可)
+- 所要時間: install で 2〜5 分、build で 30 秒〜1 分
+- 結果: `laravel/node_modules/` と `laravel/public/build/` が生成される
 
-### 8. (オプション) Ollama モデルを取得
+(host に Node 20+ を入れているなら `cd laravel && npm install && npm run build` でも可)
 
-ローカル LLM (オフライン回答) を使う場合:
-
-```bash
-docker compose exec ollama ollama pull llama3.2     # 軽量 3B
-# または
-docker compose exec ollama ollama pull llama3.1     # 8B
-```
-
-Claude API を使う場合は不要。後述の「LLM切り替え」を参照。
-
-### 9. 初回ログイン
-
-ブラウザで http://localhost を開き、以下でログイン:
+#### ★ 8. ブラウザで http://localhost にアクセス → 初回ログイン
 
 | 項目 | 値 |
 |---|---|
 | Email | `admin@example.com` |
 | Password | `password` |
 
-> **⚠️ ログイン後にパスワードを変更してください**: プロフィール画面で個人パスワードに差し替え推奨。
+ログインできれば**セットアップ完了**です 🎉
+
+> **⚠ 必ずパスワードを変更**: 上記は誰でも知れる初期値です。ログイン後、画面右上のプロフィール
+> アイコンから「パスワード変更」を実行してください。
 >
-> 別のメアド / パスワードで初期化したい場合は、`db:seed` の前に `laravel/.env` へ
-> `ADMIN_EMAIL=…` `ADMIN_PASSWORD=…` を追記すると、その値で作られます。
+> 別のメアド / パスワードで初期化したい場合は、★ 6 の `db:seed` の前に `laravel/.env` に
+> `ADMIN_EMAIL=…` / `ADMIN_PASSWORD=…` を追記すれば、その値で作られます。
 
-### 10. (オプション) スケジューラを動かす
+---
 
-ゴミ箱 / 迷惑メールの 30 日自動 purge + メール定期取得を動かすには:
+### 任意セクション (使う機能に応じて)
+
+#### ◯ A. メール受信を動かす
+
+POP3 / IMAP の接続情報を投入する必要があります。2 通りあります:
+
+1. **画面から** (推奨): http://localhost にログイン後、`設定 → メール` で接続情報を入力 → 「接続テスト」で確認 → 保存
+2. **`.env` で直接**: `laravel/.env` に `MAIL_POP_HOST=...` 等を書いて `docker compose restart laravel`
+
+Gmail を使う場合の例は下の **POP3メール設定** セクション参照。
+
+#### ◯ B. AI 回答 (RAG) を使う
+
+LLM プロバイダを選択:
+
+- **Ollama** (ローカル, 無料): 下記でモデル取得
+  ```bash
+  docker compose exec ollama ollama pull llama3.2     # 軽量 3B (8GB RAM 推奨)
+  ```
+- **Claude API** (クラウド, 有料): `laravel/.env` に `ANTHROPIC_API_KEY=sk-ant-...` を設定 →
+  `docker compose restart laravel rag-api`
+
+詳しくは下の **LLM切り替え** セクション参照。
+
+#### ◯ C. ゴミ箱 / 迷惑メールの自動削除 (30 日) を動かす
+
+スケジューラを動かすと、`mail:purge-trash` / `mail:purge-spam` / `mail:fetch` 等が自動実行されます。
 
 ```bash
-# 開発時: フォアグラウンドで scheduler を回す
+# 開発時 (フォアグラウンド)
 docker compose exec laravel php artisan schedule:work
 
-# 本番: 1 分ごとに cron 実行 (laravel コンテナの crontab 等)
+# 本番: laravel コンテナの crontab に
 # * * * * * cd /var/www/html && php artisan schedule:run >> /dev/null 2>&1
 ```
 
-これで `mail:fetch` (1 分ごと), `mail:purge-trash` / `mail:purge-spam` (深夜帯) 等が動きます。
+止める時は Ctrl+C。スケジューラを動かしていなくても、メール手動操作 (削除 → 復元等) は全て機能します。
+
+#### ◯ D. ドキュメント / Web をナレッジに登録
+
+- http://localhost/documents で PDF / Word / Markdown をアップロード
+- http://localhost/scrape で URL を登録
+
+これらは RAG コーパスに追加され、AI 回答時の参照源になります。
+
+---
+
+### 起動状況の確認コマンド
+
+```bash
+docker compose ps                         # コンテナ稼働状況
+docker compose logs -f laravel            # Laravel ログ (Ctrl+C で抜ける)
+docker compose exec laravel php artisan migrate:status   # マイグレーション履歴
+curl -I http://localhost                  # HTTP 200 が返れば Web UI 起動済み
+```
+
+### 停止 / 再起動 / 完全リセット
+
+```bash
+docker compose stop                       # 一時停止 (データは残る)
+docker compose start                      # 再開
+docker compose restart laravel            # 1 コンテナだけ再起動
+docker compose down                       # コンテナ削除 (named volume は残る = DB データ保持)
+docker compose down -v                    # named volume も削除 (DB / Ollama モデル含めて完全リセット)
+```
 
 ---
 
 ## トラブルシューティング
 
-- **`vendor/autoload.php` がない** → 手順 5 (`composer install`) を実行
-- **`npm: not found`** → Laravel コンテナに npm は無い。手順 7 の docker 経由 node:22 で実行
-- **`docker-compose` (v1) で `/tmp/tmpxxxxx not found`** → v2 (`docker compose`) を使うか、再実行
-- **マイグレーション失敗** → `docker compose ps mysql` で healthy になってから再試行 (起動直後は up でもまだ accept してないことあり)
-- **ログイン画面に CSS が当たってない** → 手順 7 の build を忘れていないか確認
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| `vendor/autoload.php` がない | composer install 未実行 | 手順 5 を実行 |
+| `npm: not found` | Laravel コンテナに npm なし | 手順 7 の Node 22 docker 経由で実行 |
+| `docker-compose` (v1) で `/tmp/tmpxxxxx not found` | v1 の tempfile race | `docker compose` (v2) を使う or 再実行 |
+| migration で `Connection refused` | mysql がまだ accept してない | `docker compose ps` で `healthy` を待ってから再試行 |
+| ログイン画面の CSS が崩れる | フロントビルド未実行 | 手順 7 (`npm run build`) を実行 |
+| `403 Permission denied` (push 時) | 機密情報を pre-commit hook がブロック | エラー内容を確認し、`.env` 等をステージから外す |
+| ポート 80 / 8000 が使用中 | 他のアプリ稼働中 | docker-compose.yml の `ports` を変更 (例: `8080:80`) |
 
 ## POP3メール設定（Gmail例）
 

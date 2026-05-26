@@ -17,13 +17,17 @@ class DraftController extends Controller
 
     public function list(): JsonResponse
     {
-        $drafts = PendingEmail::where('status', PendingEmail::STATUS_DRAFT)
+        // 下書きと「自分が予約した自己送信」を同一画面で表示する.
+        // 仕様: 「ユーザが予約送信を設定した場合 = ユーザが個別に送信」なので
+        // 予約状態のものも下書き同様、本人がここから内容を確認/取消できる.
+        $drafts = PendingEmail::whereIn('status', [PendingEmail::STATUS_DRAFT, PendingEmail::STATUS_SCHEDULED])
             ->where('created_by_user_id', auth()->id())
             ->with(['rejecter', 'inReplyToEmail.thread'])
             ->latest()
             ->get()
             ->map(fn($d) => [
                 'id'          => $d->id,
+                'status'      => $d->status, // 'draft' / 'scheduled' をフロントで使う
                 'subject'     => $d->subject,
                 'to_address'  => $d->to_address,
                 'cc'          => $d->cc,
@@ -35,6 +39,11 @@ class DraftController extends Controller
                 'reply_type_label' => $d->reply_type_label,
                 'created_at'  => $d->created_at?->format('Y/m/d H:i'),
                 'updated_at'  => $d->updated_at?->format('Y/m/d H:i'),
+                // 予約送信中の場合の情報 (取消ボタンの出し分けと残り時間表示に使う).
+                // DB は UTC で保持、表示は Asia/Tokyo に変換.
+                'is_scheduled'         => $d->status === PendingEmail::STATUS_SCHEDULED,
+                'scheduled_for'        => $d->scheduled_for?->toIso8601String(),
+                'scheduled_for_label'  => $d->scheduled_for?->copy()->setTimezone('Asia/Tokyo')->format('Y/m/d H:i'),
                 // 却下から下書きに戻された場合の情報
                 'is_rejected'      => $d->rejection_reason !== null || $d->rejected_at !== null,
                 'rejection_reason' => $d->rejection_reason,
@@ -77,10 +86,20 @@ class DraftController extends Controller
 
     /**
      * 下書きを compose-window で開いて編集する (新ウィンドウで)
+     *
+     * 対応 status:
+     *   - draft     : 通常の下書き編集
+     *   - scheduled : 予約送信中のメールを内容確認・編集する.
+     *                 compose-window は draftScheduledFor を受け取り「予約送信」ボタンを出す.
+     *                 ※ saveDraftToServer (save_as_draft=1) で保存すると status=draft に戻る仕様なので、
+     *                   実質的に「予約取消 → 編集」となる. UI 側でその旨を表示する.
      */
     public function edit(PendingEmail $draft)
     {
-        abort_unless($draft->status === PendingEmail::STATUS_DRAFT, 404);
+        abort_unless(in_array($draft->status, [
+            PendingEmail::STATUS_DRAFT,
+            PendingEmail::STATUS_SCHEDULED,
+        ], true), 404);
         abort_unless($draft->created_by_user_id === auth()->id(), 403);
 
         $settings = MailSetting::getSettings();
@@ -173,6 +192,14 @@ class DraftController extends Controller
             // ▼ 下書き編集モード用の追加データ
             'draftId'          => $draft->id,
             'draftBody'        => $draft->body ?: '',
+            // 旧下書き (body_html 列が無かった時代に保存) は null。エディタ側は body をフォールバックに使う。
+            'draftBodyHtml'    => $draft->body_html ?: '',
+            // 予約日時は DB (UTC) → JST に変換してから datetime-local 形式で渡す.
+            // (compose-window の input[type=datetime-local] はナイーブ現地時刻を期待するため)
+            'draftScheduledFor' => $draft->scheduled_for?->copy()->setTimezone('Asia/Tokyo')->format('Y-m-d\TH:i'),
+            // 予約中フラグ + 表示用ラベル. compose-window 側で「予約中バナー」を出すために使う.
+            'draftIsScheduled'      => $draft->status === PendingEmail::STATUS_SCHEDULED,
+            'draftScheduledLabel'   => $draft->scheduled_for?->copy()->setTimezone('Asia/Tokyo')->format('Y/m/d H:i'),
             'draftMemo'        => $draft->memo,
             'draftAttachments' => $draftAttachments,
             'rejectionInfo'=> $draft->rejection_reason ? [
@@ -180,6 +207,7 @@ class DraftController extends Controller
                 'rejected_at' => $draft->rejected_at?->format('Y/m/d H:i'),
                 'rejected_by' => $draft->rejecter?->name,
             ] : null,
+            'sendPolicy'   => \App\Models\MailSetting::getSettings()->send_policy ?? 'flexible',
         ]);
     }
 

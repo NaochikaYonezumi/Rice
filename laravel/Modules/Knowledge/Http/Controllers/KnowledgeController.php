@@ -38,19 +38,22 @@ class KnowledgeController extends Controller
     {
         $data = $request->validate([
             'url' => 'required|url|max:2048',
-            'collection' => 'nullable|string|max:64',
+            // 単一文字列でもカンマ区切りでもクライアント側で配列にしても受け取れるよう緩める
+            'collection'    => 'nullable',
+            'collections'   => 'nullable',
             'max_pages' => 'nullable|integer|min:1|max:300',
             'max_depth' => 'nullable|integer|min:0|max:5',
         ]);
 
         $url = $this->normalizeUrl($data['url']);
-        $collection = $data['collection'] ?? 'default';
+        $collections = ScrapedUrl::normalizeCollections($data['collections'] ?? $data['collection'] ?? null);
         $maxPages = (int) ($data['max_pages'] ?? 30);
         $maxDepth = (int) ($data['max_depth'] ?? 2);
 
         // 同一 URL は upsert 扱い
         $source = ScrapedUrl::firstOrNew(['url' => $url]);
-        $source->collection = $collection ?: 'default';
+        $source->collection  = $collections[0];     // 互換: 主コレクション = 配列の先頭
+        $source->collections = $collections;        // 全コレクション (JSON)
         $source->status = 'pending';
         $source->chunks_indexed = $source->chunks_indexed ?? 0;
         $source->error_message = null;
@@ -126,7 +129,8 @@ class KnowledgeController extends Controller
             'url'            => $source->url,
             'source_type'    => $source->source_type ?: 'url',
             'title'          => $source->title,
-            'collection'     => $source->collection,
+            'collection'     => $source->primaryCollection(), // 互換用 (単一値)
+            'collections'    => $source->allCollections(),    // 配列形 (新)
             'status'         => $source->status,
             'chunks_indexed' => (int) $source->chunks_indexed,
             'error_message'  => $source->error_message,
@@ -156,11 +160,14 @@ class KnowledgeController extends Controller
         ]);
 
         try {
+            // 再インデックス: 全コレクションを RAG API に渡す
             $result = $neuron->indexText(
                 $source->url,
                 $data['content'],
                 $data['title'] ?? $source->title,
-                $source->collection,
+                $source->primaryCollection(),
+                600,
+                $source->allCollections(),
             );
             $source->title = $data['title'] ?? $source->title;
             $source->raw_text = $data['content'];
@@ -183,35 +190,95 @@ class KnowledgeController extends Controller
     }
 
     /**
-     * 既存ソースのコレクション (タグ) を変更する。
-     * 日本語・英数字・記号一部を許容。空白とパス区切りは禁止。
+     * 既存ソースのコレクション (タグ) を変更する。複数指定可。
+     * - 入力は配列 OR カンマ/全角カンマ/改行区切り
+     * - 各トークン: 1-64 文字、空白 / \ # ? & を含まないこと
+     * - 不正トークンは静かに除去 (個別エラーにはしない)、結果空なら ['default']
      */
-    public function updateCollection(Request $request, ScrapedUrl $source): JsonResponse
+    public function updateCollection(Request $request, ScrapedUrl $source, NeuronService $neuron): JsonResponse
     {
-        $data = $request->validate([
-            'collection' => ['required', 'string', 'max:64', 'regex:/^[^\s\/\\\\#?&]+$/u'],
-        ], [
-            'collection.regex' => 'コレクション名にスペース・/ \\ # ? & は使えません。',
+        $request->validate([
+            'collection'  => 'nullable',
+            'collections' => 'nullable',
         ]);
-        $source->collection = trim($data['collection']);
+        $cols = ScrapedUrl::normalizeCollections(
+            $request->input('collections') ?? $request->input('collection')
+        );
+        $source->collections = $cols;
+        $source->collection  = $cols[0]; // 互換: 主コレクション
         $source->save();
-        return response()->json(['status' => 'ok', 'collection' => $source->collection]);
+
+        // Python ベクター DB 側の metadata も同期 (失敗しても 200 を返す)
+        try {
+            $neuron->updateSourceCollections($source->url, $cols);
+        } catch (\Throwable $e) {
+            Log::warning('updateCollection: rag-api sync failed', [
+                'source_id' => $source->url,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'status'      => 'ok',
+            'collection'  => $source->collection,  // 互換 (単一)
+            'collections' => $source->collections, // 配列
+        ]);
     }
 
     /**
-     * 複数ソースのコレクションを一括更新する。
+     * 複数ソースのコレクションを一括更新する。複数コレクション対応。
+     * 動作モード:
+     *  - mode = 'replace' (デフォルト) … 既存タグを全置換
+     *  - mode = 'append'              … 既存タグに追加 (重複は除去)
+     *  - mode = 'remove'              … 指定タグを既存から削除
      */
-    public function bulkUpdateCollection(Request $request): JsonResponse
+    public function bulkUpdateCollection(Request $request, NeuronService $neuron): JsonResponse
     {
-        $data = $request->validate([
+        $request->validate([
             'ids'         => 'required|array|min:1',
             'ids.*'       => 'integer|exists:scraped_urls,id',
-            'collection'  => ['required', 'string', 'max:64', 'regex:/^[^\s\/\\\\#?&]+$/u'],
-        ], [
-            'collection.regex' => 'コレクション名にスペース・/ \\ # ? & は使えません。',
+            'collection'  => 'nullable',
+            'collections' => 'nullable',
+            'mode'        => 'nullable|in:replace,append,remove',
         ]);
-        $count = ScrapedUrl::whereIn('id', $data['ids'])->update(['collection' => trim($data['collection'])]);
-        return response()->json(['status' => 'ok', 'updated' => $count, 'collection' => trim($data['collection'])]);
+        $mode = $request->input('mode', 'replace');
+        $incoming = ScrapedUrl::normalizeCollections(
+            $request->input('collections') ?? $request->input('collection')
+        );
+
+        $updated = 0;
+        foreach (ScrapedUrl::whereIn('id', $request->input('ids'))->get() as $src) {
+            $current = $src->allCollections();
+            if ($mode === 'append') {
+                $merged = array_values(array_unique(array_merge($current, $incoming)));
+            } elseif ($mode === 'remove') {
+                $merged = array_values(array_diff($current, $incoming));
+                if (empty($merged)) $merged = ['default'];
+            } else { // replace
+                $merged = $incoming;
+            }
+            $src->collections = $merged;
+            $src->collection  = $merged[0];
+            $src->save();
+            $updated++;
+
+            // Python ベクター DB 側の metadata も同期 (個別失敗は warning に留める)
+            try {
+                $neuron->updateSourceCollections($src->url, $merged);
+            } catch (\Throwable $e) {
+                Log::warning('bulkUpdateCollection: rag-api sync failed', [
+                    'source_id' => $src->url,
+                    'error'     => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return response()->json([
+            'status'      => 'ok',
+            'updated'     => $updated,
+            'mode'        => $mode,
+            'collections' => $incoming,
+        ]);
     }
 
     /**
@@ -219,7 +286,7 @@ class KnowledgeController extends Controller
      */
     public function statuses(): JsonResponse
     {
-        $rows = ScrapedUrl::select('id', 'url', 'source_type', 'title', 'status', 'chunks_indexed', 'error_message', 'updated_at')
+        $rows = ScrapedUrl::select('id', 'url', 'source_type', 'title', 'status', 'chunks_indexed', 'error_message', 'updated_at', 'collection', 'collections')
             ->orderByDesc('id')
             ->get()
             ->map(fn($s) => [
@@ -231,6 +298,8 @@ class KnowledgeController extends Controller
                 'chunks_indexed' => (int) ($s->chunks_indexed ?? 0),
                 'error_message' => $s->error_message,
                 'updated_at' => $s->updated_at?->format('Y-m-d H:i'),
+                'collection'  => $s->primaryCollection(),
+                'collections' => $s->allCollections(),
             ]);
         return response()->json(['sources' => $rows]);
     }
@@ -243,11 +312,14 @@ class KnowledgeController extends Controller
     {
         $request->validate([
             'file' => 'required|file|max:20480',  // 20MB
-            'collection' => 'nullable|string|max:64',
+            'collection'  => 'nullable',
+            'collections' => 'nullable',
             'title' => 'nullable|string|max:255',
         ]);
 
-        $collection = $request->input('collection') ?: 'default';
+        $collections = ScrapedUrl::normalizeCollections(
+            $request->input('collections') ?? $request->input('collection')
+        );
         $uploaded = $request->file('file');
         $originalName = $uploaded->getClientOriginalName();
         $title = $request->input('title') ?: $originalName;
@@ -260,7 +332,8 @@ class KnowledgeController extends Controller
         $source = ScrapedUrl::firstOrNew(['url' => $sourceId]);
         $source->source_type   = ScrapedUrl::SOURCE_FILE;
         $source->title         = $title;
-        $source->collection    = $collection;
+        $source->collection    = $collections[0];  // 互換: 主コレクション
+        $source->collections   = $collections;
         $source->status        = 'pending';
         $source->chunks_indexed = 0;
         $source->error_message = null;
@@ -276,7 +349,14 @@ class KnowledgeController extends Controller
 
         try {
             $absPath = Storage::disk('private')->path($stored);
-            $result = $neuron->uploadDocument($sourceId, $absPath, $originalName, $mime, $title, $collection);
+            // 全コレクションを RAG API に渡す。Python 側で metadata に保存される。
+            // 後方互換のため主コレクションも単一値として送信。
+            $result = $neuron->uploadDocument(
+                $sourceId, $absPath, $originalName, $mime, $title,
+                $collections[0],
+                900,
+                $collections,
+            );
             $source->status = 'ok';
             $source->chunks_indexed = (int) ($result['chunks_indexed'] ?? 0);
             $source->error_message = null;
@@ -330,16 +410,20 @@ class KnowledgeController extends Controller
         $data = $request->validate([
             'title'   => 'required|string|max:255',
             'content' => 'required|string|max:200000',
-            'collection' => 'nullable|string|max:64',
+            'collection'  => 'nullable',
+            'collections' => 'nullable',
         ]);
 
-        $collection = $data['collection'] ?? 'default';
+        $collections = ScrapedUrl::normalizeCollections(
+            $request->input('collections') ?? $request->input('collection')
+        );
         $sourceId = 'email://' . $email->id;
 
         $source = ScrapedUrl::firstOrNew(['url' => $sourceId]);
         $source->source_type   = ScrapedUrl::SOURCE_EMAIL;
         $source->title         = $data['title'];
-        $source->collection    = $collection;
+        $source->collection    = $collections[0];   // 互換
+        $source->collections   = $collections;
         $source->status        = 'pending';
         $source->chunks_indexed = 0;
         $source->error_message = null;
@@ -352,7 +436,13 @@ class KnowledgeController extends Controller
         $source->save();
 
         try {
-            $result = $neuron->indexText($sourceId, $data['content'], $data['title'], $collection);
+            // 全コレクションを RAG API に渡す (互換のため主コレクションも単一値で送信)
+            $result = $neuron->indexText(
+                $sourceId, $data['content'], $data['title'],
+                $collections[0],
+                600,
+                $collections,
+            );
             $source->status = 'ok';
             $source->chunks_indexed = (int) ($result['chunks_indexed'] ?? 0);
             $source->error_message = null;
@@ -449,14 +539,34 @@ class KnowledgeController extends Controller
         $names = collect();
 
         try {
-            if (Schema::hasTable('scraped_urls') && Schema::hasColumn('scraped_urls', 'collection')) {
-                $names = $names->merge(
+            if (Schema::hasTable('scraped_urls')) {
+                // 新 collections JSON 配列をフラット化して収集
+                if (Schema::hasColumn('scraped_urls', 'collections')) {
                     DB::table('scraped_urls')
-                        ->whereNotNull('collection')
-                        ->where('collection', '!=', '')
-                        ->distinct()
-                        ->pluck('collection')
-                );
+                        ->whereNotNull('collections')
+                        ->select('collections')
+                        ->orderBy('id')
+                        ->chunk(500, function ($rows) use (&$names) {
+                            foreach ($rows as $r) {
+                                $arr = json_decode((string) $r->collections, true);
+                                if (is_array($arr)) {
+                                    foreach ($arr as $n) {
+                                        if (is_string($n) && trim($n) !== '') $names->push(trim($n));
+                                    }
+                                }
+                            }
+                        });
+                }
+                // 旧 collection (単一) も拾う
+                if (Schema::hasColumn('scraped_urls', 'collection')) {
+                    $names = $names->merge(
+                        DB::table('scraped_urls')
+                            ->whereNotNull('collection')
+                            ->where('collection', '!=', '')
+                            ->distinct()
+                            ->pluck('collection')
+                    );
+                }
             }
         } catch (\Throwable $e) { /* noop */ }
 

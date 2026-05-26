@@ -63,10 +63,79 @@
     .table-info {
         background-color: #dbeafe !important;
     }
+    /* 複数コレクション表示: チップを横並びに、はみ出したら折り返し */
+    .collection-chip-list {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+        max-width: 100%;
+    }
+    .collection-chip-list .collection-chip {
+        font-size: 0.7rem;
+        padding: 2px 7px;
+    }
+    .collection-chip-list .collection-chip-edit {
+        background-color: #f3f4f6;
+        color: #4b5563;
+        border-color: #d1d5db;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+    }
+    .collection-chip-list .collection-chip-edit:hover {
+        background-color: #e5e7eb;
+    }
+
+    /* ===== ダークモード上書き ===== */
+    html.theme-dark .collection-chip {
+        background-color: rgba(88,101,242,0.18) !important;
+        color: #c7d2fe !important;
+        border-color: #4338ca !important;
+    }
+    html.theme-dark .collection-chip:hover {
+        background-color: rgba(88,101,242,0.3) !important;
+        border-color: #818cf8 !important;
+    }
+    html.theme-dark .collection-chip-list .collection-chip-edit {
+        background-color: #2b2d31 !important;
+        color: #cbd5e1 !important;
+        border-color: #3f4147 !important;
+    }
+    html.theme-dark .collection-chip-list .collection-chip-edit:hover {
+        background-color: #3f4147 !important;
+    }
+    html.theme-dark .table-active {
+        background-color: rgba(251,191,36,0.12) !important;
+        outline-color: #92400e !important;
+        color: #fde68a !important;
+    }
+    html.theme-dark .long-press-active {
+        background-color: rgba(251,191,36,0.2) !important;
+    }
+    html.theme-dark .table-info {
+        background-color: rgba(88,101,242,0.18) !important;
+    }
+    html.theme-dark .knowledge-error { color: #fca5a5 !important; }
+    /* テーブル全体 */
+    html.theme-dark table.table thead th {
+        background-color: #202225 !important;
+        color: #b9bbbe !important;
+        border-bottom-color: #42454a !important;
+    }
+    html.theme-dark table.table tbody tr {
+        background-color: #2f3136 !important;
+        color: #dcddde !important;
+    }
+    html.theme-dark table.table tbody tr:hover {
+        background-color: #34363c !important;
+    }
+    html.theme-dark table.table td,
+    html.theme-dark table.table th { border-color: #42454a !important; }
 </style>
 @endsection
 
 @section('content')
+<div style="padding-left:8.333%;padding-right:8.333%;">
 {{-- 共通アラート (両フォーム共有) --}}
 @if(session('success'))
     <div class="alert alert-success">{{ session('success') }}</div>
@@ -91,12 +160,13 @@
     <i class="fas fa-file-upload text-success ml-1"></i>
     <div class="custom-file" style="flex:7 1 0;min-width:0;">
         <input type="file" name="file" id="file" class="custom-file-input" required
-               accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.txt,.md,.rtf,.html,.htm,.epub,.odt,.ods,.odp"
+               accept=".pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.csv,.txt,.md,.rtf,.html,.htm,.epub,.odt,.ods,.odp,.png,.jpg,.jpeg,.gif,.webp,.bmp,.tif,.tiff,.heic,.heif"
                onchange="document.getElementById('file-label').innerText = this.files[0]?.name || 'ファイル選択';">
-        <label class="custom-file-label" id="file-label" for="file">ファイル選択 (PDF / Word / Excel ほか)</label>
+        <label class="custom-file-label" id="file-label" for="file">ファイル選択 (PDF / Word / Excel / PowerPoint / 画像 OCR)</label>
     </div>
 
-    {{-- コレクション入力 + オートコンプリート (ファイル選択:タグ = 7:3) --}}
+    {{-- コレクション入力 + オートコンプリート (ファイル選択:タグ = 7:3)
+         複数指定する場合は カンマ区切り。例: "モビリティ,EV,2025年版" --}}
     <div class="position-relative" style="flex:3 1 0;min-width:0;" @click.outside="acOpen = false">
         <input type="text" name="collection" class="form-control form-control-sm"
                x-model="value"
@@ -104,9 +174,9 @@
                @input="acOpen = true; acIdx = 0"
                @keydown.arrow-down.prevent="acIdx = Math.min(acIdx + 1, filtered.length - 1)"
                @keydown.arrow-up.prevent="acIdx = Math.max(acIdx - 1, 0)"
-               @keydown.enter="if(acOpen && filtered[acIdx]) { $event.preventDefault(); value = filtered[acIdx].name; acOpen = false; }"
+               @keydown.enter="if(acOpen && filtered[acIdx]) { $event.preventDefault(); insertCollectionToken(filtered[acIdx].name); acOpen = false; }"
                @keydown.escape="acOpen = false"
-               placeholder="コレクション (例: モビリティ)" maxlength="64" autocomplete="off">
+               placeholder="コレクション (例: モビリティ,EV)  ※カンマ区切りで複数可" maxlength="512" autocomplete="off">
         <div x-show="acOpen && filtered.length > 0" x-cloak
              class="position-absolute bg-white border rounded shadow-sm"
              style="top:100%;left:0;right:0;z-index:20;max-height:240px;overflow-y:auto;margin-top:2px;">
@@ -154,7 +224,7 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="collection">コレクション (任意)</label>
+                    <label for="collection">コレクション (任意 / カンマ区切りで複数指定可)</label>
                     <div class="position-relative" @click.outside="acOpen = false">
                         <input type="text" name="collection" id="collection" class="form-control"
                                x-model="value"
@@ -162,9 +232,9 @@
                                @input="acOpen = true; acIdx = 0"
                                @keydown.arrow-down.prevent="acIdx = Math.min(acIdx + 1, filtered.length - 1)"
                                @keydown.arrow-up.prevent="acIdx = Math.max(acIdx - 1, 0)"
-                               @keydown.enter="if(acOpen && filtered[acIdx]) { $event.preventDefault(); value = filtered[acIdx].name; acOpen = false; }"
+                               @keydown.enter="if(acOpen && filtered[acIdx]) { $event.preventDefault(); insertCollectionToken(filtered[acIdx].name); acOpen = false; }"
                                @keydown.escape="acOpen = false"
-                               placeholder="default (例: モビリティ)" autocomplete="off">
+                               placeholder="default (例: モビリティ,EV)" autocomplete="off">
                         <div x-show="acOpen && filtered.length > 0" x-cloak
                              class="position-absolute bg-white border rounded shadow-sm"
                              style="top:100%;left:0;right:0;z-index:20;max-height:240px;overflow-y:auto;margin-top:2px;">
@@ -185,7 +255,7 @@
                             </template>
                         </div>
                     </div>
-                    <small class="text-muted">顧客ごとに RAG を切り替えたい場合に使用します。</small>
+                    <small class="text-muted">顧客ごとに RAG を切り替えたい場合に使用します。カンマで複数タグを付けられます。</small>
                 </div>
 
                 <div class="form-row">
@@ -224,23 +294,29 @@
                     <div class="ml-auto d-flex align-items-center" style="gap:8px;flex:1;justify-content:flex-end;">
                         <span class="badge badge-info"><i class="fas fa-check-square mr-1"></i><span x-text="selectedIds.length"></span>件選択中</span>
 
-                        {{-- コレクション一括変更 (オートコンプリート付き) --}}
-                        <div class="position-relative" style="min-width:240px;" @click.outside="bulkAcOpen = false">
+                        {{-- 動作モード: 置換 / 追加 / 削除 --}}
+                        <select class="form-control form-control-sm" style="width:auto;" x-model="bulkMode" title="動作モード">
+                            <option value="replace">置換</option>
+                            <option value="append">追加</option>
+                            <option value="remove">削除</option>
+                        </select>
+                        {{-- コレクション一括変更 (オートコンプリート付き / カンマ区切り複数指定可) --}}
+                        <div class="position-relative" style="min-width:260px;" @click.outside="bulkAcOpen = false">
                             <input type="text" class="form-control form-control-sm"
                                    x-model="bulkCollection"
                                    @focus="bulkAcOpen = true; loadCollections()"
                                    @input="bulkAcOpen = true; bulkAcIdx = 0"
                                    @keydown.arrow-down.prevent="bulkAcIdx = Math.min(bulkAcIdx + 1, filteredCollections.length - 1)"
                                    @keydown.arrow-up.prevent="bulkAcIdx = Math.max(bulkAcIdx - 1, 0)"
-                                   @keydown.enter.prevent="filteredCollections[bulkAcIdx] ? (bulkCollection = filteredCollections[bulkAcIdx].name, bulkAcOpen = false) : applyBulkCollection()"
+                                   @keydown.enter.prevent="filteredCollections[bulkAcIdx] ? (bulkInsertToken(filteredCollections[bulkAcIdx].name), bulkAcOpen = false) : applyBulkCollection()"
                                    @keydown.escape="bulkAcOpen = false"
-                                   placeholder="新しいコレクション名 (タイプして候補表示)" maxlength="64">
+                                   placeholder="コレクション名 (カンマで複数指定可)" maxlength="512">
                             {{-- 候補リスト --}}
                             <div x-show="bulkAcOpen && filteredCollections.length > 0" x-cloak
                                  class="position-absolute bg-white border rounded shadow-sm"
                                  style="top:100%;left:0;right:0;z-index:10;max-height:200px;overflow-y:auto;">
                                 <template x-for="(c, idx) in filteredCollections" :key="c.name + idx">
-                                    <div @mousedown.prevent="bulkCollection = c.name; bulkAcOpen = false"
+                                    <div @mousedown.prevent="bulkInsertToken(c.name); bulkAcOpen = false"
                                          @mouseenter="bulkAcIdx = idx"
                                          :class="idx === bulkAcIdx ? 'bg-light' : ''"
                                          class="px-2 py-1 small" style="cursor:pointer;">
@@ -251,7 +327,7 @@
                             </div>
                         </div>
                         <button type="button" class="btn btn-sm btn-primary" @click="applyBulkCollection()"
-                                :disabled="!bulkCollection || selectedIds.length === 0">
+                                :disabled="_parseBulkTokens().length === 0 || selectedIds.length === 0">
                             <i class="fas fa-check"></i> 適用
                         </button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" @click="exitSelectionMode()">
@@ -324,29 +400,44 @@
                                         </div>
                                     </td>
                                     <td class="knowledge-collection-cell" data-collection-cell>
-                                        @php $col = $source->collection ?: 'default'; @endphp
-                                        {{-- タグ風チップ。クリックで個別編集 --}}
-                                        <span class="collection-chip collection-display"
-                                              data-source-id="{{ $source->id }}"
-                                              data-collection="{{ $col }}"
-                                              @click.stop="!selectionMode && showCollectionEditor({{ $source->id }}, $event)"
-                                              title="クリックで編集">
-                                            <i class="fas fa-tag" style="font-size:9px;"></i>
-                                            <span class="collection-name">{{ $col }}</span>
-                                            <i class="fas fa-pen" style="font-size:8px;opacity:0.5;"></i>
-                                        </span>
-                                        {{-- インライン編集 (オートコンプリート付き) --}}
-                                        <div class="position-relative d-none collection-edit-wrap" style="min-width:220px;"
-                                             @click.outside="if (inlineEditId === {{ $source->id }}) hideInlineEditor()">
+                                        @php
+                                            $cols = method_exists($source, 'allCollections')
+                                                ? $source->allCollections()
+                                                : [($source->collection ?: 'default')];
+                                            $joinedCols = implode(',', $cols);
+                                        @endphp
+                                        {{-- タグ風チップを 1 件ずつ。ペンアイコンの「+ 編集」ボタンで一括編集 --}}
+                                        <div class="collection-chip-list collection-display"
+                                             data-source-id="{{ $source->id }}"
+                                             data-collection="{{ $joinedCols }}"
+                                             title="クリックで編集">
+                                            @foreach($cols as $col)
+                                                <span class="collection-chip"
+                                                      @click.stop="!selectionMode && showCollectionEditor({{ $source->id }}, $event)">
+                                                    <i class="fas fa-tag" style="font-size:9px;"></i>
+                                                    <span class="collection-name">{{ $col }}</span>
+                                                </span>
+                                            @endforeach
+                                            <span class="collection-chip collection-chip-edit"
+                                                  @click.stop="!selectionMode && showCollectionEditor({{ $source->id }}, $event)"
+                                                  title="コレクションを編集">
+                                                <i class="fas fa-pen" style="font-size:9px;"></i>
+                                                編集
+                                            </span>
+                                        </div>
+                                        {{-- インライン編集 (オートコンプリート付き / カンマ区切り複数指定可) --}}
+                                        <div class="position-relative d-none collection-edit-wrap" style="min-width:260px;"
+                                             @click.outside="if (inlineEditId === {{ $source->id }}) saveInline({{ $source->id }})">
                                             <input type="text" class="form-control form-control-sm collection-edit"
-                                                   maxlength="64"
+                                                   maxlength="512"
                                                    data-source-id="{{ $source->id }}"
                                                    x-model="inlineValue"
+                                                   placeholder="例: モビリティ,EV,2025年版"
                                                    @focus="inlineAcOpen = true; loadInlineCollections()"
                                                    @input="inlineAcOpen = true; inlineAcIdx = 0"
                                                    @keydown.arrow-down.prevent="inlineAcIdx = Math.min(inlineAcIdx + 1, filteredInline.length - 1)"
                                                    @keydown.arrow-up.prevent="inlineAcIdx = Math.max(inlineAcIdx - 1, 0)"
-                                                   @keydown.enter.prevent="if(inlineAcOpen && filteredInline[inlineAcIdx]) { inlineValue = filteredInline[inlineAcIdx].name; inlineAcOpen = false; saveInline({{ $source->id }}); } else { saveInline({{ $source->id }}); }"
+                                                   @keydown.enter.prevent="if(inlineAcOpen && filteredInline[inlineAcIdx]) { inlineInsertToken(filteredInline[inlineAcIdx].name); inlineAcOpen = false; } else { saveInline({{ $source->id }}); }"
                                                    @keydown.escape="hideInlineEditor()"
                                                    @click.stop
                                                    x-show="inlineEditId === {{ $source->id }}">
@@ -354,18 +445,12 @@
                                                  class="position-absolute bg-white border rounded shadow-sm"
                                                  style="top:100%;left:0;right:0;z-index:30;max-height:200px;overflow-y:auto;margin-top:2px;">
                                                 <template x-for="(c, idx) in filteredInline" :key="c.name + idx">
-                                                    <div @mousedown.prevent="inlineValue = c.name; inlineAcOpen = false; saveInline({{ $source->id }})"
+                                                    <div @mousedown.prevent="inlineInsertToken(c.name); inlineAcOpen = false"
                                                          @mouseenter="inlineAcIdx = idx"
                                                          :class="idx === inlineAcIdx ? 'bg-light' : ''"
                                                          class="px-2 py-1 small" style="cursor:pointer;">
                                                         <i class="fas fa-tag text-secondary mr-1" style="font-size:10px;"></i>
                                                         <span x-text="c.name"></span>
-                                                    </div>
-                                                </template>
-                                                <template x-if="inlineValue && !filteredInline.some(c => c.name === inlineValue)">
-                                                    <div class="px-2 py-1 small border-top text-success" style="background-color:#f0fdf4;">
-                                                        <i class="fas fa-plus-circle mr-1"></i>
-                                                        <span>「<span x-text="inlineValue"></span>」を新規作成 (Enter)</span>
                                                     </div>
                                                 </template>
                                             </div>
@@ -499,6 +584,7 @@
         </div>
     </div>
 </div>
+</div>
 
 <script>
 // 既存コレクションのキャッシュ (画面内のすべての picker で共有)
@@ -518,6 +604,7 @@ async function _loadKnowledgeCollections(force = false) {
 }
 
 // コレクション名入力欄向けのオートコンプリート用 Alpine コンポーネント
+// (カンマ区切りで複数指定する場合は、最後のカンマ以降のトークンに対して絞り込み + 補完を行う)
 function collectionPicker(initial = '') {
     return {
         value: initial,
@@ -527,11 +614,29 @@ function collectionPicker(initial = '') {
         async loadCollections() {
             this.collections = await _loadKnowledgeCollections();
         },
+        // カンマ区切りの最後の token を取り出す
+        _lastToken() {
+            const s = (this.value || '');
+            const i = Math.max(s.lastIndexOf(','), s.lastIndexOf('，'));
+            return (i < 0 ? s : s.slice(i + 1)).trim().toLowerCase();
+        },
+        // 補完候補から 1 件選んだ時、最後のトークンだけを置き換える
+        insertCollectionToken(name) {
+            const s = (this.value || '');
+            const i = Math.max(s.lastIndexOf(','), s.lastIndexOf('，'));
+            const head = i < 0 ? '' : s.slice(0, i + 1);
+            // 末尾にカンマを付けて次の入力に進みやすくする
+            this.value = (head ? head : '') + name + ',';
+            this.acIdx = 0;
+        },
         get filtered() {
-            const q = (this.value || '').toLowerCase().trim();
-            if (!q) return this.collections;
+            const q = this._lastToken();
+            // 既に value に含まれているコレクションは候補から除く
+            const existing = (this.value || '').split(/[,，]/).map(s => s.trim()).filter(Boolean);
+            const pool = this.collections.filter(c => !existing.includes(c.name));
+            if (!q) return pool;
             const prefix = [], rest = [];
-            this.collections.forEach(c => {
+            pool.forEach(c => {
                 const name = (c.name || '').toLowerCase();
                 if (name.startsWith(q)) prefix.push(c);
                 else if (name.includes(q)) rest.push(c);
@@ -696,11 +801,19 @@ function knowledgeListApp() {
             this.collections = await _loadKnowledgeCollections();
             this.collectionsLoaded = true;
         },
-        _filter(query) {
-            const q = (query || '').toLowerCase().trim();
-            if (!q) return this.collections;
+        // 入力値全体ではなく「最後のカンマ以降」をクエリにする (タグ入力対応)
+        _lastTokenOf(value) {
+            const s = (value || '');
+            const i = Math.max(s.lastIndexOf(','), s.lastIndexOf('，'));
+            return (i < 0 ? s : s.slice(i + 1)).trim().toLowerCase();
+        },
+        _filter(value) {
+            const q = this._lastTokenOf(value);
+            const existing = (value || '').split(/[,，]/u).map(s => s.trim()).filter(Boolean);
+            const pool = this.collections.filter(c => !existing.includes(c.name));
+            if (!q) return pool;
             const prefix = [], rest = [];
-            this.collections.forEach(c => {
+            pool.forEach(c => {
                 const name = (c.name || '').toLowerCase();
                 if (name.startsWith(q)) prefix.push(c);
                 else if (name.includes(q)) rest.push(c);
@@ -712,60 +825,78 @@ function knowledgeListApp() {
         async loadInlineCollections() {
             this.collections = await _loadKnowledgeCollections();
         },
+        // bulk 入力欄に補完候補を挿入 (最後のトークンを差し替え + カンマで次へ)
+        bulkInsertToken(name) {
+            const s = (this.bulkCollection || '');
+            const i = Math.max(s.lastIndexOf(','), s.lastIndexOf('，'));
+            const head = i < 0 ? '' : s.slice(0, i + 1);
+            this.bulkCollection = (head ? head : '') + name + ',';
+            this.bulkAcIdx = 0;
+        },
+        // inline 入力欄向け同等処理
+        inlineInsertToken(name) {
+            const s = (this.inlineValue || '');
+            const i = Math.max(s.lastIndexOf(','), s.lastIndexOf('，'));
+            const head = i < 0 ? '' : s.slice(0, i + 1);
+            this.inlineValue = (head ? head : '') + name + ',';
+            this.inlineAcIdx = 0;
+        },
 
-        // ----- 一括適用 -----
+        // ----- 一括適用 (複数コレクション + モード対応) -----
+        // bulkMode: 'replace' (置換) | 'append' (追加) | 'remove' (削除)
+        bulkMode: 'replace',
+        // カンマ区切りの bulkCollection を配列にして送信。空除去 + 不正文字除去はサーバ側でも実施。
+        _parseBulkTokens() {
+            const raw = (this.bulkCollection || '').split(/[,，\n\r]+/u).map(s => s.trim()).filter(Boolean);
+            // 不正文字を含むトークンはクライアントでも除外
+            return raw.filter(t => !/[\s\/\\#?&]/u.test(t));
+        },
         async applyBulkCollection() {
-            const newVal = (this.bulkCollection || '').trim();
-            if (!newVal) return;
-            if (/[\s\/\\#?&]/.test(newVal)) {
-                alert('コレクション名にスペース・/ \\ # ? & は使えません。');
-                return;
-            }
+            const tokens = this._parseBulkTokens();
+            if (tokens.length === 0) return;
             if (this.selectedIds.length === 0) return;
             try {
                 const res = await fetch('/knowledge/sources/bulk-collection', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ ids: this.selectedIds, collection: newVal }),
+                    body: JSON.stringify({
+                        ids:         this.selectedIds,
+                        collections: tokens,
+                        mode:        this.bulkMode,
+                    }),
                 });
                 if (!res.ok) { alert('一括更新に失敗しました'); return; }
                 const data = await res.json();
-                // DOM 上のチップも更新
-                this.selectedIds.forEach(id => {
-                    const tr = document.querySelector(`tr[data-source-id="${id}"]`);
-                    if (!tr) return;
-                    const chip = tr.querySelector('.collection-display');
-                    if (chip) {
-                        chip.dataset.collection = data.collection;
-                        const span = chip.querySelector('.collection-name');
-                        if (span) span.textContent = data.collection;
-                    }
-                });
-                // キャッシュをリセット (新規追加されたコレクションを次回反映)
+                // DOM 反映は一覧再描画が無いので最小: 各行を rerender するために `statuses` ポーリングをトリガー。
+                // ここでは行ごとの datasets を更新するに留め、ページリロードで完全表示。
                 window._knowledgeCollections.loaded = false;
                 window._knowledgeCollections.items = [];
                 this.collectionsLoaded = false;
                 this.collections = [];
-                alert(`${data.updated} 件のコレクションを「${data.collection}」に変更しました。`);
+                const modeLabel = { replace: '置換', append: '追加', remove: '削除' }[this.bulkMode] || '更新';
+                alert(`${data.updated} 件のコレクションを${modeLabel}しました: ${tokens.join(', ')}\n(画面を再読込で反映されます)`);
                 this.exitSelectionMode();
+                // 軽量に再読込 (大量ソースでも DOM 再構築は受け入れる)
+                setTimeout(() => window.location.reload(), 250);
             } catch (e) {
                 alert('通信エラー: ' + e.message);
             }
         },
 
-        // ----- 個別チップクリックで編集 (Alpine + オートコンプリート) -----
+        // ----- 個別行クリックで複数コレクションを編集 (Alpine + オートコンプリート) -----
         showCollectionEditor(id, e) {
-            const chip = e.currentTarget;
-            const td   = chip.closest('[data-collection-cell]');
+            const list = e.currentTarget.closest('.collection-display') || e.currentTarget;
+            const td   = list?.closest('[data-collection-cell]');
             const wrap = td?.querySelector('.collection-edit-wrap');
             const input = td?.querySelector('.collection-edit');
             if (!td || !wrap || !input) return;
             // 他の編集中セルを閉じる
             this.hideInlineEditor();
-            chip.classList.add('d-none');
+            list.classList.add('d-none');
             wrap.classList.remove('d-none');
             this.inlineEditId = id;
-            this.inlineValue  = chip.dataset.collection || 'default';
+            // dataset.collection には現在のカンマ区切り文字列が入っている
+            this.inlineValue  = list.dataset.collection || 'default';
             this.inlineAcIdx  = 0;
             this.inlineAcOpen = false;
             this.$nextTick(() => { try { input.focus(); input.select(); } catch (_) {} });
@@ -773,11 +904,11 @@ function knowledgeListApp() {
         hideInlineEditor() {
             // 開いていたセルを元に戻す
             if (this.inlineEditId == null) return;
-            const td = document.querySelector(`[data-collection-cell] .collection-display[data-source-id="${this.inlineEditId}"]`)?.closest('[data-collection-cell]');
+            const list = document.querySelector(`.collection-display[data-source-id="${this.inlineEditId}"]`);
+            const td   = list?.closest('[data-collection-cell]');
             if (td) {
-                const chip = td.querySelector('.collection-display');
                 const wrap = td.querySelector('.collection-edit-wrap');
-                if (chip) chip.classList.remove('d-none');
+                if (list) list.classList.remove('d-none');
                 if (wrap) wrap.classList.add('d-none');
             }
             this.inlineEditId = null;
@@ -785,12 +916,16 @@ function knowledgeListApp() {
             this.inlineAcOpen = false;
         },
         async saveInline(id) {
-            const td = document.querySelector(`[data-collection-cell] .collection-display[data-source-id="${id}"]`)?.closest('[data-collection-cell]');
-            const chip = td?.querySelector('.collection-display');
-            const oldVal = chip?.dataset.collection || 'default';
-            const newVal = (this.inlineValue || '').trim();
-            if (!newVal || newVal === oldVal) { this.hideInlineEditor(); return; }
-            if (/[\s\/\\#?&]/.test(newVal)) {
+            const list = document.querySelector(`.collection-display[data-source-id="${id}"]`);
+            const oldVal = list?.dataset.collection || 'default';
+            // 入力値をカンマ区切りで配列化
+            const tokens = (this.inlineValue || '').split(/[,，\n\r]+/u).map(s => s.trim()).filter(Boolean);
+            if (tokens.length === 0) { this.hideInlineEditor(); return; }
+            const newJoined = tokens.join(',');
+            if (newJoined === oldVal) { this.hideInlineEditor(); return; }
+            // 不正文字を含むトークンは事前に除外 (サーバ側もガード)
+            const valid = tokens.filter(t => !/[\s\/\\#?&]/u.test(t));
+            if (valid.length === 0) {
                 alert('コレクション名にスペース・/ \\ # ? & は使えません。');
                 this.hideInlineEditor();
                 return;
@@ -799,14 +934,29 @@ function knowledgeListApp() {
                 const res = await fetch(`/knowledge/sources/${id}/collection`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': this.csrfToken },
-                    body: JSON.stringify({ collection: newVal }),
+                    body: JSON.stringify({ collections: valid }),
                 });
                 if (!res.ok) { alert('更新に失敗しました'); this.hideInlineEditor(); return; }
                 const data = await res.json();
-                if (chip) {
-                    chip.dataset.collection = data.collection;
-                    const span = chip.querySelector('.collection-name');
-                    if (span) span.textContent = data.collection;
+                // 表示更新: チップ群を再描画
+                if (list) {
+                    const cols = Array.isArray(data.collections) ? data.collections : [data.collection];
+                    list.dataset.collection = cols.join(',');
+                    // 既存の通常チップを撤去 (編集ボタンは残す)
+                    Array.from(list.querySelectorAll('.collection-chip:not(.collection-chip-edit)')).forEach(n => n.remove());
+                    const editBtn = list.querySelector('.collection-chip-edit');
+                    cols.forEach(name => {
+                        const chip = document.createElement('span');
+                        chip.className = 'collection-chip';
+                        chip.innerHTML = `<i class="fas fa-tag" style="font-size:9px;"></i><span class="collection-name"></span>`;
+                        chip.querySelector('.collection-name').textContent = name;
+                        chip.addEventListener('click', (ev) => {
+                            ev.stopPropagation();
+                            if (!this.selectionMode) this.showCollectionEditor(id, ev);
+                        });
+                        if (editBtn) list.insertBefore(chip, editBtn);
+                        else list.appendChild(chip);
+                    });
                 }
                 // 新規コレクション追加の可能性 → キャッシュをリセット
                 window._knowledgeCollections.loaded = false;

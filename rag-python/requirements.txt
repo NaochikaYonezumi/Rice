@@ -23,3 +23,10 @@ xlrd
 odfpy
 striprtf
 ebooklib
+# OCR (画像 + スキャン PDF 取り込み)
+# pytesseract: tesseract バイナリへの薄いラッパ。Dockerfile で日本語/英語学習データを apt 経由で入れる。
+# Pillow:      画像読み込み/正規化に使用。
+# pdf2image:   PDF を 1 ページ 1 画像 に変換する。Poppler-utils が必要 (Dockerfile で apt install 済)。
+pytesseract
+Pillow
+pdf2image

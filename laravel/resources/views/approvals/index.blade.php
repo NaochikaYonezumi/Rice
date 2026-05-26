@@ -19,7 +19,18 @@
 @endsection
 
 @section('content')
-<div class="flex h-full bg-gray-50" x-data="approvalApp()" x-init="init()" x-cloak>
+{{--
+  グローバルショートカット:
+    J / K           : 次 / 前の依頼 (selectedId が無ければ先頭を選択)
+    Enter           : 選択中の依頼を「承認・送信」(可能な状態のみ)
+    Shift+Enter     : 「予約して承認」モーダルを開く
+    R               : 却下モーダルを開く
+    Esc             : モーダル / 選択を閉じる
+    Ctrl+Z          : 直近の取消可能アクション (予約取消 / 取り下げ) を 1 つ巻き戻す
+  入力欄 (input/textarea) フォーカス時、または承認/予約モーダル表示中は無効化.
+--}}
+<div class="flex h-full bg-gray-50" x-data="approvalApp()" x-cloak
+     @keydown.window="onGlobalKey($event)">
 
     {{-- 左: 承認・送信リスト (メール一覧と同じパネルスタイルに揃え) --}}
     <div class="flex flex-col flex-shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 shadow-sm"
@@ -44,6 +55,9 @@
                 <button @click="setStatusTab('pending')"
                         :class="statusTab === 'pending' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
                         class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">承認待ち</button>
+                <button @click="setStatusTab('scheduled')"
+                        :class="statusTab === 'scheduled' ? 'bg-white shadow text-indigo-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">予約中</button>
                 <button @click="setStatusTab('approved')"
                         :class="statusTab === 'approved' ? 'bg-white shadow text-green-600' : 'text-gray-500 hover:text-gray-800'"
                         class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">送信済</button>
@@ -54,14 +68,13 @@
         </div>
 
         {{-- 対象者フィルタ (承認待ち時のみ。非表示時もスペースは確保) --}}
-        <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50/50 flex items-center gap-2 transition-opacity"
-             :class="statusTab === 'pending' ? '' : 'invisible pointer-events-none'">
+        <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
             <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
                 <button @click="setFilter('me')"
                         :class="filter === 'me' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
                         class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">あなた宛</button>
                 <button @click="setFilter('mine')"
-                        :class="filter === 'mine' ? 'bg-white shadow text-emerald-600' : 'text-gray-500 hover:text-gray-800'"
+                        :class="filter === 'mine' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
                         class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">自分が依頼</button>
                 <button @click="setFilter('all')"
                         :class="filter === 'all' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'"
@@ -81,11 +94,18 @@
                 <div class="text-center py-16 px-4 text-gray-400">
                     <i :class="emptyIconClass" class="fa-2x text-gray-300 mb-3"></i>
                     <p class="text-sm font-semibold text-gray-600 mb-1">
-                        <span x-show="statusTab === 'pending' && filter === 'me'">あなた宛の承認依頼はありません</span>
-                        <span x-show="statusTab === 'pending' && filter === 'mine'">自分が依頼した承認待ちはありません</span>
+                        <span x-show="statusTab === 'pending' && filter === 'me'">あなたを承認者に指定した依頼はありません</span>
+                        <span x-show="statusTab === 'pending' && filter === 'mine'">あなたが依頼した承認待ちはありません</span>
                         <span x-show="statusTab === 'pending' && filter === 'all'">承認待ちの依頼はありません</span>
-                        <span x-show="statusTab === 'approved'">承認済の依頼はありません</span>
-                        <span x-show="statusTab === 'rejected'">却下された依頼はありません</span>
+                        <span x-show="statusTab === 'approved' && filter === 'me'">あなたが承認したものはありません</span>
+                        <span x-show="statusTab === 'approved' && filter === 'mine'">あなたが依頼して承認されたものはありません</span>
+                        <span x-show="statusTab === 'approved' && filter === 'all'">承認済の依頼はありません</span>
+                        <span x-show="statusTab === 'rejected' && filter === 'me'">あなたが却下したものはありません</span>
+                        <span x-show="statusTab === 'rejected' && filter === 'mine'">あなたが依頼して却下されたものはありません</span>
+                        <span x-show="statusTab === 'rejected' && filter === 'all'">却下された依頼はありません</span>
+                        <span x-show="statusTab === 'scheduled' && filter === 'me'">あなたが予約に関わるものはありません</span>
+                        <span x-show="statusTab === 'scheduled' && filter === 'mine'">あなたが依頼した予約中の案件はありません</span>
+                        <span x-show="statusTab === 'scheduled' && filter === 'all'">予約中の案件はありません</span>
                     </p>
                     <p class="text-[11px] text-gray-400" x-show="statusTab === 'pending' && filter === 'me'">
                         他のユーザーが承認者にあなたを指定すると、ここに表示されます。
@@ -98,6 +118,7 @@
 
             <template x-for="p in allEmails" :key="p.id">
                 <div @click="selectEmail(p)"
+                     :data-approval-row-id="p.id"
                      class="group/row w-full cursor-pointer border-b border-gray-100 hover:bg-blue-50 transition-all duration-200 relative"
                      :class="selectedId === p.id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : ''">
                     <div class="px-5 py-2 flex flex-col justify-center gap-1">
@@ -116,6 +137,15 @@
                             <template x-if="p.status === 'rejected'">
                                 <span class="text-[9px] font-black text-white bg-red-500 px-1.5 py-0.5 rounded shrink-0 inline-flex items-center gap-0.5" title="却下済">
                                     <i class="fas fa-times"></i>却下
+                                </span>
+                            </template>
+                            <template x-if="p.status === 'scheduled'">
+                                {{-- 予約バッジ: 白文字 indigo 背景は視認性が低かったので、薄背景 + 濃文字に変更.
+                                     日時もインラインで表示し、ホバーしなくても予約時刻が読めるようにする. --}}
+                                <span class="text-[10px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-300 px-2 py-0.5 rounded shrink-0 inline-flex items-center gap-1"
+                                      :title="'予約日時: ' + (p.scheduled_for_label || '')">
+                                    <i class="fas fa-clock text-[9px]"></i>
+                                    <span>予約 <span x-text="p.scheduled_for_label || '?'"></span></span>
                                 </span>
                             </template>
                             <span class="text-[9px] font-black text-white bg-blue-600 px-1.5 py-0.5 rounded shrink-0"
@@ -147,10 +177,16 @@
                                     却下: <span class="truncate max-w-[80px]" x-text="p.rejected_by_name"></span>
                                 </span>
                             </template>
-                            <template x-if="p.status === 'approved' && p.approved_by_name">
-                                <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1">
+                            <template x-if="p.status === 'approved' && p.approved_by_name && !p.is_self_sent">
+                                <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1" title="承認した人">
                                     <i class="fas fa-check-double text-[8px]"></i>
                                     <span class="truncate max-w-[100px]" x-text="p.approved_by_name"></span>
+                                </span>
+                            </template>
+                            <template x-if="p.status === 'approved' && p.is_self_sent">
+                                <span class="bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded text-[9px] font-black inline-flex items-center gap-1" title="作成者本人が承認フローを経由せず直接送信">
+                                    <i class="fas fa-paper-plane text-[8px]"></i>
+                                    自己送信
                                 </span>
                             </template>
                             <template x-if="p.memo">
@@ -209,6 +245,12 @@
                                     <i class="fas fa-user-check"></i> 承認者: <span x-text="selectedEmail.target_approver_name"></span>
                                 </span>
                             </template>
+                            {{-- 予約送信中バッジ (status=scheduled の時のみ表示) --}}
+                            <template x-if="selectedEmail.status === 'scheduled' && selectedEmail.scheduled_for_label">
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    <i class="fas fa-clock"></i> 予約: <span x-text="selectedEmail.scheduled_for_label"></span>
+                                </span>
+                            </template>
                         </div>
                         <h1 class="text-lg font-extrabold text-gray-900 leading-tight mb-2" x-text="selectedEmail.subject"></h1>
                         <div class="space-y-0.5">
@@ -252,7 +294,15 @@
                                     class="bg-white text-red-600 border border-red-200 text-xs font-bold px-4 py-2 rounded-lg hover:bg-red-50 transition-all disabled:opacity-50">
                                     <i class="fas fa-times mr-1"></i>却下
                                 </button>
-                                <button @click="approve(selectedEmail)"
+                                {{-- 予約して承認 (承認者が日時を指定して予約化) --}}
+                                <button @click="openScheduleModal(selectedEmail)"
+                                    :disabled="actionLoading"
+                                    title="承認後、指定日時まで送信を待機する"
+                                    class="bg-white text-indigo-700 border border-indigo-300 text-xs font-bold px-3 py-2 rounded-lg hover:bg-indigo-50 transition-all disabled:opacity-50 inline-flex items-center gap-1.5">
+                                    <i class="fas fa-clock"></i>予約して承認
+                                </button>
+                                {{-- 承認・今すぐ送信 (デフォルト) --}}
+                                <button @click="approve(selectedEmail, 'immediate')"
                                     :disabled="actionLoading"
                                     class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50"
                                     style="background-color:#2563eb;color:#ffffff;">
@@ -284,12 +334,23 @@
                 {{-- 却下情報 (rejected タブで詳細表示) --}}
                 <template x-if="statusTab === 'rejected' && selectedEmail">
                     <div class="mx-8 mt-4 shrink-0 bg-red-50 border border-red-200 rounded-xl p-4">
-                        <div class="flex items-center gap-2 mb-2">
-                            <i class="fas fa-times-circle text-red-600"></i>
-                            <p class="text-xs font-bold text-red-700">
-                                却下: <span x-text="selectedEmail.rejected_by_name || '不明'"></span>
-                                <span class="text-red-500 ml-2 font-medium" x-text="selectedEmail.rejected_at"></span>
-                            </p>
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-times-circle text-red-600"></i>
+                                <p class="text-xs font-bold text-red-700">
+                                    却下: <span x-text="selectedEmail.rejected_by_name || '不明'"></span>
+                                    <span class="text-red-500 ml-2 font-medium" x-text="selectedEmail.rejected_at"></span>
+                                </p>
+                            </div>
+                            {{-- 履歴から削除ボタン (依頼者本人 or 却下を実行した承認者本人のみ) --}}
+                            <template x-if="canDeleteRejected(selectedEmail)">
+                                <button @click="deleteRejected(selectedEmail)"
+                                        :disabled="actionLoading"
+                                        class="inline-flex items-center gap-1 text-[11px] font-bold text-red-700 bg-white border border-red-300 px-3 py-1.5 rounded-lg hover:bg-red-600 hover:text-white hover:border-red-600 transition-all disabled:opacity-50"
+                                        title="却下履歴から完全に削除する">
+                                    <i class="fas fa-trash"></i>履歴から削除
+                                </button>
+                            </template>
                         </div>
                         <p x-show="selectedEmail.rejection_reason" class="text-sm text-red-900 whitespace-pre-wrap leading-relaxed"
                            x-text="selectedEmail.rejection_reason"></p>
@@ -298,17 +359,73 @@
                     </div>
                 </template>
 
-                {{-- 承認情報 (approved タブで詳細表示) --}}
+                {{-- 承認情報 (approved タブで詳細表示).
+                     自己送信 (is_self_sent) と承認経由を文言で区別する. --}}
                 <template x-if="statusTab === 'approved' && selectedEmail">
                     <div class="mx-8 mt-4 shrink-0 bg-green-50 border border-green-200 rounded-xl p-4">
                         <div class="flex items-center gap-2 mb-1">
                             <i class="fas fa-check-circle text-green-600"></i>
                             <p class="text-xs font-bold text-green-700">
-                                承認: <span x-text="selectedEmail.approved_by_name || '不明'"></span>
-                                <span class="text-green-500 ml-2 font-medium" x-text="selectedEmail.approved_at"></span>
+                                <template x-if="selectedEmail.is_self_sent">
+                                    <span>
+                                        自己送信: <span x-text="selectedEmail.approved_by_name || selectedEmail.created_by || '本人'"></span>
+                                        <span class="text-green-500 ml-2 font-medium" x-text="selectedEmail.approved_at"></span>
+                                    </span>
+                                </template>
+                                <template x-if="!selectedEmail.is_self_sent">
+                                    <span>
+                                        承認: <span x-text="selectedEmail.approved_by_name || '不明'"></span>
+                                        <span class="text-green-500 ml-2 font-medium" x-text="selectedEmail.approved_at"></span>
+                                    </span>
+                                </template>
                             </p>
                         </div>
-                        <p class="text-[10px] text-green-700 mt-1"><i class="fas fa-paper-plane mr-1"></i>このメールは承認後、自動的に SMTP 経由で送信されています。</p>
+                        <template x-if="selectedEmail.is_self_sent">
+                            <p class="text-[10px] text-green-700 mt-1"><i class="fas fa-paper-plane mr-1"></i>このメールは作成者本人が「今すぐ送信」を選択し、承認フローを経由せず SMTP 経由で送信されています。</p>
+                        </template>
+                        <template x-if="!selectedEmail.is_self_sent">
+                            <p class="text-[10px] text-green-700 mt-1"><i class="fas fa-paper-plane mr-1"></i>このメールは承認後、自動的に SMTP 経由で送信されています。</p>
+                        </template>
+                    </div>
+                </template>
+
+                {{-- 予約中バナー (scheduled タブで詳細表示).
+                     - 取消できるのは: 作成者本人 / 予約に切替えた承認者 / 管理者 (backend で同条件をチェック).
+                     - 取消すると status=draft に戻る → /drafts (作成者) や承認待ち再依頼が可能.
+                --}}
+                <template x-if="statusTab === 'scheduled' && selectedEmail">
+                    <div class="mx-8 mt-4 shrink-0 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <i class="fas fa-clock text-indigo-600 shrink-0"></i>
+                                <p class="text-xs font-bold text-indigo-700 truncate">
+                                    予約送信:
+                                    <span class="text-indigo-900 ml-1" x-text="selectedEmail.scheduled_for_label || '不明'"></span>
+                                    に自動送信予定
+                                    <template x-if="selectedEmail.is_self_sent">
+                                        <span class="text-indigo-500 ml-2 font-medium text-[10px]">(作成者の予約)</span>
+                                    </template>
+                                    <template x-if="!selectedEmail.is_self_sent && selectedEmail.approved_by_name">
+                                        <span class="text-indigo-500 ml-2 font-medium text-[10px]">
+                                            (承認者: <span x-text="selectedEmail.approved_by_name"></span> が予約)
+                                        </span>
+                                    </template>
+                                </p>
+                            </div>
+                            <template x-if="canCancelSchedule(selectedEmail)">
+                                <button @click="unschedule(selectedEmail)"
+                                        :disabled="actionLoading"
+                                        class="shrink-0 inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-white border border-indigo-300 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-all disabled:opacity-50"
+                                        title="予約を取り消して下書きに戻す">
+                                    <i class="fas" :class="actionLoading ? 'fa-spinner fa-spin' : 'fa-ban'"></i>
+                                    予約取消
+                                </button>
+                            </template>
+                        </div>
+                        <p class="text-[10px] text-indigo-600 mt-2">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            指定日時になると自動的に SMTP 経由で送信されます。それまでは「予約取消」で下書きに戻して編集できます。
+                        </p>
                     </div>
                 </template>
 
@@ -443,6 +560,47 @@
             </div>
         </div>
     </template>
+
+    {{-- 予約承認モーダル (承認者が送信日時を指定する) --}}
+    <template x-if="scheduleModalOpen">
+        <div class="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-md p-4" @click.self="closeScheduleModal()">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div class="bg-indigo-50 px-6 py-5 border-b border-indigo-100 flex items-center gap-3">
+                    <div class="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center text-indigo-600">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-base font-bold text-indigo-900">予約して承認</h3>
+                        <p class="text-xs text-indigo-600 mt-0.5">指定日時に自動で SMTP 経由で送信されます</p>
+                    </div>
+                </div>
+                <div class="px-6 py-5 space-y-3">
+                    <div class="text-xs text-gray-700 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                        <span class="font-bold">対象:</span>
+                        <span class="ml-1" x-text="schedulingEmail?.subject"></span>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1.5">送信日時 <span class="text-red-600">*</span></label>
+                        <input type="datetime-local" x-model="scheduleFor" :min="scheduleMinValue"
+                               class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300">
+                        <p class="text-[10px] text-gray-400 mt-1">現在以降の日時を指定してください。承認後、指定日時まで送信を待機します。</p>
+                    </div>
+                </div>
+                <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex gap-2 justify-end">
+                    <button @click="closeScheduleModal()"
+                            class="bg-white border border-gray-200 text-gray-600 px-4 py-2 rounded-lg text-sm font-bold hover:bg-gray-100 transition-all">
+                        キャンセル
+                    </button>
+                    <button @click="confirmSchedule()" :disabled="actionLoading || !scheduleFor"
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            style="background-color:#4f46e5;color:#ffffff;">
+                        <i class="fas fa-clock"></i>
+                        <span x-text="actionLoading ? '処理中...' : '予約して承認'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>
 
 <script>
@@ -476,17 +634,42 @@ function approvalApp() {
         rejectModalOpen: false,
         rejectingEmail: null,
         rejectReason: '',
+        // 予約承認モーダル
+        scheduleModalOpen: false,
+        schedulingEmail: null,
+        scheduleFor: '',  // datetime-local 値
+        get scheduleMinValue() {
+            const d = new Date(Date.now() + 60 * 1000);
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        },
 
         get filterDescription() {
-            if (this.statusTab === 'rejected') return '過去に却下された依頼の履歴';
-            if (this.statusTab === 'approved') return '承認されて送信完了した依頼の履歴';
-            if (this.filter === 'me')   return '他のユーザーがあなたを承認者に指定した依頼';
-            if (this.filter === 'mine') return 'あなたが送信した承認依頼 (相手の承認待ち)';
-            return '全ての承認待ち';
+            // タブ × フィルタの 9 通りを正しく言い分ける。
+            // 「あなた宛」の意味はタブによって変わる:
+            //   - 承認待ち : 自分が承認者として指定された依頼
+            //   - 送信済   : 自分が実際に承認したもの
+            //   - 却下済   : 自分が実際に却下したもの
+            // 「自分が依頼」は全タブ共通で「他のユーザに承認を依頼したもの」。
+            if (this.statusTab === 'pending') {
+                if (this.filter === 'me')   return '他のユーザーがあなたを承認者に指定した依頼';
+                if (this.filter === 'mine') return 'あなたが他のユーザーに承認を依頼した待機中の案件';
+                return '全ての承認待ち';
+            }
+            if (this.statusTab === 'approved') {
+                if (this.filter === 'me')   return 'あなたが承認して送信した履歴';
+                if (this.filter === 'mine') return 'あなたが他のユーザーに依頼し、承認・送信された履歴';
+                return '全ての送信済 (承認済) 履歴';
+            }
+            // rejected
+            if (this.filter === 'me')   return 'あなたが却下した履歴';
+            if (this.filter === 'mine') return 'あなたが他のユーザーに依頼し、却下された履歴';
+            return '全ての却下済履歴';
         },
         get emptyIconClass() {
             if (this.statusTab === 'approved') return 'fas fa-check-circle';
             if (this.statusTab === 'rejected') return 'fas fa-times-circle';
+            if (this.statusTab === 'scheduled') return 'fas fa-clock';
             return 'fas fa-inbox';
         },
 
@@ -499,7 +682,7 @@ function approvalApp() {
                     this.statusTab = 'approved';
                 } else {
                     const tab = params.get('tab');
-                    if (tab === 'approved' || tab === 'rejected' || tab === 'pending') {
+                    if (tab === 'approved' || tab === 'rejected' || tab === 'pending' || tab === 'scheduled') {
                         this.statusTab = tab;
                     }
                 }
@@ -544,8 +727,11 @@ function approvalApp() {
             this.loading = true;
             try {
                 const params = new URLSearchParams({ status: this.statusTab });
-                if (this.statusTab === 'pending' && this.filter === 'me')   params.set('for_me', '1');
-                if (this.statusTab === 'pending' && this.filter === 'mine') params.set('mine',   '1');
+                // 旧実装は statusTab === 'pending' の時しか for_me / mine を送っていなかった。
+                // そのため 送信済 / 却下済 タブでは あなた宛 / 自分が依頼 / すべて を切り替えても
+                // 同じ全件リストが返ってきていた。フィルタは常に効かせる。
+                if (this.filter === 'me')   params.set('for_me', '1');
+                if (this.filter === 'mine') params.set('mine',   '1');
                 const res = await fetch('/pending-emails?' + params.toString(), { headers: { 'Accept': 'application/json' } });
                 this.allEmails = await res.json();
                 if (this.selectedId) {
@@ -571,6 +757,114 @@ function approvalApp() {
             this.actionError = false;
         },
 
+        // ============= グローバルキーボードショートカット =============
+        // メール画面と同じ感覚で承認画面でも J/K ナビと Ctrl+Z 巻き戻しが使えるようにする.
+        // 入力欄やモーダル表示中は無効化して、ユーザの文字入力を奪わない.
+        undoStack: [],
+        maxUndoStack: 12,
+        _pushUndoApproval(label, undoFn) {
+            if (typeof undoFn !== 'function') return;
+            this.undoStack.push({ label, undoFn, ts: Date.now() });
+            if (this.undoStack.length > this.maxUndoStack) this.undoStack.shift();
+        },
+        async undoLastApproval() {
+            const action = this.undoStack.pop();
+            if (!action) { this.actionMessage = '元に戻せる操作がありません'; this.actionError = false; return; }
+            try {
+                await action.undoFn();
+                this.actionMessage = '元に戻しました: ' + action.label;
+                this.actionError = false;
+                this.loadPending();
+            } catch (e) {
+                this.actionMessage = '戻せませんでした: ' + (e?.message || e);
+                this.actionError = true;
+            }
+        },
+        onGlobalKey(e) {
+            // 入力欄フォーカス中はネイティブ動作を尊重 (テキスト編集 / IME 入力など)
+            const tag = (e.target?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+            if (e.target?.isContentEditable) return;
+            // モーダル表示中は J/K / R / Enter を奪わない (モーダル内の UI に任せる)
+            if (this.rejectModalOpen || this.scheduleModalOpen) {
+                if (e.key === 'Escape') {
+                    if (this.rejectModalOpen) this.closeRejectModal?.();
+                    if (this.scheduleModalOpen) this.closeScheduleModal?.();
+                    e.preventDefault();
+                }
+                return;
+            }
+            const ctrlOrCmd = e.ctrlKey || e.metaKey;
+            // Ctrl+Z (undo)
+            if (ctrlOrCmd && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+                e.preventDefault();
+                this.undoLastApproval();
+                return;
+            }
+            if (ctrlOrCmd || e.altKey) return;  // それ以外の修飾キー付きはブラウザ既定に譲る
+
+            switch (e.key) {
+                case 'j': case 'J':
+                    e.preventDefault();
+                    if (!this.selectedId && this.allEmails.length > 0) {
+                        this.selectEmail(this.allEmails[0]);
+                    } else {
+                        this.goToNextEmail();
+                    }
+                    this._scrollSelectedRowIntoView();
+                    break;
+                case 'k': case 'K':
+                    e.preventDefault();
+                    if (!this.selectedId && this.allEmails.length > 0) {
+                        this.selectEmail(this.allEmails[this.allEmails.length - 1]);
+                    } else {
+                        this.goToPrevEmail();
+                    }
+                    this._scrollSelectedRowIntoView();
+                    break;
+                case 'Enter':
+                    // 承認可能な依頼のみ反応
+                    if (this.statusTab === 'pending' && this.selectedEmail
+                        && this.selectedEmail.created_by_user_id !== {{ auth()->id() }}
+                        && (!this.selectedEmail.target_approver_user_id || this.selectedEmail.target_approver_user_id === {{ auth()->id() }})) {
+                        e.preventDefault();
+                        if (e.shiftKey) {
+                            this.openScheduleModal?.(this.selectedEmail);
+                        } else {
+                            this.approve(this.selectedEmail, 'immediate');
+                        }
+                    }
+                    break;
+                case 'r': case 'R':
+                    if (this.statusTab === 'pending' && this.selectedEmail
+                        && this.selectedEmail.created_by_user_id !== {{ auth()->id() }}) {
+                        e.preventDefault();
+                        this.openRejectModal?.(this.selectedEmail);
+                    }
+                    break;
+                case 'Escape':
+                    if (this.selectedId) {
+                        e.preventDefault();
+                        this.selectedId = null;
+                        this.selectedEmail = null;
+                    }
+                    break;
+                case '?':
+                    // 既存のグローバルヘルプを開く (layouts/app の関数を呼ぶ)
+                    e.preventDefault();
+                    if (typeof window.riceShowKeyboardShortcuts === 'function') window.riceShowKeyboardShortcuts();
+                    break;
+            }
+        },
+        _scrollSelectedRowIntoView() {
+            this.$nextTick(() => {
+                const el = document.querySelector('[data-approval-row-id="' + this.selectedId + '"]');
+                if (el && typeof el.scrollIntoView === 'function') {
+                    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                }
+            });
+        },
+
         // ============= 前/次の依頼ナビゲーション (メール一覧と同じパターン) =============
         get _currentEmailIndex() {
             if (!this.selectedId) return -1;
@@ -594,22 +888,35 @@ function approvalApp() {
             }
         },
 
-        async approve(p) {
-            if (!confirm('このメールを承認し、実際に送信しますか？')) return;
+        // 承認・送信 (デフォルトは immediate). 予約承認は openScheduleModal()→confirmSchedule() 経由.
+        async approve(p, mode, scheduledFor) {
+            mode = mode || 'immediate';
+            const isScheduled = mode === 'scheduled' && scheduledFor;
+            const scheduledLabel = isScheduled ? this._fmtDateLocal(scheduledFor) : '';
+            const msg = isScheduled
+                ? `${scheduledLabel} に送信する予約として承認しますか？\n(その時刻になると自動で送信されます)`
+                : 'このメールを承認し、今すぐ送信しますか？';
+            if (!confirm(msg)) return;
             this.actionLoading = true;
             this.actionMessage = '';
             this.actionError = false;
             try {
+                const fd = new FormData();
+                fd.append('mode', mode);
+                if (isScheduled) fd.append('scheduled_for', scheduledFor);
                 const res = await fetch(`/pending-emails/${p.id}/approve`, {
                     method: 'POST',
-                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
+                    body: fd,
                 });
                 const data = await res.json();
                 if (!res.ok || data.status === 'error') {
                     this.actionMessage = data.message || '送信に失敗しました';
                     this.actionError = true;
                 } else {
-                    this.actionMessage = '承認しました。メールを送信しました。';
+                    this.actionMessage = isScheduled
+                        ? `承認しました。${scheduledLabel} に自動送信されます。`
+                        : '承認しました。メールを送信しました。';
                     this.actionError = false;
                     setTimeout(() => {
                         this.selectedId = null;
@@ -620,6 +927,88 @@ function approvalApp() {
                 }
             } catch (e) {
                 this.actionMessage = 'エラー: ' + e.message;
+                this.actionError = true;
+            } finally {
+                this.actionLoading = false;
+            }
+        },
+
+        // datetime-local 文字列 (YYYY-MM-DDTHH:MM) を "M/D HH:MM" にフォーマット
+        _fmtDateLocal(s) {
+            if (!s) return '';
+            try {
+                const d = new Date(s);
+                if (isNaN(d.getTime())) return s;
+                return d.getMonth()+1 + '/' + d.getDate() + ' ' +
+                       String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+            } catch (_) { return s; }
+        },
+
+        // 予約承認モーダルを開く (datetime-local の初期値は「現在 + 5 分」)
+        openScheduleModal(p) {
+            this.schedulingEmail = p;
+            const d = new Date(Date.now() + 5 * 60 * 1000);
+            const pad = n => String(n).padStart(2, '0');
+            this.scheduleFor = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+            this.scheduleModalOpen = true;
+        },
+        closeScheduleModal() {
+            this.scheduleModalOpen = false;
+            this.schedulingEmail = null;
+            this.scheduleFor = '';
+        },
+        async confirmSchedule() {
+            if (!this.schedulingEmail) return;
+            if (!this.scheduleFor) { this.actionMessage = '送信日時を指定してください'; this.actionError = true; return; }
+            const when = new Date(this.scheduleFor);
+            if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+                this.actionMessage = '送信日時は現在以降を指定してください';
+                this.actionError = true;
+                return;
+            }
+            const p = this.schedulingEmail;
+            const sched = this.scheduleFor;
+            this.closeScheduleModal();
+            await this.approve(p, 'scheduled', sched);
+        },
+
+        // 「予約取消」できるか判定 (UI 表示用. backend 側でも同条件を再チェック).
+        // - 作成者本人
+        // - 予約に切替えた承認者 (approved_by_user_id)
+        // - admin (フロントからは判別困難なので backend に任せ、UI 上はとりあえず表示してエラー時にトースト)
+        canCancelSchedule(p) {
+            if (!p) return false;
+            const myId = {{ auth()->id() }};
+            return p.created_by_user_id === myId || p.approved_by_user_id === myId;
+        },
+
+        async unschedule(p) {
+            if (!p) return;
+            if (!confirm(`予約送信 (${p.scheduled_for_label || ''}) を取り消し、下書きに戻しますか？`)) return;
+            this.actionLoading = true;
+            this.actionMessage = '';
+            this.actionError = false;
+            try {
+                const res = await fetch(`/pending-emails/${p.id}/unschedule`, {
+                    method: 'POST',
+                    headers: { 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content, 'Accept': 'application/json' },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.status === 'error') {
+                    this.actionMessage = data.message || '予約取消に失敗しました';
+                    this.actionError = true;
+                } else {
+                    this.actionMessage = '予約を取り消し、下書きに戻しました。';
+                    this.actionError = false;
+                    setTimeout(() => {
+                        this.selectedId = null;
+                        this.selectedEmail = null;
+                        this.actionMessage = '';
+                        this.loadPending();
+                    }, 1200);
+                }
+            } catch (e) {
+                this.actionMessage = 'エラー: ' + (e.message || '');
                 this.actionError = true;
             } finally {
                 this.actionLoading = false;
@@ -671,6 +1060,53 @@ function approvalApp() {
             this.rejectModalOpen = false;
             this.rejectingEmail = null;
             this.rejectReason = '';
+        },
+
+        // 却下済を「履歴から削除」する権限判定: 依頼者本人 or 却下した本人だけ.
+        // バックエンドにも同じ判定があるが、UI 側でも事前に隠して誤操作を防ぐ.
+        canDeleteRejected(p) {
+            if (!p || p.status !== 'rejected') return false;
+            const myId = {{ auth()->id() ?? 'null' }};
+            if (myId === null) return false;
+            if (p.created_by_user_id === myId) return true;
+            if (p.rejected_by_user_id && p.rejected_by_user_id === myId) return true;
+            return false;
+        },
+
+        async deleteRejected(p) {
+            if (!p) return;
+            if (!confirm('この却下履歴を完全に削除しますか?\n\n注意: 削除後は復元できません。下書きとして再生成された分は /drafts に残ります。')) return;
+            this.actionLoading = true;
+            this.actionMessage = '';
+            this.actionError = false;
+            try {
+                const res = await fetch(`/pending-emails/${p.id}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        'Accept': 'application/json',
+                    },
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.status === 'error') {
+                    this.actionMessage = data.message || '削除に失敗しました';
+                    this.actionError = true;
+                } else {
+                    this.actionMessage = '却下履歴を削除しました';
+                    this.actionError = false;
+                    setTimeout(() => {
+                        this.selectedId = null;
+                        this.selectedEmail = null;
+                        this.actionMessage = '';
+                        this.loadPending();
+                    }, 1200);
+                }
+            } catch (e) {
+                this.actionMessage = 'エラー: ' + e.message;
+                this.actionError = true;
+            } finally {
+                this.actionLoading = false;
+            }
         },
 
         async confirmReject() {

@@ -101,7 +101,7 @@
     <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
             <h1 class="text-xl font-extrabold text-gray-900">レポート</h1>
-            <p class="text-xs text-gray-500 mt-0.5">担当者別・日付別・タグ別の集計</p>
+            <p class="text-xs text-gray-500 mt-0.5">担当者別・日付別の集計</p>
         </div>
         <form method="GET" action="{{ route('reports.index') }}" class="flex items-end gap-2 flex-wrap">
             <div>
@@ -263,6 +263,10 @@
                 @if(empty($byDate['rows']))
                     <div class="empty">期間内のデータがありません</div>
                 @else
+                    {{--
+                        日付別パネル: 期間内の日付数だけ縦に並ぶ自然な高さ.
+                        max-height は付けない (ユーザ要望: 元のまま伸ばす).
+                    --}}
                     <div class="chart-grid">
                         @foreach($byDate['rows'] as $d)
                             <div class="day-row">
@@ -282,45 +286,49 @@
             </div>
         </div>
 
-        {{-- タグ別 --}}
+        {{-- ===== 共有ルーム毎のメール件数 ===== --}}
         <div class="panel">
             <div class="panel-header">
-                <i class="fas fa-tags text-purple-500"></i>
-                <div class="panel-title">タグ別</div>
-                <div class="panel-sub">期間内に動きのあったスレッド</div>
+                <i class="fas fa-hashtag text-amber-500"></i>
+                <div class="panel-title">共有ルーム毎のメール件数</div>
+                <div class="panel-sub">期間内に受信したメール数</div>
             </div>
-            <div class="px-5 py-4 space-y-3">
-                @forelse($stats['by_tag'] as $tag)
-                    @php
-                        $tg = max(1, $tag['total']);
-                        $tp = fn($n) => round(($n / $tg) * 100, 1);
-                    @endphp
-                    <div>
-                        <div class="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-                            <span class="tag-chip">
-                                <i class="fas fa-tag"></i>
-                                {{ $tag['name'] }}
-                                <span class="count">{{ $tag['total'] }}</span>
-                            </span>
-                            <div class="flex items-center gap-1.5 text-[10px] text-gray-500">
-                                @if($tag['inbox']     > 0)<span class="pill pill-inbox">受信 {{ $tag['inbox'] }}</span>@endif
-                                @if($tag['hold']      > 0)<span class="pill pill-hold">保留 {{ $tag['hold'] }}</span>@endif
-                                @if($tag['completed'] > 0)<span class="pill pill-completed">完了 {{ $tag['completed'] }}</span>@endif
-                                @if($tag['pending']   > 0)<span class="pill pill-pending">承認待ち {{ $tag['pending'] }}</span>@endif
+            <div class="px-5 py-4">
+                @php
+                    $maxRoomEmails = max(1, collect($stats['rooms'])->max('emails_count') ?? 0);
+                @endphp
+                @if(empty($stats['rooms']))
+                    <div class="empty">共有ルームがありません</div>
+                @else
+                    {{--
+                        共有ルームパネル: 日付別パネルと同じ自然な縦伸び (max-height 無し).
+                        2 カラムで横並びにした時、両方が同じ伸び方をするのでレイアウトが揃う.
+                    --}}
+                    <div class="chart-grid">
+                        @foreach($stats['rooms'] as $room)
+                            <div class="day-row" style="grid-template-columns: 140px 1fr 60px;">
+                                <div class="day-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                    <a href="{{ url('/chats?room=' . $room['id']) }}" target="_blank"
+                                       class="hover:text-blue-600"
+                                       title="{{ $room['name'] }}">
+                                        <i class="fas fa-hashtag text-gray-400 text-[9px] mr-0.5"></i>{{ $room['name'] }}
+                                    </a>
+                                </div>
+                                <div class="day-bar-track">
+                                    <div class="day-bar" style="width: {{ round(($room['emails_count'] / $maxRoomEmails) * 100, 1) }}%; background: linear-gradient(90deg, #a855f7 0%, #7e22ce 100%);"></div>
+                                </div>
+                                <div class="day-num">{{ $room['emails_count'] }}</div>
                             </div>
-                        </div>
-                        <div class="seg-bar">
-                            <div class="seg seg-inbox"     style="width: {{ $tp($tag['inbox'])     }}%"></div>
-                            <div class="seg seg-hold"      style="width: {{ $tp($tag['hold'])      }}%"></div>
-                            <div class="seg seg-completed" style="width: {{ $tp($tag['completed']) }}%"></div>
-                            <div class="seg seg-pending"   style="width: {{ $tp($tag['pending'])   }}%"></div>
-                        </div>
+                        @endforeach
                     </div>
-                @empty
-                    <div class="empty">期間内にタグ付きスレッドがありません</div>
-                @endforelse
+                    <div class="mt-3 text-[10px] text-gray-400 font-semibold flex items-center gap-3">
+                        <span><span class="inline-block w-2 h-2 rounded-full" style="background:#a855f7;"></span> 期間内メール件数</span>
+                        <span>最大: <span class="num">{{ $maxRoomEmails }}</span></span>
+                    </div>
+                @endif
             </div>
         </div>
+
     </div>
 
     <div class="text-center text-[10px] text-gray-400 pt-2 pb-6">

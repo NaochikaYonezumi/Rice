@@ -11,6 +11,15 @@
     .chat-channel.active  { background-color: #404249; color: #ffffff; font-weight: 600; }
     .chat-channel .hash    { color: #80848e; font-weight: 600; }
     .chat-channel.active .hash { color: #ffffff; }
+    /* バンドル先スレッドの「未読メール数」バッジ。 */
+    .chat-channel .badge-email-unread {
+        background: #3b82f6; color: #ffffff;
+        font-size: 10px; font-weight: 800;
+        border-radius: 8px; min-width: 18px; height: 18px; padding: 0 5px;
+        display: inline-flex; align-items: center; justify-content: center;
+        gap: 3px; line-height: 1; margin-left: auto;
+    }
+    .chat-channel .badge-email-unread i { font-size: 8px; }
 
     .chat-main         { background-color: #313338; }
     .chat-header       { background-color: #313338; border-bottom: 1px solid #1e1f22; color: #f2f3f5; }
@@ -61,7 +70,7 @@
 @endsection
 
 @section('content')
-<div class="flex flex-1 h-full" x-data="chatRoomsApp()" x-init="init()">
+<div class="flex flex-1 h-full" x-data="chatRoomsApp()">
 
     {{-- 左: ルーム一覧 (Discord サイドバー) --}}
     <aside class="w-60 shrink-0 chat-sidebar flex flex-col">
@@ -79,6 +88,11 @@
                      :class="selected?.id === r.id ? 'chat-channel active' : 'chat-channel'">
                     <span class="hash">#</span>
                     <span class="flex-1 truncate text-sm" x-text="r.name"></span>
+                    {{-- バンドル先スレッドの受信メール件数バッジ。is_read は問わず合計。 --}}
+                    <span class="badge-email-unread" x-show="r.received_email_count > 0"
+                          :title="'受信スレッド ' + r.received_email_count + ' 件'">
+                        <i class="fas fa-envelope"></i><span x-text="r.received_email_count"></span>
+                    </span>
                 </div>
             </template>
             <template x-if="rooms.length === 0">
@@ -95,6 +109,14 @@
                 <div class="chat-header px-4 py-3 flex items-center gap-2 shrink-0">
                     <span style="color:#80848e;font-weight:600;">#</span>
                     <h2 class="text-base font-bold flex-1" x-text="selected.name"></h2>
+                    <button @click="renameRoom()"
+                            class="text-xs px-2 py-1 rounded"
+                            style="color:#949ba4;"
+                            onmouseover="this.style.color='#5865f2';this.style.backgroundColor='#252633'"
+                            onmouseout="this.style.color='#949ba4';this.style.backgroundColor='transparent'"
+                            title="ルーム名を変更">
+                        <i class="fas fa-pen"></i>
+                    </button>
                     <button @click="deleteRoom()"
                             class="text-xs px-2 py-1 rounded"
                             style="color:#949ba4;"
@@ -199,6 +221,29 @@ function chatRoomsApp() {
             await fetch(`/api/chat-rooms/${this.selected.id}`, { method:'DELETE', headers:{'X-CSRF-TOKEN':this.csrfToken}});
             this.selected = null; this.messages = [];
             this.load();
+        },
+        async renameRoom() {
+            if (!this.selected) return;
+            const name = prompt('新しいルーム名を入力してください', this.selected.name || '');
+            if (name === null) return;          // キャンセル
+            const trimmed = name.trim();
+            if (!trimmed || trimmed === this.selected.name) return;
+            const r = await fetch(`/api/chat-rooms/${this.selected.id}`, {
+                method:'PUT',
+                headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-TOKEN':this.csrfToken},
+                body: JSON.stringify({ name: trimmed }),
+            });
+            if (!r.ok) {
+                let msg = '変更に失敗しました';
+                try { msg = (await r.json()).error || msg; } catch (_) {}
+                alert(msg);
+                return;
+            }
+            const d = await r.json();
+            // 選択中ルーム & 一覧をその場で反映 (load() でも良いが選択を保ちたい)
+            this.selected = { ...this.selected, ...(d.room || {}) };
+            const idx = this.rooms.findIndex(x => x.id === this.selected.id);
+            if (idx >= 0) this.rooms[idx] = { ...this.rooms[idx], ...(d.room || {}) };
         },
         async selectRoom(r) {
             this.selected = r;

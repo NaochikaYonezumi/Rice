@@ -2,7 +2,7 @@
 @section('title', 'タグ・顧客リスト')
 
 @section('content')
-<div class="flex h-full" x-data="tagApp()" x-init="init()" x-cloak>
+<div class="flex h-full" x-data="tagApp()" x-cloak>
 
     {{-- 左パネル: タグ / 顧客 一覧 --}}
     <div class="w-72 shrink-0 border-r border-gray-200 bg-white flex flex-col">

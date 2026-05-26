@@ -84,17 +84,22 @@ class NeuronService
 
     /**
      * Query the knowledge base.
+     *
+     * @param array|null $collections フィルタするコレクション名の配列 (OR マッチ)
      */
-    public function query(string $query): array
+    public function query(string $query, ?array $collections = null): array
     {
-        return Http::post("{$this->baseUrl}/query", [
-            'query' => $query,
-        ])->json() ?? [];
+        $payload = ['query' => $query];
+        if (!empty($collections)) {
+            $payload['collections'] = array_values($collections);
+        }
+        return Http::post("{$this->baseUrl}/query", $payload)->json() ?? [];
     }
 
     /**
      * アップロードファイルをベクター DB にインデックス。
      * - $sourceId は `scraped_urls.url` と同じく一意な識別子になる
+     * - $collections に配列を渡すとドキュメント側に複数コレクションが記録される
      */
     public function uploadDocument(
         string $sourceId,
@@ -102,17 +107,38 @@ class NeuronService
         string $filename,
         string $mimeType,
         ?string $title = null,
-        ?string $collection = null,
+        ?string $collection = null,         // 互換 (主コレクション)
         int $timeoutSec = 900,
+        ?array $collections = null,         // 新: 配列 (全コレクション)
     ): array {
+        // multipart/form-data に collection (互換) と collections (JSON 文字列) を両方乗せる。
+        // FastAPI 側は collections を優先的に解釈する。
+        $form = array_filter([
+            'source_id'   => $sourceId,
+            'title'       => $title,
+            'collection'  => $collection,
+            'collections' => !empty($collections) ? json_encode(array_values($collections), JSON_UNESCAPED_UNICODE) : null,
+        ], fn($v) => $v !== null && $v !== '');
+
         $response = Http::timeout($timeoutSec)
             ->attach('file', fopen($absoluteLocalPath, 'r'), $filename, ['Content-Type' => $mimeType])
-            ->post("{$this->baseUrl}/documents/upload", array_filter([
-                'source_id'  => $sourceId,
-                'title'      => $title,
-                'collection' => $collection,
-            ], fn($v) => $v !== null && $v !== ''));
+            ->post("{$this->baseUrl}/documents/upload", $form);
 
+        $response->throw();
+        return $response->json() ?? [];
+    }
+
+    /**
+     * 指定 source_id の vector DB レコードのコレクションを上書きする (再インデックスなし)。
+     */
+    public function updateSourceCollections(string $sourceId, array $collections, int $timeoutSec = 60): array
+    {
+        $payload = [
+            'source_id'   => $sourceId,
+            'collections' => array_values($collections),
+        ];
+        $response = Http::timeout($timeoutSec)
+            ->post("{$this->baseUrl}/sources/collections", $payload);
         $response->throw();
         return $response->json() ?? [];
     }
@@ -135,16 +161,20 @@ class NeuronService
         string $sourceId,
         string $content,
         ?string $title = null,
-        ?string $collection = null,
+        ?string $collection = null,         // 互換
         int $timeoutSec = 600,
+        ?array $collections = null,         // 新: 配列
     ): array {
+        $payload = array_filter([
+            'source_id'   => $sourceId,
+            'content'     => $content,
+            'title'       => $title,
+            'collection'  => $collection,
+            'collections' => !empty($collections) ? array_values($collections) : null,
+        ], fn($v) => $v !== null && $v !== '');
+
         $response = Http::timeout($timeoutSec)
-            ->post("{$this->baseUrl}/documents/text", array_filter([
-                'source_id'  => $sourceId,
-                'content'    => $content,
-                'title'      => $title,
-                'collection' => $collection,
-            ], fn($v) => $v !== null && $v !== ''));
+            ->post("{$this->baseUrl}/documents/text", $payload);
 
         $response->throw();
         return $response->json() ?? [];

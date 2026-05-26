@@ -15,7 +15,7 @@
 @endsection
 
 @section('content')
-<div class="px-6 py-5 max-w-5xl mx-auto space-y-5">
+<div class="py-5 space-y-5" style="padding-left:8.333%;padding-right:8.333%;">
 
     {{-- ヘッダー --}}
     <div class="flex items-center justify-between flex-wrap gap-3">

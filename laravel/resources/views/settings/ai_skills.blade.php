@@ -36,7 +36,7 @@
                 </div>
             </template>
 
-            <div class="space-y-2 max-w-3xl">
+            <div class="space-y-2 w-full">
                 <template x-for="s in skills" :key="s.id">
                     <div @click="openEdit(s)"
                          class="group bg-white border rounded-xl px-4 py-3 cursor-pointer transition-all"

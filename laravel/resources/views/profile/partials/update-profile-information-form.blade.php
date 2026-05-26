@@ -32,18 +32,8 @@
             @enderror
         </div>
 
-        <div>
-            <label for="signature" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">メール署名</label>
-            <textarea id="signature" name="signature" rows="6" maxlength="5000"
-                      placeholder="---&#10;〇〇株式会社&#10;氏名: 米住 直親&#10;Email: example@example.com"
-                      class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-y">{{ old('signature', $user->signature) }}</textarea>
-            <p class="mt-1 text-xs text-gray-500">
-                AI 返信生成や手動返信で末尾に挿入される署名。空なら全体設定 (AI設定の Agent 署名) を使用します。
-            </p>
-            @error('signature')
-                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
-            @enderror
-        </div>
+        {{-- メール署名はメール作成画面の「✍️ 署名挿入」(UserSignature) で複数管理できるため、
+             プロフィール画面の単一署名フィールドは廃止しました (重複設定の混乱を避けるため). --}}
 
         <div>
             <label for="email" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Email</label>

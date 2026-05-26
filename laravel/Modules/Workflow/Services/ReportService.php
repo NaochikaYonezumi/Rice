@@ -33,9 +33,58 @@ class ReportService
             'totals'      => $this->getTotals($from, $to),
             'by_assignee' => $this->getStatsByAssignee($from, $to),
             'by_date'     => $this->getStatsByDate($from, $to),
-            'by_tag'      => $this->getStatsByTag($from, $to),
             'by_status'   => $this->getStatsByStatus($from, $to),
+            'rooms'       => $this->getRoomReports($from, $to),
         ];
+    }
+
+    /**
+     * 共有ルーム毎のレポート (本文) と関連スレッド数/期間内メール件数
+     */
+    protected function getRoomReports(Carbon $from, Carbon $to): array
+    {
+        // DB 側の order は name で安定させておく. 期間内メール件数による並びは下で再ソート.
+        $rooms = \App\Models\ChatRoom::where('is_private', false)
+            ->orderBy('name')
+            ->get();
+
+        $rows = $rooms->map(function ($r) use ($from, $to) {
+            // 紐付けられたスレッド数
+            $threadIds = $r->bundledThreads()->pluck('email_threads.id')->all();
+            $threadsCount = count($threadIds);
+            // 期間内に受信されたメールに限定してカウント
+            $emailsCount = $threadsCount > 0
+                ? \App\Models\Email::whereIn('thread_id', $threadIds)
+                    ->whereBetween('received_at', [$from, $to])
+                    ->count()
+                : 0;
+
+            $report = (string) ($r->report_content ?? '');
+            $hasReport = trim($report) !== '';
+            // 行数 + 先頭400字プレビュー
+            $preview = \Illuminate\Support\Str::limit($report, 400);
+
+            return [
+                'id'            => $r->id,
+                'name'          => $r->name,
+                'has_report'    => $hasReport,
+                'preview'       => $preview,
+                'updated_at'    => $r->report_updated_at?->format('Y/m/d H:i'),
+                'threads_count' => $threadsCount,
+                'emails_count'  => $emailsCount,
+            ];
+        })->all();
+
+        // 期間内メール件数の降順で並べ替え (= 多い順, ユーザ要望: 件数順に表示).
+        // 同件数は name 昇順で安定ソート.
+        usort($rows, function ($a, $b) {
+            if ($a['emails_count'] !== $b['emails_count']) {
+                return $b['emails_count'] <=> $a['emails_count'];
+            }
+            return strcmp((string) $a['name'], (string) $b['name']);
+        });
+
+        return $rows;
     }
 
     /**
@@ -52,8 +101,35 @@ class ReportService
             'threads_total'      => EmailThread::count(),
             'threads_in_period'  => $threadIdsInPeriod->count(),
             'emails_in_period'   => Email::whereBetween('received_at', [$from, $to])->count(),
-            'open_threads'       => EmailThread::where('status', 'inbox')->count(),
+            // 「未対応 (受信)」は inbox だけでなく hold / pending (承認待ち) も含めて数える。
+            // さらにメール一覧・サイドバーバッチと完全に同じ可視条件を適用する:
+            //   - マージ source は一覧で非表示なので除外
+            //   - 添付アップロード由来の合成スレッドは除外
+            //   - emails 行を 1 通も持たない孤児スレッドは除外
+            // 旧実装は素の COUNT() だったため、孤児/マージ source が含まれて
+            //  「レポートには 2 件、画面にはどこにもない」事象が発生していた。
+            'open_threads'       => $this->visibleThreadQuery()
+                ->whereIn('status', [
+                    EmailThread::STATUS_INBOX,
+                    EmailThread::STATUS_HOLD,
+                    EmailThread::STATUS_AWAITING_APPROVAL,
+                ])->count(),
         ];
+    }
+
+    /**
+     * メール一覧 / サイドバーバッチと一致する「ユーザに見えるスレッド」の
+     * 共通クエリビルダ。集計のズレを防ぐためレポートでも同じ条件を使う。
+     */
+    protected function visibleThreadQuery()
+    {
+        return EmailThread::query()
+            ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
+            ->where(function ($q) {
+                $q->where('is_manual_upload', false)
+                  ->orWhereNull('is_manual_upload');
+            })
+            ->has('emails');
     }
 
     /**
@@ -62,7 +138,9 @@ class ReportService
     protected function getStatsByAssignee(Carbon $from, Carbon $to): array
     {
         // ベース: 担当者ごとのスレッド総数とステータス内訳
-        $rows = EmailThread::query()
+        // メール一覧の可視条件と同じフィルタを掛けないと、孤児/マージ source が紛れて
+        // 画面と数字が食い違うので visibleThreadQuery() を使う。
+        $rows = $this->visibleThreadQuery()
             ->select(
                 'assigned_user_id',
                 DB::raw('COUNT(*) as total'),
@@ -142,6 +220,8 @@ class ReportService
             $maxEmails  = max($maxEmails, $emails);
             $maxThreads = max($maxThreads, $threads);
         }
+        // ユーザ要望: 最新の日付を上部に. 上から「直近の活動 → 古い活動」の順で読みたい.
+        $rows = array_reverse($rows);
 
         return [
             'rows'        => $rows,
@@ -151,44 +231,13 @@ class ReportService
     }
 
     /**
-     * タグ別: 件数 + ステータス内訳
-     */
-    protected function getStatsByTag(Carbon $from, Carbon $to): array
-    {
-        $threads = EmailThread::query()
-            ->whereNotNull('tags')
-            ->where(function ($q) use ($from, $to) {
-                $q->whereBetween('last_email_at', [$from, $to])
-                  ->orWhereBetween('created_at', [$from, $to]);
-            })
-            ->get(['id', 'tags', 'status']);
-
-        $bucket = []; // tag => ['total','inbox','hold','completed','pending']
-        foreach ($threads as $t) {
-            $tags = $t->tags ?? [];
-            foreach ($tags as $tag) {
-                if (!is_string($tag) || $tag === '') continue;
-                if (!isset($bucket[$tag])) {
-                    $bucket[$tag] = ['name' => $tag, 'total' => 0, 'inbox' => 0, 'hold' => 0, 'completed' => 0, 'pending' => 0];
-                }
-                $bucket[$tag]['total']++;
-                if (in_array($t->status, ['inbox', 'hold', 'completed', 'pending'], true)) {
-                    $bucket[$tag][$t->status]++;
-                }
-            }
-        }
-
-        $rows = array_values($bucket);
-        usort($rows, fn($a, $b) => $b['total'] <=> $a['total']);
-        return $rows;
-    }
-
-    /**
      * ステータス別 (期間に依存せず全体)
      */
     protected function getStatsByStatus(Carbon $from, Carbon $to): array
     {
-        $rows = EmailThread::query()
+        // メール一覧の可視条件と同じ。レポート側に「画面では見えないスレッド」が
+        // 紛れていると、ユーザが追いかけられない「幽霊」件数になるので除外。
+        $rows = $this->visibleThreadQuery()
             ->select('status', DB::raw('COUNT(*) as cnt'))
             ->groupBy('status')
             ->pluck('cnt', 'status');

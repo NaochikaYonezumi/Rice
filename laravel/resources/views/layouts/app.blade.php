@@ -2886,6 +2886,15 @@
                             <p>添付ファイル</p>
                         </a>
                     </li>
+                    @if(Route::has('mail-accounts.index'))
+                    <li class="nav-item">
+                        <a href="{{ route('mail-accounts.index') }}"
+                           class="nav-link {{ request()->routeIs('mail-accounts.*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-envelope-open-text"></i>
+                            <p>メールアカウント</p>
+                        </a>
+                    </li>
+                    @endif
                     <li class="nav-item">
                         <a href="{{ route('chats.index') }}"
                            data-room-aware="chat"

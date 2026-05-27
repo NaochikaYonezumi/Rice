@@ -958,7 +958,11 @@ class PendingEmailController extends Controller
     private function applyEffectiveSmtpConfig(PendingEmail $pending, MailSetting $settings): void
     {
         if ($pending->mail_account_id) {
-            $account = \App\Models\MailAccount::find($pending->mail_account_id);
+            // セキュリティ: pending->mail_account_id が改竄されていても他人の口座は使わない。
+            // 作成者本人 (created_by_user_id) が所有する MailAccount のみ許可。
+            $account = \App\Models\MailAccount::where('id', $pending->mail_account_id)
+                ->where('user_id', $pending->created_by_user_id)
+                ->first();
             if ($account && $account->canSend()) {
                 if ($account->isOAuth()) {
                     $this->applyAccountSmtpXOAuth2Config($account);
@@ -967,6 +971,10 @@ class PendingEmailController extends Controller
                 }
                 return;
             }
+            \Illuminate\Support\Facades\Log::warning(
+                '[pending] mail_account_id が作成者の所有でない、または送信不可。システム既定にフォールバック',
+                ['pending_id' => $pending->id, 'mail_account_id' => $pending->mail_account_id]
+            );
         }
         $this->applySmtpConfig($settings);
     }

@@ -52,6 +52,34 @@ class EmailController extends Controller
     }
 
     /**
+     * 指定の Email (= 紐づくスレッド) が今のユーザーに表示可能か検証。
+     * 個人スレッドの場合は所有者本人だけ操作可。共有スレッド (owner_user_id IS NULL) は全員可。
+     */
+    protected function authorizeEmailAccess(Email $email): void
+    {
+        $thread = $email->thread;
+        if ($thread && $thread->owner_user_id !== null && $thread->owner_user_id !== auth()->id()) {
+            abort(403, 'このメール / スレッドへのアクセス権がありません。');
+        }
+    }
+
+    /**
+     * mail_account_id がリクエスト時、自分が所有する有効な口座であることを確認。
+     * 無効 / 他人の口座 → null を返す(呼び出し側で null チェック)。
+     * 数値以外 / 未指定 → null。
+     */
+    protected function verifyOwnedMailAccountId(?int $userId, $accountId): ?int
+    {
+        if (!$userId || !$accountId) return null;
+        $id = (int) $accountId;
+        if ($id <= 0) return null;
+        $exists = \App\Models\MailAccount::where('id', $id)
+            ->where('user_id', $userId)
+            ->exists();
+        return $exists ? $id : null;
+    }
+
+    /**
      * 個人メール切替プルダウン用に、自分のアカウントを最小限のフィールドだけで返す。
      */
     protected function loadPersonalAccountsLite(?\App\Models\User $user): array
@@ -204,6 +232,7 @@ class EmailController extends Controller
      */
     public function replyWindow(Email $email, Request $request)
     {
+        $this->authorizeEmailAccess($email);
         $email->load(['thread.customer', 'thread.assignee', 'attachments']);
         $isReplyAll = $request->boolean('all');
 
@@ -323,6 +352,7 @@ class EmailController extends Controller
      */
     public function forwardWindow(Email $email, Request $request)
     {
+        $this->authorizeEmailAccess($email);
         $email->load(['thread.customer', 'thread.assignee', 'attachments']);
 
         $thread = $email->thread;
@@ -809,6 +839,7 @@ class EmailController extends Controller
     // 返信予約 (TO/CC/BCC/添付対応)
     public function reply(Request $request, Email $email): JsonResponse
     {
+        $this->authorizeEmailAccess($email);
         $validated = $request->validate([
             'from_address' => 'nullable|string|email',
             // 下書き保存 (save_as_draft=1) の場合は未入力でも保存可
@@ -914,6 +945,7 @@ class EmailController extends Controller
      */
     public function forward(Request $request, Email $email): JsonResponse
     {
+        $this->authorizeEmailAccess($email);
         $validated = $request->validate([
             'from_address' => 'nullable|string|email',
             'to' => 'required_without:save_as_draft|nullable|string',
@@ -1284,7 +1316,7 @@ class EmailController extends Controller
             $inboxScope = 'shared';
         }
 
-        $personalAccountId = $request->input('mail_account_id');
+        $personalAccountId = $this->verifyOwnedMailAccountId(auth()->id(), $request->input('mail_account_id'));
         $base = EmailThread::query()
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->where(function ($q) {
@@ -1296,7 +1328,7 @@ class EmailController extends Controller
                 fn($q) => $q->whereNull('owner_user_id')
             )
             ->when($inboxScope === 'personal' && $personalAccountId,
-                fn($q) => $q->where('mail_account_id', (int) $personalAccountId)
+                fn($q) => $q->where('mail_account_id', $personalAccountId)
             );
 
         if ($query !== '') {
@@ -1375,7 +1407,8 @@ class EmailController extends Controller
         }
 
         // 個人モード時の特定アカウント絞り込み (複数アカウント時のプルダウン用)
-        $personalAccountId = $request->input('mail_account_id');
+        // 自分が所有する有効な口座IDのみ通す (他人のIDを指定された場合は無視)
+        $personalAccountId = $this->verifyOwnedMailAccountId(auth()->id(), $request->input('mail_account_id'));
         $threads = EmailThread::with('latestEmail', 'customer', 'assignee')->withCount('threadMerges')
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->when($inboxScope === 'personal',
@@ -1383,7 +1416,7 @@ class EmailController extends Controller
                 fn($q) => $q->whereNull('owner_user_id')
             )
             ->when($inboxScope === 'personal' && $personalAccountId,
-                fn($q) => $q->where('mail_account_id', (int) $personalAccountId)
+                fn($q) => $q->where('mail_account_id', $personalAccountId)
             )
             // 添付ファイル管理画面の「アップロード」で作られた合成スレッドは
             // メール一覧からは除外する (添付一覧 / ルームのバンドル先には引き続き出す)

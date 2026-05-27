@@ -32,12 +32,20 @@ class ChatRoomController extends Controller
             $inboxScope = 'shared';
         }
         // 個人モード時に特定アカウントへ絞る (複数アカウント切替プルダウン用)
-        $personalAccountId = $request->input('mail_account_id');
+        // 自分が所有する有効な口座IDのみ通す (他人/未存在は無視 = 全体表示)
+        $personalAccountId = null;
+        if ($inboxScope === 'personal' && $request->filled('mail_account_id')) {
+            $candidate = (int) $request->input('mail_account_id');
+            if ($candidate > 0
+                && \App\Models\MailAccount::where('id', $candidate)->where('user_id', $userId)->exists()) {
+                $personalAccountId = $candidate;
+            }
+        }
         $applyScope = function ($q) use ($inboxScope, $userId, $personalAccountId) {
             if ($inboxScope === 'personal') {
                 $q->where('owner_user_id', $userId);
                 if ($personalAccountId) {
-                    $q->where('mail_account_id', (int) $personalAccountId);
+                    $q->where('mail_account_id', $personalAccountId);
                 }
             } else {
                 $q->whereNull('owner_user_id');

@@ -35,6 +35,11 @@ class ThreadChatController extends Controller
         $showHidden  = $request->boolean('show_hidden');
         $myName      = auth()->user()->name ?? '';
         $myId        = auth()->id();
+        // 個人 / 共有 切替: サイドバーのスレッド一覧も scope で絞り込む
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
         // type => [id => hidden_at] のマップ。非表示登録後にメール/チャットが来たスレッドは
         // 「自動的に再表示」するため、ID リストだけでなく時刻も保持しておく。
         $hiddenMap   = UserChatHide::getHiddenMapByType((int) $myId);
@@ -51,7 +56,12 @@ class ThreadChatController extends Controller
                 'latestEmail',
                 'assignee',
                 'customer',
-            ]);
+            ])
+            // 個人/共有 切替で表示範囲を絞る
+            ->when($inboxScope === 'personal',
+                fn($qq) => $qq->where('owner_user_id', $myId),
+                fn($qq) => $qq->whereNull('owner_user_id')
+            );
 
         if ($q !== '') {
             $query->where(function ($w) use ($q) {

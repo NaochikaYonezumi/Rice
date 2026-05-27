@@ -1782,15 +1782,21 @@
             <div style="display:flex;border-bottom:1px solid #e5e7eb;background:#f9fafb;">
                 <button @click="setInboxScope('shared')"
                         :style="inboxScope === 'shared'
-                            ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
-                            : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
+                            ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;position:relative;'
+                            : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;position:relative;'">
                     <i class="fas fa-users" style="margin-right:4px;"></i>共有メール
+                    <span x-show="sharedInboxCount > 0"
+                          x-text="sharedInboxCount > 99 ? '99+' : sharedInboxCount"
+                          style="display:inline-block;margin-left:6px;background:#2563eb;color:#fff;font-size:9px;font-weight:700;border-radius:9px;padding:1px 6px;min-width:16px;line-height:1.2;"></span>
                 </button>
                 <button @click="setInboxScope('personal')"
                         :style="inboxScope === 'personal'
-                            ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
-                            : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
+                            ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;position:relative;'
+                            : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;position:relative;'">
                     <i class="fas fa-user" style="margin-right:4px;"></i>個人メール
+                    <span x-show="personalInboxCount > 0"
+                          x-text="personalInboxCount > 99 ? '99+' : personalInboxCount"
+                          style="display:inline-block;margin-left:6px;background:#2563eb;color:#fff;font-size:9px;font-weight:700;border-radius:9px;padding:1px 6px;min-width:16px;line-height:1.2;"></span>
                 </button>
             </div>
 
@@ -4377,6 +4383,9 @@ function emailApp() {
             const v = localStorage.getItem('inboxScope');
             return (v === 'personal' || v === 'shared') ? v : 'shared';
         })(),
+        // 共有メール / 個人メール タブ横の inbox 新着バッジ件数
+        sharedInboxCount: 0,
+        personalInboxCount: 0,
         assigneeFilterId: localStorage.getItem('assigneeFilterId') || 'all',
         // ルームフィルター (チャットのルーム概念をメール一覧側にも反映)
         emailRoomFilterId: localStorage.getItem('emailRoomFilterId') || 'all',
@@ -5543,7 +5552,8 @@ function emailApp() {
                     this.loadUsers(),
                     this.loadEmailRooms(),
                     this.loadSidebarThreads(),
-                    this.loadEmailRoomBundledThreads()
+                    this.loadEmailRoomBundledThreads(),
+                    this.loadInboxScopeBadges()
                 ]);
                 results.forEach((r, i) => {
                     if (r.status === 'rejected') {
@@ -6142,6 +6152,10 @@ function emailApp() {
             this.loadThreads();
             // ルーム件数バッジも scope 連動で再集計したいので一緒にリロード
             this.loadEmailRooms();
+            // サイドバーのスレッド一覧も scope で再フェッチ
+            this.loadSidebarThreads();
+            // バッジ件数も同時に最新化
+            this.loadInboxScopeBadges();
         },
         setRoomFilter(id) {
             // 同じルームを再度クリックしたら "すべて" に切り替えるトグル動作
@@ -6274,10 +6288,30 @@ function emailApp() {
         },
         // サイドバー専用のスレッド一覧をサーバから取得 (チャット/添付と同じエンドポイント)
         // メール本体の status / 担当者などのフィルタとは無関係に「全スレッド」を引く
+        // 共有メール/個人メール タブ横の inbox 件数バッジを更新する。
+        // 両方のスコープで /emails/status-counts を叩いて inbox 件数を取得する.
+        async loadInboxScopeBadges() {
+            try {
+                const [shared, personal] = await Promise.all([
+                    fetch('/emails/status-counts?scope=shared',   { headers: { Accept:'application/json' } }),
+                    fetch('/emails/status-counts?scope=personal', { headers: { Accept:'application/json' } }),
+                ]);
+                if (shared.ok) {
+                    const d = await shared.json();
+                    this.sharedInboxCount = Number(d.inbox || 0);
+                }
+                if (personal.ok) {
+                    const d = await personal.json();
+                    this.personalInboxCount = Number(d.inbox || 0);
+                }
+            } catch (_) {}
+        },
         async loadSidebarThreads() {
             try {
                 // show_hidden=1 で非表示スレッドも含めて取得 (クライアント側でフィルタ)
-                const r = await fetch('/chats/threads?show_hidden=1', { headers: { Accept:'application/json' } });
+                // scope を渡してサイドバーも個人/共有で切り替える
+                const scope = this.inboxScope || 'shared';
+                const r = await fetch('/chats/threads?show_hidden=1&scope=' + encodeURIComponent(scope), { headers: { Accept:'application/json' } });
                 if (!r.ok) return;
                 const d = await r.json();
                 this.sidebarThreadList = (d.threads || []).map(t => ({

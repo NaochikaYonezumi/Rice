@@ -333,7 +333,7 @@
                         </template>
                     </div>
                 </template>
-                <template x-if="testResult && !testResult.inbox && !testResult.smtp">
+                <template x-if="testResult && testResult.inbox === null && testResult.smtp === null && !testResult.error">
                     <div class="alert alert-warning text-sm">
                         <i class="fas fa-info-circle"></i> 受信プロトコルが「受信しない」でかつ SMTP も未有効なので、テストする対象がありません。
                     </div>

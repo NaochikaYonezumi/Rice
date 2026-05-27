@@ -17,10 +17,33 @@
         @endif
 
         <form method="POST" action="{{ $account->exists ? route('mail-accounts.update', $account) : route('mail-accounts.store') }}"
+              id="mailAccountForm"
               x-data="{
                   inbox: '{{ old('inbox_protocol', $account->inbox_protocol ?: 'imap') }}',
                   smtp:  {{ old('smtp_enabled', $account->smtp_enabled) ? 'true' : 'false' }},
-                  active: {{ old('is_active', $account->exists ? $account->is_active : true) ? 'true' : 'false' }}
+                  active: {{ old('is_active', $account->exists ? $account->is_active : true) ? 'true' : 'false' }},
+                  testing: false,
+                  testResult: null,
+                  async runTest() {
+                      this.testing = true;
+                      this.testResult = null;
+                      try {
+                          const fd = new FormData(document.getElementById('mailAccountForm'));
+                          @if($account->exists)
+                            fd.append('mail_account_id', '{{ $account->id }}');
+                          @endif
+                          const res = await fetch('{{ route('mail-accounts.test') }}', {
+                              method: 'POST',
+                              headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+                              body: fd,
+                          });
+                          this.testResult = await res.json();
+                      } catch (e) {
+                          this.testResult = { error: e.message };
+                      } finally {
+                          this.testing = false;
+                      }
+                  }
               }">
             @csrf
             @if($account->exists) @method('PUT') @endif
@@ -194,9 +217,47 @@
                 </div>
             </div>
 
-            <div class="d-flex">
+            {{-- 接続テスト結果 --}}
+            <div x-show="testResult" x-cloak class="mb-3">
+                <template x-if="testResult && testResult.inbox">
+                    <div class="alert text-sm" :class="testResult.inbox.status === 'ok' ? 'alert-success' : 'alert-danger'">
+                        <i class="fas" :class="testResult.inbox.status === 'ok' ? 'fa-check-circle' : 'fa-exclamation-triangle'"></i>
+                        <strong>受信:</strong>
+                        <span x-text="testResult.inbox.message"></span>
+                        <template x-if="testResult.inbox.raw">
+                            <details class="mt-1"><summary class="small">詳細</summary><code class="small" x-text="testResult.inbox.raw"></code></details>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="testResult && testResult.smtp">
+                    <div class="alert text-sm" :class="testResult.smtp.status === 'ok' ? 'alert-success' : 'alert-danger'">
+                        <i class="fas" :class="testResult.smtp.status === 'ok' ? 'fa-check-circle' : 'fa-exclamation-triangle'"></i>
+                        <strong>送信:</strong>
+                        <span x-text="testResult.smtp.message"></span>
+                        <template x-if="testResult.smtp.raw">
+                            <details class="mt-1"><summary class="small">詳細</summary><code class="small" x-text="testResult.smtp.raw"></code></details>
+                        </template>
+                    </div>
+                </template>
+                <template x-if="testResult && !testResult.inbox && !testResult.smtp">
+                    <div class="alert alert-warning text-sm">
+                        <i class="fas fa-info-circle"></i> 受信プロトコルが「受信しない」でかつ SMTP も未有効なので、テストする対象がありません。
+                    </div>
+                </template>
+                <template x-if="testResult && testResult.error">
+                    <div class="alert alert-danger text-sm">
+                        <i class="fas fa-times"></i> リクエスト失敗: <span x-text="testResult.error"></span>
+                    </div>
+                </template>
+            </div>
+
+            <div class="d-flex align-items-center">
                 <a href="{{ route('mail-accounts.index') }}" class="btn btn-secondary">キャンセル</a>
-                <button type="submit" class="btn btn-primary ml-auto">
+                <button type="button" class="btn btn-outline-info ml-2" @click="runTest()" :disabled="testing">
+                    <i class="fas" :class="testing ? 'fa-spinner fa-spin' : 'fa-plug'"></i>
+                    <span x-text="testing ? 'テスト中...' : '接続テスト'"></span>
+                </button>
+                <button type="submit" class="btn btn-primary ml-auto" :disabled="testing">
                     <i class="fas fa-save mr-1"></i> 保存
                 </button>
             </div>

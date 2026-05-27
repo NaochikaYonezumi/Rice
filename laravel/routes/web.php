@@ -66,6 +66,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('/mail-accounts/{mailAccount}', [MailAccountController::class, 'update'])->name('mail-accounts.update');
     Route::delete('/mail-accounts/{mailAccount}', [MailAccountController::class, 'destroy'])->name('mail-accounts.destroy');
     Route::post('/mail-accounts/{mailAccount}/fetch', [MailAccountController::class, 'fetchNow'])->name('mail-accounts.fetch');
+    Route::post('/mail-accounts/test', [MailAccountController::class, 'testConnection'])->name('mail-accounts.test');
 
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
     Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');

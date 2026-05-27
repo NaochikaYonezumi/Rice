@@ -185,8 +185,10 @@ class TwoFactorChallengeTest extends TestCase
         ]);
         $cookieName = config('two_factor.trusted_device_cookie');
 
-        $response = $this->withoutMiddleware(\Illuminate\Cookie\Middleware\EncryptCookies::class)
-            ->withCookie($cookieName, $trusted->id . '|cookie-token')
+        // Cookie の暗号化 middleware を本テスト中だけ除外し、テスト側も暗号化しない値を渡す
+        \Illuminate\Cookie\Middleware\EncryptCookies::except($cookieName);
+
+        $response = $this->withUnencryptedCookie($cookieName, $trusted->id . '|cookie-token')
             ->post('/login', [
                 'email' => $user->email,
                 'password' => 'secret123!',

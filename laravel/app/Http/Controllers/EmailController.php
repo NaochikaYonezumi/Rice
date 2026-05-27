@@ -1255,13 +1255,22 @@ class EmailController extends Controller
         $assigneeId = $request->input('assigned_user_id');
         $chatRoomId = $request->input('chat_room_id');
         $isPinned = $request->boolean('is_pinned');
+        // 個人 / 共有 切替: 受信/保留/完了/対応不要/承認待ち/迷惑メール の件数も scope で絞り込む.
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
 
         $base = EmailThread::query()
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->where(function ($q) {
                 $q->where('is_manual_upload', false)->orWhereNull('is_manual_upload');
             })
-            ->has('emails');
+            ->has('emails')
+            ->when($inboxScope === 'personal',
+                fn($q) => $q->where('owner_user_id', auth()->id()),
+                fn($q) => $q->whereNull('owner_user_id')
+            );
 
         if ($query !== '') {
             $base->where(function ($q) use ($query) {

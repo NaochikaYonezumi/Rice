@@ -6104,6 +6104,7 @@ function emailApp() {
         async loadStatusCounts() {
             const params = new URLSearchParams({
                 is_pinned: this.pinnedOnlyMode ? '1' : '0',
+                scope: this.inboxScope || 'shared',
             });
             if (this.assigneeFilterId !== 'all') params.append('assigned_user_id', this.assigneeFilterId);
             if (this.emailRoomFilterId && this.emailRoomFilterId !== 'all') params.append('chat_room_id', this.emailRoomFilterId);

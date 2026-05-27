@@ -373,6 +373,23 @@
             <i class="fas" :class="attRoomsCollapsed ? 'fa-angle-double-right' : 'fa-angle-double-left'"></i>
         </button>
         <div class="att-rooms-head"><h3>ルーム</h3></div>
+
+        {{-- 共有メール / 個人メール 切替タブ --}}
+        <div style="display:flex;border-bottom:1px solid #e5e7eb;background:#f9fafb;">
+            <button @click="setInboxScope('shared')"
+                    :style="inboxScope === 'shared'
+                        ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
+                        : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
+                <i class="fas fa-users" style="margin-right:4px;"></i>共有メール
+            </button>
+            <button @click="setInboxScope('personal')"
+                    :style="inboxScope === 'personal'
+                        ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
+                        : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
+                <i class="fas fa-user" style="margin-right:4px;"></i>個人メール
+            </button>
+        </div>
+
         {{-- ルーム/スレッド 横断検索 --}}
         <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">
             <div style="position:relative;">
@@ -1199,6 +1216,11 @@ function attachmentApp() {
         totalPages: 1,
         // ルーム (メール/チャットと同じ概念をここにも)
         attRoomFilterId: localStorage.getItem('attRoomFilterId') || 'all',
+        // 共有 / 個人 切替 (メール一覧と共通の localStorage キーを共用)
+        inboxScope: (() => {
+            const v = localStorage.getItem('inboxScope');
+            return (v === 'personal' || v === 'shared') ? v : 'shared';
+        })(),
         attRoomsShared: [],
         attRoomsPersonal: [],
         attRoomsCollapsed: (() => { try { return JSON.parse(localStorage.getItem('attRoomsCollapsed') || 'false'); } catch(_) { return false; } })(),
@@ -1457,6 +1479,7 @@ function attachmentApp() {
                 params.set('sort', this.sortOrder);
                 params.set('page',     String(this.page));
                 params.set('per_page', String(this.perPage));
+                params.set('scope',    this.inboxScope || 'shared');
 
                 const res = await fetch('/attachments?' + params.toString(), {
                     headers: { 'Accept': 'application/json' }
@@ -1719,7 +1742,8 @@ function attachmentApp() {
         // ===== ルーム (チャット/メールと同じ概念) =====
         async loadAttRooms() {
             try {
-                const res = await fetch('/api/chat-rooms', { headers: { 'Accept': 'application/json' } });
+                const scope = this.inboxScope || 'shared';
+                const res = await fetch('/api/chat-rooms?scope=' + encodeURIComponent(scope), { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) return;
                 const d = await res.json();
                 const rooms = d.rooms || [];
@@ -1761,6 +1785,15 @@ function attachmentApp() {
                 if (!r.ok) return;
                 this.attHiddenRoomIds = this.attHiddenRoomIds.filter(x => Number(x) !== Number(id));
             } catch (_) {}
+        },
+        setInboxScope(scope) {
+            if (scope !== 'shared' && scope !== 'personal') return;
+            if (this.inboxScope === scope) return;
+            this.inboxScope = scope;
+            try { localStorage.setItem('inboxScope', scope); } catch (_) {}
+            this.fetchAttachments();
+            // ルーム一覧バッジも scope 連動
+            if (typeof this.loadAttRooms === 'function') this.loadAttRooms();
         },
         setAttRoomFilter(id) {
             // 同じルームを再度クリックしたら "すべて" に切り替えるトグル動作

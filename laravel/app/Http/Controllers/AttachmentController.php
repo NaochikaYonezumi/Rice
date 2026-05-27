@@ -191,6 +191,11 @@ class AttachmentController extends Controller
         $sort       = $request->input('sort', 'desc'); // 'asc' | 'desc'
         $chatRoomId = $request->input('chat_room_id'); // ルームに束ねられたスレッドの添付のみ表示
         $threadId   = $request->input('thread_id');    // 指定スレッドの添付のみ表示
+        // 個人 / 共有 切替: 添付も紐づくスレッドの owner_user_id で絞り込む.
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
 
         // ルームフィルター。値の解釈:
         //   - 'all' / 空 → フィルタなし
@@ -223,6 +228,14 @@ class AttachmentController extends Controller
             ->where(function ($q) {
                 $q->where('hidden_from_list', false)
                   ->orWhereNull('hidden_from_list');
+            })
+            // 個人/共有 切替: 紐づくスレッドの owner_user_id でフィルタ
+            ->whereHas('email.thread', function ($q) use ($inboxScope) {
+                if ($inboxScope === 'personal') {
+                    $q->where('owner_user_id', auth()->id());
+                } else {
+                    $q->whereNull('owner_user_id');
+                }
             })
             ->when($customerId === 'none', function($query) {
                 $query->whereHas('email.thread', fn($q) => $q->whereNull('customer_id'));

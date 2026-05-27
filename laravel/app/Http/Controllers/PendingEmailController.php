@@ -23,6 +23,26 @@ class PendingEmailController extends Controller
         $query = PendingEmail::where('status', $status);
         $uid   = auth()->id();
 
+        // 個人 / 共有 切替: 承認・送信タブも scope で絞り込む.
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
+        if ($inboxScope === 'personal') {
+            // 個人: 自分の mail_account を使うもの or 自分が所有するスレッドに対する返信
+            $query->where(function ($q) use ($uid) {
+                $q->whereHas('mailAccount', fn($mq) => $mq->where('user_id', $uid))
+                  ->orWhereHas('inReplyToEmail.thread', fn($tq) => $tq->where('owner_user_id', $uid));
+            });
+        } else {
+            // 共有: mail_account 未指定 AND (返信元無し or 返信元スレッドが共有)
+            $query->whereNull('mail_account_id')
+                  ->where(function ($q) {
+                      $q->whereNull('in_reply_to_email_id')
+                        ->orWhereHas('inReplyToEmail.thread', fn($tq) => $tq->whereNull('owner_user_id'));
+                  });
+        }
+
         // ===== 「あなた宛」フィルタ =====
         // タブ (status) によって意味を変える:
         //   - pending  : 自分が承認者に指定された (or 承認者未指定で誰でも承認可) 案件

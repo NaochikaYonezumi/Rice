@@ -23,6 +23,21 @@
 
     {{-- ヘッダーバー (メール一覧のステータスタブ部分に相当) --}}
     <div class="shrink-0 px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-3">
+        {{-- 共有メール / 個人メール 切替タブ --}}
+        <div class="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden shrink-0">
+            <button @click="setInboxScope('shared')"
+                    :class="inboxScope === 'shared'
+                        ? 'px-3 py-1.5 text-[11px] font-bold bg-blue-600 text-white'
+                        : 'px-3 py-1.5 text-[11px] font-semibold bg-white text-gray-600 hover:bg-gray-50'">
+                <i class="fas fa-users mr-1"></i>共有メール
+            </button>
+            <button @click="setInboxScope('personal')"
+                    :class="inboxScope === 'personal'
+                        ? 'px-3 py-1.5 text-[11px] font-bold bg-blue-600 text-white'
+                        : 'px-3 py-1.5 text-[11px] font-semibold bg-white text-gray-600 hover:bg-gray-50'">
+                <i class="fas fa-user mr-1"></i>個人メール
+            </button>
+        </div>
         <div class="flex items-center gap-2 min-w-0">
             <h1 class="text-[13px] font-extrabold text-gray-800 truncate">下書き / 予約送信</h1>
             <span class="text-[11px] text-gray-500 font-medium">合計 <span class="font-bold text-gray-700" x-text="drafts.length"></span> 件</span>
@@ -203,6 +218,11 @@ function draftApp() {
         unscheduling: null,
         toast: null,
         toastType: 'success',
+        // 共有メール / 個人メール 切替 (メール一覧と同じ localStorage キーを共用)
+        inboxScope: (() => {
+            const v = localStorage.getItem('inboxScope');
+            return (v === 'personal' || v === 'shared') ? v : 'shared';
+        })(),
 
         async init() {
             // compose-window が「下書き保存して閉じる」した場合、バックエンドは
@@ -233,7 +253,8 @@ function draftApp() {
         async load() {
             this.loading = true;
             try {
-                const res = await fetch('/drafts/list', { headers: { 'Accept': 'application/json' } });
+                const scope = this.inboxScope || 'shared';
+                const res = await fetch('/drafts/list?scope=' + encodeURIComponent(scope), { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 this.drafts = await res.json();
             } catch (e) {
@@ -241,6 +262,14 @@ function draftApp() {
             } finally {
                 this.loading = false;
             }
+        },
+
+        setInboxScope(scope) {
+            if (scope !== 'shared' && scope !== 'personal') return;
+            if (this.inboxScope === scope) return;
+            this.inboxScope = scope;
+            try { localStorage.setItem('inboxScope', scope); } catch (_) {}
+            this.load();
         },
 
         openEdit(d) {

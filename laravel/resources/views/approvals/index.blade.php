@@ -46,6 +46,21 @@
                     <i class="fas fa-sync-alt text-sm"></i>
                 </button>
             </div>
+            {{-- 共有メール / 個人メール 切替タブ --}}
+            <div class="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <button @click="setInboxScope('shared')"
+                        :class="inboxScope === 'shared'
+                            ? 'flex-1 px-3 py-1.5 text-[11px] font-bold bg-blue-600 text-white'
+                            : 'flex-1 px-3 py-1.5 text-[11px] font-semibold bg-white text-gray-600 hover:bg-gray-50'">
+                    <i class="fas fa-users mr-1"></i>共有メール
+                </button>
+                <button @click="setInboxScope('personal')"
+                        :class="inboxScope === 'personal'
+                            ? 'flex-1 px-3 py-1.5 text-[11px] font-bold bg-blue-600 text-white'
+                            : 'flex-1 px-3 py-1.5 text-[11px] font-semibold bg-white text-gray-600 hover:bg-gray-50'">
+                    <i class="fas fa-user mr-1"></i>個人メール
+                </button>
+            </div>
             <p class="text-[10px] text-gray-400 font-medium min-h-[14px] truncate" x-text="filterDescription"></p>
         </div>
 
@@ -624,6 +639,18 @@ function approvalApp() {
         selectedId: null,
         selectedEmail: null,
         actionLoading: false,
+        // 共有メール / 個人メール 切替 (メール一覧と共通 localStorage キー)
+        inboxScope: (() => {
+            const v = localStorage.getItem('inboxScope');
+            return (v === 'personal' || v === 'shared') ? v : 'shared';
+        })(),
+        setInboxScope(scope) {
+            if (scope !== 'shared' && scope !== 'personal') return;
+            if (this.inboxScope === scope) return;
+            this.inboxScope = scope;
+            try { localStorage.setItem('inboxScope', scope); } catch (_) {}
+            this.loadPending();
+        },
         actionMessage: '',
         actionError: false,
         statusTab: 'pending',  // 'pending' / 'approved' / 'rejected'
@@ -732,6 +759,8 @@ function approvalApp() {
                 // 同じ全件リストが返ってきていた。フィルタは常に効かせる。
                 if (this.filter === 'me')   params.set('for_me', '1');
                 if (this.filter === 'mine') params.set('mine',   '1');
+                // 共有 / 個人 切替に連動
+                params.set('scope', this.inboxScope || 'shared');
                 const res = await fetch('/pending-emails?' + params.toString(), { headers: { 'Accept': 'application/json' } });
                 this.allEmails = await res.json();
                 if (this.selectedId) {

@@ -15,13 +15,35 @@ class DraftController extends Controller
         return view('drafts.index');
     }
 
-    public function list(): JsonResponse
+    public function list(\Illuminate\Http\Request $request): JsonResponse
     {
+        // 個人 / 共有 切替: 下書きが「個人スレッド由来」か「共有スレッド由来」かで絞り込む.
+        // 判定: inReplyToEmail.thread.owner_user_id が自分なら personal、NULL なら shared.
+        // 新規作成 (in_reply_to_email_id が null) は mail_account_id があれば personal、無ければ shared.
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
+        $uid = auth()->id();
         // 下書きと「自分が予約した自己送信」を同一画面で表示する.
         // 仕様: 「ユーザが予約送信を設定した場合 = ユーザが個別に送信」なので
         // 予約状態のものも下書き同様、本人がここから内容を確認/取消できる.
         $drafts = PendingEmail::whereIn('status', [PendingEmail::STATUS_DRAFT, PendingEmail::STATUS_SCHEDULED])
-            ->where('created_by_user_id', auth()->id())
+            ->where('created_by_user_id', $uid)
+            ->when($inboxScope === 'personal', function ($q) use ($uid) {
+                // 個人: 自分の個人アカウント経由、または自分が所有するスレッドに対する返信下書き
+                $q->where(function ($q) use ($uid) {
+                    $q->whereHas('mailAccount', fn($mq) => $mq->where('user_id', $uid))
+                      ->orWhereHas('inReplyToEmail.thread', fn($tq) => $tq->where('owner_user_id', $uid));
+                });
+            }, function ($q) {
+                // 共有: 個人アカウント指定なし AND (返信元無し or 返信元スレッドが共有)
+                $q->whereNull('mail_account_id')
+                  ->where(function ($q) {
+                      $q->whereNull('in_reply_to_email_id')
+                        ->orWhereHas('inReplyToEmail.thread', fn($tq) => $tq->whereNull('owner_user_id'));
+                  });
+            })
             ->with(['rejecter', 'inReplyToEmail.thread'])
             ->latest()
             ->get()

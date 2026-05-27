@@ -6149,6 +6149,17 @@ function emailApp() {
             if (this.inboxScope === scope) return;
             this.inboxScope = scope;
             localStorage.setItem('inboxScope', scope);
+            // 開いていたスレッドが新しい scope では見えなくなる (or 権限的に NG な)
+            // 可能性が高いので、必ずワークスペースを閉じてリセットする。
+            // closeWorkspace は selectedThread / selectedThreadId / 返信ドラフト等もクリアする。
+            if (this.selectedThread || this.selectedThreadId) {
+                if (typeof this.closeWorkspace === 'function') {
+                    this.closeWorkspace();
+                } else {
+                    this.selectedThread = null;
+                    this.selectedThreadId = null;
+                }
+            }
             this.loadThreads();
             // ルーム件数バッジも scope 連動で再集計したいので一緒にリロード
             this.loadEmailRooms();

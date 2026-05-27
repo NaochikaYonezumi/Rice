@@ -302,7 +302,16 @@ class EmailController extends Controller
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
-        $thread->update(['status' => $request->status]);
+        $newStatus = $request->status;
+        $updates = ['status' => $newStatus];
+
+        // 完了に変更したユーザを担当者に記録する。
+        // (既に他のユーザが担当でも、実際に完了させた人が責任者となるため上書きする)
+        if ($newStatus === EmailThread::STATUS_DONE && $request->user()) {
+            $updates['assigned_user_id'] = $request->user()->id;
+        }
+
+        $thread->update($updates);
         return response()->json(['status' => 'ok']);
     }
 

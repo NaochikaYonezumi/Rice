@@ -133,6 +133,15 @@ class EmailController extends Controller
         $pending->attachment_paths = $paths;
         $pending->save();
 
+        // 返信を行ったらスレッドを「完了」にし、担当者未設定なら返信者をアサインする
+        if ($email->thread) {
+            $threadUpdates = ['status' => EmailThread::STATUS_DONE];
+            if ($email->thread->assigned_user_id === null && $request->user()) {
+                $threadUpdates['assigned_user_id'] = $request->user()->id;
+            }
+            $email->thread->update($threadUpdates);
+        }
+
         return response()->json(['status' => 'ok', 'id' => $pending->id]);
     }
 
@@ -302,12 +311,11 @@ class EmailController extends Controller
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
-        $newStatus = $request->status;
-        $updates = ['status' => $newStatus];
+        $updates = ['status' => $request->status];
 
-        // 完了に変更したユーザを担当者に記録する。
-        // (既に他のユーザが担当でも、実際に完了させた人が責任者となるため上書きする)
-        if ($newStatus === EmailThread::STATUS_DONE && $request->user()) {
+        // 担当者が未設定のスレッドのステータスを変更したユーザを担当者にする。
+        // (既に他のユーザが担当している場合は尊重して上書きしない)
+        if ($thread->assigned_user_id === null && $request->user()) {
             $updates['assigned_user_id'] = $request->user()->id;
         }
 

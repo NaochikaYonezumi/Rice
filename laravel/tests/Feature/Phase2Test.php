@@ -175,7 +175,7 @@ class Phase2Test extends TestCase
         $this->assertFalse($thread->fresh()->is_pinned);
     }
 
-    public function test_marking_status_completed_assigns_thread_to_actor(): void
+    public function test_status_change_assigns_actor_when_thread_has_no_assignee(): void
     {
         $user = User::factory()->create();
         $thread = EmailThread::create(['subject' => 'X', 'status' => 'inbox']);
@@ -191,7 +191,22 @@ class Phase2Test extends TestCase
         $this->assertSame($user->id, $fresh->assigned_user_id);
     }
 
-    public function test_marking_completed_overrides_existing_assignee_with_actor(): void
+    public function test_status_change_assigns_actor_for_any_status_not_just_completed(): void
+    {
+        $user = User::factory()->create();
+        $thread = EmailThread::create(['subject' => 'X', 'status' => 'inbox']);
+
+        $response = $this->actingAs($user)->putJson(route('threads.status', $thread), [
+            'status' => EmailThread::STATUS_HOLD,
+        ]);
+
+        $response->assertStatus(200);
+        $fresh = $thread->fresh();
+        $this->assertSame(EmailThread::STATUS_HOLD, $fresh->status);
+        $this->assertSame($user->id, $fresh->assigned_user_id);
+    }
+
+    public function test_status_change_does_not_overwrite_existing_assignee(): void
     {
         $previousAssignee = User::factory()->create();
         $actor = User::factory()->create();
@@ -206,26 +221,59 @@ class Phase2Test extends TestCase
         ]);
 
         $response->assertStatus(200);
-        $this->assertSame($actor->id, $thread->fresh()->assigned_user_id);
+        $this->assertSame($previousAssignee->id, $thread->fresh()->assigned_user_id);
     }
 
-    public function test_changing_status_to_non_completed_leaves_assignee_untouched(): void
+    public function test_reply_completes_thread_and_assigns_replier_when_unassigned(): void
     {
-        $previousAssignee = User::factory()->create();
-        $actor = User::factory()->create();
-        $thread = EmailThread::create([
+        $user = User::factory()->create();
+        $thread = EmailThread::create(['subject' => 'X', 'status' => 'inbox']);
+        $email = Email::create([
+            'thread_id' => $thread->id,
+            'message_id' => 'm-1',
             'subject' => 'X',
-            'status' => 'completed',
-            'assigned_user_id' => $previousAssignee->id,
+            'from_address' => 'a@example.com',
+            'to_address' => 'b@example.com',
+            'body_text' => 'q',
         ]);
 
-        $response = $this->actingAs($actor)->putJson(route('threads.status', $thread), [
-            'status' => EmailThread::STATUS_INBOX,
+        $response = $this->actingAs($user)->postJson(route('emails.reply', $email), [
+            'to' => 'a@example.com',
+            'body' => 'reply',
         ]);
 
         $response->assertStatus(200);
         $fresh = $thread->fresh();
-        $this->assertSame(EmailThread::STATUS_INBOX, $fresh->status);
+        $this->assertSame(EmailThread::STATUS_DONE, $fresh->status);
+        $this->assertSame($user->id, $fresh->assigned_user_id);
+    }
+
+    public function test_reply_does_not_overwrite_existing_assignee_even_when_completing(): void
+    {
+        $previousAssignee = User::factory()->create();
+        $replier = User::factory()->create();
+        $thread = EmailThread::create([
+            'subject' => 'X',
+            'status' => 'inbox',
+            'assigned_user_id' => $previousAssignee->id,
+        ]);
+        $email = Email::create([
+            'thread_id' => $thread->id,
+            'message_id' => 'm-2',
+            'subject' => 'X',
+            'from_address' => 'a@example.com',
+            'to_address' => 'b@example.com',
+            'body_text' => 'q',
+        ]);
+
+        $response = $this->actingAs($replier)->postJson(route('emails.reply', $email), [
+            'to' => 'a@example.com',
+            'body' => 'reply',
+        ]);
+
+        $response->assertStatus(200);
+        $fresh = $thread->fresh();
+        $this->assertSame(EmailThread::STATUS_DONE, $fresh->status);
         $this->assertSame($previousAssignee->id, $fresh->assigned_user_id);
     }
 }

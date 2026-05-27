@@ -23,11 +23,20 @@ class MailAccountController extends Controller
         return view('mail-accounts.form', ['account' => new MailAccount()]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
         $data = $this->validated($request);
         $data['user_id'] = $request->user()->id;
-        MailAccount::create($data);
+        $account = MailAccount::create($data);
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'メールアカウントを追加しました。',
+                'id' => $account->id,
+                'redirect' => route('mail-accounts.edit', $account),
+            ]);
+        }
         return redirect()->route('mail-accounts.index')->with('status', 'メールアカウントを追加しました。');
     }
 
@@ -37,7 +46,7 @@ class MailAccountController extends Controller
         return view('mail-accounts.form', ['account' => $mailAccount]);
     }
 
-    public function update(Request $request, MailAccount $mailAccount): RedirectResponse
+    public function update(Request $request, MailAccount $mailAccount)
     {
         $this->authorizeOwnership($request, $mailAccount);
         $data = $this->validated($request, $mailAccount);
@@ -48,6 +57,14 @@ class MailAccountController extends Controller
             }
         }
         $mailAccount->update($data);
+
+        if ($request->expectsJson() || $request->wantsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'message' => 'メールアカウントを更新しました。',
+                'id' => $mailAccount->id,
+            ]);
+        }
         return redirect()->route('mail-accounts.index')->with('status', 'メールアカウントを更新しました。');
     }
 

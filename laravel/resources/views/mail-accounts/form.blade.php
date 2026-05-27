@@ -18,12 +18,59 @@
 
         <form method="POST" action="{{ $account->exists ? route('mail-accounts.update', $account) : route('mail-accounts.store') }}"
               id="mailAccountForm"
+              @submit.prevent="save()"
               x-data="{
                   inbox: '{{ old('inbox_protocol', $account->inbox_protocol ?: 'imap') }}',
                   smtp:  {{ old('smtp_enabled', $account->smtp_enabled) ? 'true' : 'false' }},
                   active: {{ old('is_active', $account->exists ? $account->is_active : true) ? 'true' : 'false' }},
                   testing: false,
                   testResult: null,
+                  saving: false,
+                  saveMessage: null,
+                  saveError: null,
+                  async save() {
+                      this.saving = true;
+                      this.saveMessage = null;
+                      this.saveError = null;
+                      try {
+                          const form = document.getElementById('mailAccountForm');
+                          const fd = new FormData(form);
+                          fd.set('inbox_protocol', this.inbox);
+                          fd.set('smtp_enabled', this.smtp ? '1' : '0');
+                          fd.set('is_active', this.active ? '1' : '0');
+                          @if($account->exists)
+                            // PUT を multipart で渡すため _method を付与
+                            fd.set('_method', 'PUT');
+                          @endif
+                          const res = await fetch(form.action, {
+                              method: 'POST',
+                              headers: {
+                                  'Accept': 'application/json',
+                                  'X-CSRF-TOKEN': '{{ csrf_token() }}',
+                                  'X-Requested-With': 'XMLHttpRequest',
+                              },
+                              body: fd,
+                          });
+                          const body = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                              this.saveError = body && body.errors
+                                  ? Object.values(body.errors).flat().join(' / ')
+                                  : (body && body.message) || 'HTTP ' + res.status;
+                              return;
+                          }
+                          this.saveMessage = body.message || '保存しました。';
+                          // 新規追加→編集画面へ移動 (URL を PUT 先に切替えるため). 画面遷移は最小限.
+                          if (body.redirect) {
+                              setTimeout(() => { window.location.href = body.redirect; }, 600);
+                          }
+                      } catch (e) {
+                          this.saveError = e.message;
+                      } finally {
+                          this.saving = false;
+                          // 自動でメッセージを薄れさせる
+                          if (this.saveMessage) setTimeout(() => { this.saveMessage = null; }, 4000);
+                      }
+                  },
                   async runTest() {
                       this.testing = true;
                       this.testResult = null;
@@ -70,7 +117,7 @@
                         <div class="col-md-6 form-group">
                             <label>アカウント名 <span class="text-danger">*</span></label>
                             <input type="text" name="name" required maxlength="100"
-                                   class="form-control" placeholder="個人Gmail / 仕事用 など"
+                                   class="form-control" placeholder="仕事用 / 営業窓口 など"
                                    value="{{ old('name', $account->name) }}">
                         </div>
                         <div class="col-md-6 form-group">
@@ -298,14 +345,25 @@
                 </template>
             </div>
 
+            {{-- 保存結果トースト (画面遷移せず表示) --}}
+            <div x-show="saveMessage" x-cloak class="alert alert-success mb-3" x-transition>
+                <i class="fas fa-check-circle"></i> <span x-text="saveMessage"></span>
+            </div>
+            <div x-show="saveError" x-cloak class="alert alert-danger mb-3">
+                <i class="fas fa-exclamation-triangle"></i> <span x-text="saveError"></span>
+            </div>
+
             <div class="d-flex align-items-center">
-                <a href="{{ route('mail-accounts.index') }}" class="btn btn-secondary">キャンセル</a>
-                <button type="button" class="btn btn-outline-info ml-2" @click="runTest()" :disabled="testing">
+                <a href="{{ route('mail-accounts.index') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left mr-1"></i> 戻る (一覧へ)
+                </a>
+                <button type="button" class="btn btn-outline-info ml-2" @click="runTest()" :disabled="testing || saving">
                     <i class="fas" :class="testing ? 'fa-spinner fa-spin' : 'fa-plug'"></i>
                     <span x-text="testing ? 'テスト中...' : '接続テスト'"></span>
                 </button>
-                <button type="submit" class="btn btn-primary ml-auto" :disabled="testing">
-                    <i class="fas fa-save mr-1"></i> 保存
+                <button type="submit" class="btn btn-primary ml-auto" :disabled="testing || saving">
+                    <i class="fas" :class="saving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
+                    <span x-text="saving ? '保存中...' : '保存'"></span>
                 </button>
             </div>
         </form>

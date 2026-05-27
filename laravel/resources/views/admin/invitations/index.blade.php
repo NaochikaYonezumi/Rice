@@ -162,5 +162,78 @@
             </table>
         </div>
     </div>
+
+    {{-- 登録済みユーザー一覧 --}}
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/60 flex items-center gap-2">
+            <i class="fas fa-users text-blue-500 text-sm"></i>
+            <h2 class="text-sm font-bold text-gray-800">登録済みユーザー</h2>
+            <span class="ml-auto text-xs text-gray-500">{{ count($users ?? []) }} 名</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-gray-50/60 border-b border-gray-100">
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:30%;">名前</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:32%;">メール</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:14%;">ロール</th>
+                        <th class="text-left px-4 py-2.5 text-xs font-bold text-gray-500" style="width:16%;">登録日時</th>
+                        <th class="text-right px-4 py-2.5 text-xs font-bold text-gray-500" style="width:8%;">操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($users ?? [] as $user)
+                        <tr class="border-b border-gray-100 hover:bg-gray-50/60 transition-colors">
+                            <td class="px-4 py-3 font-semibold text-gray-900">
+                                {{ $user->display_name ?: $user->name }}
+                                @if($user->id === auth()->id())
+                                    <span class="ml-2 text-xs text-blue-600 font-bold">(あなた)</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3 text-gray-700">{{ $user->email }}</td>
+                            <td class="px-4 py-3">
+                                @if($user->role === 'admin')
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                        <i class="fas fa-shield-alt"></i> 管理者
+                                    </span>
+                                @else
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-700 border border-gray-200">
+                                        <i class="fas fa-user"></i> メンバー
+                                    </span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3 text-gray-600 text-xs">
+                                {{ $user->created_at?->format('Y/m/d H:i') }}
+                            </td>
+                            <td class="px-4 py-3 text-right">
+                                @if($user->id !== auth()->id())
+                                    <form action="{{ route('admin.users.destroy', $user) }}" method="POST"
+                                          onsubmit="return confirm('ユーザー「{{ $user->display_name ?: $user->name }}」({{ $user->email }}) を削除します。\nこの操作は取り消せません。よろしいですか?')"
+                                          class="inline">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit"
+                                                class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 hover:border-red-200 border border-transparent transition-all"
+                                                title="ユーザーを削除">
+                                            <i class="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </form>
+                                @else
+                                    <span class="text-xs text-gray-300">—</span>
+                                @endif
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="5" class="text-center text-gray-400 py-12 text-sm">
+                                <i class="fas fa-users text-3xl text-gray-300 mb-2 block"></i>
+                                ユーザーは登録されていません
+                            </td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 @endsection

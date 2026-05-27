@@ -29,5 +29,3 @@
         </div>
     </form>
 </x-guest-layout>
-
-</x-guest-layout>

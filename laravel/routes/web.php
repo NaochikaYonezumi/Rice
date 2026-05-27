@@ -338,6 +338,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/admin/invitations', [InvitationController::class, 'index'])->name('admin.invitations.index');
         Route::post('/admin/invitations', [InvitationController::class, 'store'])->name('admin.invitations.store');
         Route::delete('/admin/invitations/{invitation}', [InvitationController::class, 'destroy'])->name('admin.invitations.destroy');
+        Route::delete('/admin/users/{user}', [\App\Http\Controllers\Admin\UserController::class, 'destroy'])->name('admin.users.destroy');
 
         Route::get('/master/statuses', [StatusMasterController::class, 'index'])->name('master.statuses');
         Route::post('/master/statuses', [StatusMasterController::class, 'store'])->name('master.statuses.store');

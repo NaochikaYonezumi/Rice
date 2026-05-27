@@ -24,14 +24,28 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Register Module Views & Migrations (Manual since ServiceProviders aren't loading due to cache permissions)
-        $this->loadViewsFrom(base_path('Modules/Knowledge/Resources/views'), 'knowledge');
-        $this->loadViewsFrom(base_path('Modules/Workflow/Resources/views'), 'workflow');
-        $this->loadViewsFrom(base_path('Modules/AIReply/Resources/views'), 'aireply');
-        $this->loadViewsFrom(base_path('Modules/OAuthLogin/Resources/views'), 'oauthlogin');
+        // 存在しないディレクトリを loadViewsFrom すると view:cache が
+        // Symfony Finder の DirectoryNotFoundException で落ちるためガード
+        foreach ([
+            'knowledge'  => base_path('Modules/Knowledge/Resources/views'),
+            'workflow'   => base_path('Modules/Workflow/Resources/views'),
+            'aireply'    => base_path('Modules/AIReply/Resources/views'),
+            'oauthlogin' => base_path('Modules/OAuthLogin/Resources/views'),
+        ] as $ns => $path) {
+            if (is_dir($path)) {
+                $this->loadViewsFrom($path, $ns);
+            }
+        }
 
-        $this->loadMigrationsFrom(base_path('Modules/Workflow/Database/Migrations'));
-        $this->loadMigrationsFrom(base_path('Modules/AIReply/Database/Migrations'));
-        $this->loadMigrationsFrom(base_path('Modules/MailClient/Database/Migrations'));
+        foreach ([
+            base_path('Modules/Workflow/Database/Migrations'),
+            base_path('Modules/AIReply/Database/Migrations'),
+            base_path('Modules/MailClient/Database/Migrations'),
+        ] as $migrationPath) {
+            if (is_dir($migrationPath)) {
+                $this->loadMigrationsFrom($migrationPath);
+            }
+        }
 
         Event::listen(
             \SocialiteProviders\Manager\SocialiteWasCalled::class,

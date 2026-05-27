@@ -1702,6 +1702,13 @@ class EmailController extends Controller
         } else if ($thread->status === EmailThread::STATUS_SPAM) {
             $updates['spammed_at'] = null;
         }
+
+        // 担当者が未設定なら、ステータス変更したユーザを自動的に担当者にする。
+        // 既に他のユーザが担当している場合は尊重して上書きしない。
+        if ($thread->assigned_user_id === null && $request->user()) {
+            $updates['assigned_user_id'] = $request->user()->id;
+        }
+
         $thread->update($updates);
 
         // ★ マージ関係にあるスレッドの status を全部揃える。

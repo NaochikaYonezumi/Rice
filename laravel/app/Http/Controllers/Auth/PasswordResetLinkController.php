@@ -35,8 +35,15 @@ class PasswordResetLinkController extends Controller
             $request->only('email')
         );
 
+        $messages = [
+            Password::RESET_LINK_SENT => 'パスワード再設定リンクをメールでお送りしました。受信箱をご確認ください。',
+            Password::INVALID_USER    => 'そのメールアドレスのアカウントが見つかりません。',
+            Password::RESET_THROTTLED => 'しばらく時間をおいてから再度お試しください。',
+        ];
+        $message = $messages[$status] ?? __($status);
+
         return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', __($status))
-                    : back()->withErrors(['email' => __($status)]);
+                    ? back()->with('status', $message)
+                    : back()->withErrors(['email' => $message]);
     }
 }

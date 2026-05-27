@@ -37,5 +37,4 @@
                 </button>
             </div>
         </form>
-    </div>
 </x-guest-layout>

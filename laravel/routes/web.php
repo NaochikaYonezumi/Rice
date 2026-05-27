@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\InvitationController;
 use App\Http\Controllers\ApprovalController;
+use App\Http\Controllers\DraftController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\SocialiteController;
 use App\Http\Controllers\ChatController;
@@ -94,8 +95,28 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('/pending-emails/{pending}/approve', [PendingEmailController::class, 'approve'])->name('pending.approve');
     Route::post('/pending-emails/{pending}/reject', [PendingEmailController::class, 'reject'])->name('pending.reject');
 
+    // 通知
+    Route::get('/notifications', function () {
+        $notifications = auth()->user()->unreadNotifications()->latest()->take(20)->get();
+        return response()->json($notifications);
+    })->name('notifications.index');
+    Route::post('/notifications/{id}/read', function (string $id) {
+        auth()->user()->notifications()->where('id', $id)->update(['read_at' => now()]);
+        return response()->json(['status' => 'ok']);
+    })->name('notifications.read');
+    Route::post('/notifications/read-all', function () {
+        auth()->user()->unreadNotifications->markAsRead();
+        return response()->json(['status' => 'ok']);
+    })->name('notifications.read-all');
+
     // 承認ページ
     Route::get('/approvals', [ApprovalController::class, 'index'])->name('approvals.index');
+
+    // 下書き
+    Route::get('/drafts', [DraftController::class, 'index'])->name('drafts.index');
+    Route::get('/drafts/list', [DraftController::class, 'list'])->name('drafts.list');
+    Route::post('/drafts/{draft}/submit', [DraftController::class, 'submit'])->name('drafts.submit');
+    Route::delete('/drafts/{draft}', [DraftController::class, 'destroy'])->name('drafts.destroy');
 
     // 顧客・タグ
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');

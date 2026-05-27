@@ -960,10 +960,61 @@ class PendingEmailController extends Controller
         if ($pending->mail_account_id) {
             $account = \App\Models\MailAccount::find($pending->mail_account_id);
             if ($account && $account->canSend()) {
-                $this->applyAccountSmtpConfig($account);
+                if ($account->isOAuth()) {
+                    $this->applyAccountSmtpXOAuth2Config($account);
+                } else {
+                    $this->applyAccountSmtpConfig($account);
+                }
                 return;
             }
         }
         $this->applySmtpConfig($settings);
+    }
+
+    /**
+     * OAuth (XOAUTH2) で SMTP を一時的に差し替える。
+     * Symfony Mailer の組み込み XOAuth2Authenticator を使うため、独自 Transport を解決して
+     * mailer インスタンスごと上書きする。
+     */
+    private function applyAccountSmtpXOAuth2Config(\App\Models\MailAccount $account): void
+    {
+        $svc = app(\App\Services\MicrosoftMailOAuth::class);
+        $token = $svc->ensureValidAccessToken($account);
+        if (!$token) {
+            // フォールバック (パスワードがあるなら基本認証で試行)
+            $this->applyAccountSmtpConfig($account);
+            return;
+        }
+
+        // 既存 mailer/manager インスタンスを破棄して、独自 transport を bind し直す
+        app()->forgetInstance('mail.manager');
+        app()->forgetInstance('mailer');
+
+        config([
+            'mail.from.address' => $account->email_address,
+            'mail.from.name'    => $account->smtp_from_name ?: $account->name,
+        ]);
+
+        app()->extend('mailer', function ($mailer, $app) use ($account, $token) {
+            $tls = ($account->smtp_encryption ?? 'tls') === 'ssl';
+            $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
+                $account->smtp_host,
+                (int) ($account->smtp_port ?: 587),
+                $tls
+            );
+            // 標準の Authenticator リストから Plain/Login を外して XOAuth2 のみにする
+            $transport->setAuthenticators([
+                new \Symfony\Component\Mailer\Transport\Smtp\Auth\XOAuth2Authenticator(),
+            ]);
+            $transport->setUsername($account->smtp_username ?: $account->email_address);
+            $transport->setPassword($token); // XOAUTH2 では access_token をパスワード欄に渡す
+
+            return new \Illuminate\Mail\Mailer(
+                'smtp_oauth',
+                $app['view'],
+                $transport,
+                $app['events']
+            );
+        });
     }
 }

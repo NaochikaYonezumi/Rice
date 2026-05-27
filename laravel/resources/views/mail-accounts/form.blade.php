@@ -85,6 +85,38 @@
                         <input type="checkbox" id="is_active" name="is_active" value="1" class="form-check-input" x-model="active">
                         <label for="is_active" class="form-check-label">このアカウントを有効にする (取得・送信を許可)</label>
                     </div>
+
+                    {{-- 認証方式 (OAuth or パスワード) --}}
+                    <hr>
+                    <div class="form-group">
+                        <label class="d-block font-weight-bold">認証方式</label>
+                        @if($account->exists && $account->isOAuth())
+                            <div class="alert alert-success mb-2 py-2">
+                                <i class="fas fa-check-circle"></i> <strong>Microsoft 365 (OAuth2)</strong> で連携済
+                                @if($account->oauth_expires_at)
+                                    <span class="small text-muted ml-2">アクセストークン期限: {{ $account->oauth_expires_at->format('Y/m/d H:i') }}</span>
+                                @endif
+                                <a href="{{ route('mail-accounts.oauth.microsoft.redirect', ['account_id' => $account->id]) }}"
+                                   class="btn btn-sm btn-outline-secondary float-right">再認証</a>
+                            </div>
+                        @else
+                            <div class="d-flex flex-wrap" style="gap:8px;">
+                                <span class="badge badge-info py-2 px-3" style="font-size:12px;">
+                                    <i class="fas fa-key mr-1"></i> ID + パスワード (現在)
+                                </span>
+                                <a href="{{ $account->exists ? route('mail-accounts.oauth.microsoft.redirect', ['account_id' => $account->id]) : route('mail-accounts.oauth.microsoft.redirect') }}"
+                                   class="btn btn-sm btn-primary" style="background:#0078d4;border-color:#0078d4;">
+                                    <i class="fab fa-microsoft mr-1"></i> Microsoft 365 で接続 (XOAUTH2)
+                                </a>
+                            </div>
+                            <small class="form-text text-muted">
+                                Microsoft 365 を使うなら OAuth 認証(Modern Auth)推奨。
+                                @if(!config('services.microsoft_mail.client_id'))
+                                    <span class="text-warning"><i class="fas fa-exclamation-triangle"></i> 現在 OAuth 未設定 — 管理者が .env の MICROSOFT_MAIL_CLIENT_ID を設定する必要があります</span>
+                                @endif
+                            </small>
+                        @endif
+                    </div>
                 </div>
             </div>
 

@@ -67,6 +67,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/mail-accounts/{mailAccount}', [MailAccountController::class, 'destroy'])->name('mail-accounts.destroy');
     Route::post('/mail-accounts/{mailAccount}/fetch', [MailAccountController::class, 'fetchNow'])->name('mail-accounts.fetch');
     Route::post('/mail-accounts/test', [MailAccountController::class, 'testConnection'])->name('mail-accounts.test');
+    // Microsoft 365 OAuth (XOAUTH2 IMAP/SMTP)
+    Route::get('/mail-accounts/oauth/microsoft/redirect', [\App\Http\Controllers\MailAccountOAuthController::class, 'redirectMicrosoft'])
+        ->name('mail-accounts.oauth.microsoft.redirect');
+    Route::get('/mail-accounts/oauth/microsoft/callback', [\App\Http\Controllers\MailAccountOAuthController::class, 'callbackMicrosoft'])
+        ->name('mail-accounts.oauth.microsoft.callback');
 
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
     Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');

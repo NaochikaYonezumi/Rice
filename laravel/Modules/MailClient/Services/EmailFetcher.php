@@ -1805,13 +1805,27 @@ class EmailFetcher
             Log::info('[mail-fetch] account ' . $account->id . ' skipped (incomplete config)');
             return 0;
         }
+
+        // OAuth (XOAUTH2) アカウントは access_token を refresh してから利用する
+        $oauthToken = null;
+        if ($account->isOAuth()) {
+            $svc = app(\App\Services\MicrosoftMailOAuth::class);
+            $oauthToken = $svc->ensureValidAccessToken($account);
+            if (!$oauthToken) {
+                Log::warning('[mail-fetch] account ' . $account->id . ' OAuth access_token を取得できません');
+                return 0;
+            }
+        }
+
         if ($account->inbox_protocol === \App\Models\MailAccount::PROTOCOL_POP3) {
             $config = [
                 'host' => $account->pop_host, 'port' => $account->pop_port,
                 'encryption' => $account->pop_encryption === 'null' ? false : $account->pop_encryption,
                 'validate_cert' => false,
-                'username' => $account->pop_username, 'password' => $account->pop_password,
+                'username' => $account->pop_username,
+                'password' => $oauthToken ?: $account->pop_password,
                 'protocol' => 'pop3',
+                'authentication' => $oauthToken ? 'oauth' : null,
             ];
             $folderName = 'INBOX';
         } else {
@@ -1819,8 +1833,10 @@ class EmailFetcher
                 'host' => $account->imap_host, 'port' => $account->imap_port,
                 'encryption' => $account->imap_encryption === 'null' ? false : $account->imap_encryption,
                 'validate_cert' => false,
-                'username' => $account->imap_username, 'password' => $account->imap_password,
+                'username' => $account->imap_username,
+                'password' => $oauthToken ?: $account->imap_password,
                 'protocol' => 'imap',
+                'authentication' => $oauthToken ? 'oauth' : null,
             ];
             $folderName = $account->imap_folder ?: 'INBOX';
         }

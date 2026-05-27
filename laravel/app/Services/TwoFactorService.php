@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\TwoFactorCode;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 class TwoFactorService
@@ -37,6 +38,9 @@ class TwoFactorService
      * 平文コードを検証する。
      * - 一致 → 消費して true
      * - 不一致 → attempts をインクリメントし、上限超過で当該コードを消費扱いに
+     *
+     * 並行リクエストでも max_attempts を確実に守るため、
+     * 対象コード行に lockForUpdate を掛けたトランザクション内で実行する。
      */
     public function verifyCode(User $user, string $plainCode): bool
     {
@@ -45,32 +49,36 @@ class TwoFactorService
             return false;
         }
 
-        $code = $user->twoFactorCodes()
-            ->whereNull('consumed_at')
-            ->where('expires_at', '>', now())
-            ->latest('id')
-            ->first();
+        return DB::transaction(function () use ($user, $plainCode) {
+            $code = $user->twoFactorCodes()
+                ->whereNull('consumed_at')
+                ->where('expires_at', '>', now())
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
 
-        if (!$code) {
+            if (!$code) {
+                return false;
+            }
+
+            $maxAttempts = (int) config('two_factor.max_attempts', 5);
+            if ($code->attempts >= $maxAttempts) {
+                $code->forceFill(['consumed_at' => now()])->save();
+                return false;
+            }
+
+            if (Hash::check($plainCode, $code->code_hash)) {
+                $code->forceFill(['consumed_at' => now()])->save();
+                return true;
+            }
+
+            // increment + 上限超過チェックも同じトランザクション内で
+            $code->forceFill(['attempts' => $code->attempts + 1])->save();
+            if ($code->attempts >= $maxAttempts) {
+                $code->forceFill(['consumed_at' => now()])->save();
+            }
             return false;
-        }
-
-        $maxAttempts = (int) config('two_factor.max_attempts', 5);
-        if ($code->attempts >= $maxAttempts) {
-            $code->forceFill(['consumed_at' => now()])->save();
-            return false;
-        }
-
-        if (Hash::check($plainCode, $code->code_hash)) {
-            $code->forceFill(['consumed_at' => now()])->save();
-            return true;
-        }
-
-        $code->increment('attempts');
-        if ($code->attempts >= $maxAttempts) {
-            $code->forceFill(['consumed_at' => now()])->save();
-        }
-        return false;
+        });
     }
 
     public function cleanupExpired(User $user): void

@@ -109,6 +109,11 @@ class User extends Authenticatable
         return $this->hasMany(TrustedDevice::class);
     }
 
+    public function mailAccounts(): HasMany
+    {
+        return $this->hasMany(MailAccount::class);
+    }
+
     /**
      * 新しいリカバリーコードを生成して保存し、平文配列を返す。
      * 返した平文は1度だけユーザーに見せる用途。DBにはハッシュのみ保存する。

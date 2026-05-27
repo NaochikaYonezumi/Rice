@@ -333,6 +333,17 @@
                         {{-- 新規作成用フォーム --}}
                         <div x-show="composeMode" class="max-w-4xl 2xl:max-w-6xl mx-auto space-y-6 h-full flex flex-col">
                             <div class="space-y-4 shrink-0">
+                                <template x-if="sendableAccounts.length > 1">
+                                    <div class="relative group">
+                                        <label class="text-[9px] font-black text-gray-400 uppercase absolute left-4 top-2 tracking-widest">送信アカウント</label>
+                                        <select x-on:change="pickSendableAccount($event.target.value)"
+                                                class="w-full pt-7 pb-3 px-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-blue-50 transition-all font-bold appearance-none">
+                                            <template x-for="acc in sendableAccounts" :key="acc.id ?? 'system'">
+                                                <option :value="acc.id ?? ''" :selected="(acc.id ?? null) === replyAccountId" x-text="acc.label + ' <' + acc.from_address + '>'"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </template>
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="relative group">
                                         <label data-test-id="compose-from-label" class="text-[9px] font-black text-gray-400 uppercase absolute left-4 top-2 tracking-widest">差出人 (From)</label>
@@ -399,6 +410,17 @@
                         </div>
                         <div class="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
                             <div class="space-y-4">
+                                <template x-if="sendableAccounts.length > 1">
+                                    <div class="relative mb-3">
+                                        <label class="text-[9px] font-black text-blue-500 uppercase absolute left-3 top-1.5 z-10">送信アカウント</label>
+                                        <select x-on:change="pickSendableAccount($event.target.value)"
+                                                class="w-full pt-6 pb-2 px-3 bg-white border border-blue-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-300 font-bold appearance-none">
+                                            <template x-for="acc in sendableAccounts" :key="acc.id ?? 'system'">
+                                                <option :value="acc.id ?? ''" :selected="(acc.id ?? null) === replyAccountId" x-text="acc.label + ' <' + acc.from_address + '>'"></option>
+                                            </template>
+                                        </select>
+                                    </div>
+                                </template>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div class="relative">
                                         <label data-test-id="reply-from-label" class="text-[9px] font-black text-blue-500 uppercase absolute left-3 top-1.5 z-10">差出人 (From)</label>
@@ -594,6 +616,15 @@ function emailApp() {
         users: [], // 招待管理から一元化されたユーザーリスト
         selectedFiles: [],
         replyToAddress: '', replyCc: '', replyBcc: '', replySubject: '', replyBody: '', replyFromAddress: '',
+        replyAccountId: null,
+        sendableAccounts: @json($sendableAccounts ?? []),
+        pickSendableAccount(idOrEmpty) {
+            // 値はアカウントID (数値文字列) または '' (システム既定)
+            const id = idOrEmpty === '' ? null : Number(idOrEmpty);
+            const acc = this.sendableAccounts.find(a => (a.id ?? null) === id);
+            this.replyAccountId = id;
+            if (acc) this.replyFromAddress = acc.from_address;
+        },
         replyAiPanelOpen: false, aiSkill: 'reply', 
         aiSkills: @json(config('ai_skills.skills', [])),
         aiUserPrompt: '', aiAnalysis: null, aiLoading: false, sendingReply: false, maskPii: true,
@@ -1004,6 +1035,9 @@ function emailApp() {
             formData.append('body', this.replyBody); 
             formData.append('to', this.replyToAddress); 
             formData.append('from_address', this.replyFromAddress);
+            if (this.replyAccountId !== null && this.replyAccountId !== undefined) {
+                formData.append('mail_account_id', this.replyAccountId);
+            }
             formData.append('cc', this.replyCc || ''); 
             formData.append('bcc', this.replyBcc || ''); 
             formData.append('subject', this.replySubject);

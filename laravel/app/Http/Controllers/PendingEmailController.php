@@ -80,15 +80,26 @@ class PendingEmailController extends Controller
         }
 
         $settings = MailSetting::getSettings();
-        $this->applySmtpConfig($settings);
+        // pending に紐づく MailAccount があり、SMTP有効ならそれを使う。なければシステム設定。
+        $account = $pending->mail_account_id ? \App\Models\MailAccount::find($pending->mail_account_id) : null;
+        $useAccount = $account && $account->canSend();
+        if ($useAccount) {
+            $this->applyAccountSmtpConfig($account);
+            $fromName = $account->smtp_from_name ?: $account->name;
+            $fromAddressDefault = $account->email_address;
+        } else {
+            $this->applySmtpConfig($settings);
+            $fromName = $settings->smtp_from_name;
+            $fromAddressDefault = $settings->smtp_from_address;
+        }
 
         try {
-            DB::transaction(function () use ($pending, $settings, $fetchService) {
-                Mail::send([], [], function ($message) use ($pending, $settings) {
-                    $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
+            DB::transaction(function () use ($pending, $settings, $fetchService, $fromName, $fromAddressDefault) {
+                Mail::send([], [], function ($message) use ($pending, $fromName, $fromAddressDefault) {
+                    $fromAddress = $pending->from_address ?: $fromAddressDefault;
                     $message
                         ->to($pending->to_address)
-                        ->from($fromAddress, $settings->smtp_from_name)
+                        ->from($fromAddress, $fromName)
                         ->subject($pending->subject)
                         ->text($pending->body);
 
@@ -122,21 +133,23 @@ class PendingEmailController extends Controller
 
                 // 送信済みメールを記録
                 $inReplyToId = $pending->inReplyToEmail?->message_id;
-                $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
+                $fromAddress = $pending->from_address ?: $fromAddressDefault;
                 $thread = $fetchService->resolveThread($pending->subject, $inReplyToId, $fromAddress);
 
                 $email = Email::create([
-                    'thread_id'    => $thread->id,
-                    'message_id'   => 'SENT_' . time() . '_' . uniqid(),
-                    'in_reply_to'  => $inReplyToId,
-                    'subject'      => $pending->subject,
-                    'from_address' => $fromAddress,
-                    'from_name'    => $settings->smtp_from_name,
-                    'to_address'   => $pending->to_address,
-                    'cc'           => $pending->cc,
-                    'bcc'          => $pending->bcc,
-                    'body_text'    => $pending->body,
-                    'received_at'  => now(),
+                    'thread_id'       => $thread->id,
+                    'message_id'      => 'SENT_' . time() . '_' . uniqid(),
+                    'in_reply_to'     => $inReplyToId,
+                    'subject'         => $pending->subject,
+                    'from_address'    => $fromAddress,
+                    'from_name'       => $fromName,
+                    'to_address'      => $pending->to_address,
+                    'cc'              => $pending->cc,
+                    'bcc'             => $pending->bcc,
+                    'body_text'       => $pending->body,
+                    'received_at'     => now(),
+                    'owner_user_id'   => $thread->owner_user_id,
+                    'mail_account_id' => $pending->mail_account_id,
                 ]);
 
                 $thread->update(['last_email_at' => now()]);
@@ -198,6 +211,22 @@ class PendingEmailController extends Controller
             'mail.mailers.smtp.password'   => $settings->smtp_password,
             'mail.from.address'            => $settings->smtp_from_address,
             'mail.from.name'               => $settings->smtp_from_name,
+        ]);
+
+        app()->forgetInstance('mail.manager');
+        app()->forgetInstance('mailer');
+    }
+
+    private function applyAccountSmtpConfig(\App\Models\MailAccount $account): void
+    {
+        config([
+            'mail.mailers.smtp.host'       => $account->smtp_host,
+            'mail.mailers.smtp.port'       => $account->smtp_port,
+            'mail.mailers.smtp.encryption' => $account->smtp_encryption === 'null' ? null : $account->smtp_encryption,
+            'mail.mailers.smtp.username'   => $account->smtp_username,
+            'mail.mailers.smtp.password'   => $account->smtp_password,
+            'mail.from.address'            => $account->email_address,
+            'mail.from.name'               => $account->smtp_from_name ?: $account->name,
         ]);
 
         app()->forgetInstance('mail.manager');

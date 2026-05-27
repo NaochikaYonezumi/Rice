@@ -19,9 +19,46 @@ class EmailController extends Controller
 {
     public function __construct(private RagApiService $ragApi) {}
 
-    public function index() { return view('emails.index', ['isPinnedView' => false]); }
+    public function index(Request $request)
+    {
+        return view('emails.index', [
+            'isPinnedView' => false,
+            'sendableAccounts' => $this->loadSendableAccounts($request->user()),
+        ]);
+    }
 
-    public function pinned() { return view('emails.index', ['isPinnedView' => true]); }
+    public function pinned(Request $request)
+    {
+        return view('emails.index', [
+            'isPinnedView' => true,
+            'sendableAccounts' => $this->loadSendableAccounts($request->user()),
+        ]);
+    }
+
+    protected function loadSendableAccounts(?\App\Models\User $user): array
+    {
+        $items = [];
+        $settings = \App\Models\MailSetting::getSettings();
+        if (!empty($settings->smtp_from_address)) {
+            $items[] = [
+                'id' => null, // システム既定
+                'label' => 'システム既定',
+                'from_address' => $settings->smtp_from_address,
+                'from_name' => $settings->smtp_from_name ?? '',
+            ];
+        }
+        if ($user) {
+            foreach ($user->mailAccounts()->where('smtp_enabled', true)->where('is_active', true)->get() as $a) {
+                $items[] = [
+                    'id' => $a->id,
+                    'label' => $a->name,
+                    'from_address' => $a->email_address,
+                    'from_name' => $a->smtp_from_name ?: $a->name,
+                ];
+            }
+        }
+        return $items;
+    }
 
     public function fetch(EmailFetcher $fetcher): JsonResponse
     {
@@ -108,12 +145,22 @@ class EmailController extends Controller
             'bcc' => 'nullable|string',
             'body' => 'required|string',
             'created_by' => 'nullable|string',
+            'mail_account_id' => 'nullable|integer|exists:mail_accounts,id',
             'attachments.*' => 'file|max:20480', // 20MB
         ]);
+
+        // 指定された送信アカウントが自分のものか検証
+        if (!empty($validated['mail_account_id'])) {
+            $account = \App\Models\MailAccount::find($validated['mail_account_id']);
+            if (!$account || $account->user_id !== auth()->id()) {
+                abort(403, '指定された送信アカウントは利用できません。');
+            }
+        }
 
         $pending = new PendingEmail();
         $pending->in_reply_to_email_id = $email->id;
         $pending->reply_type = PendingEmail::TYPE_REPLY;
+        $pending->mail_account_id = $validated['mail_account_id'] ?? null;
         $pending->from_address = $validated['from_address'] ?? null;
         $pending->to_address = $validated['to'];
         $pending->cc = $validated['cc'] ?? null;
@@ -156,11 +203,20 @@ class EmailController extends Controller
             'body' => 'required|string',
             'subject' => 'nullable|string',
             'created_by' => 'nullable|string',
+            'mail_account_id' => 'nullable|integer|exists:mail_accounts,id',
             'attachments.*' => 'file|max:20480',
         ]);
 
+        if (!empty($validated['mail_account_id'])) {
+            $account = \App\Models\MailAccount::find($validated['mail_account_id']);
+            if (!$account || $account->user_id !== auth()->id()) {
+                abort(403, '指定された送信アカウントは利用できません。');
+            }
+        }
+
         $pending = new PendingEmail();
         $pending->reply_type = PendingEmail::TYPE_COMPOSE;
+        $pending->mail_account_id = $validated['mail_account_id'] ?? null;
         $pending->from_address = $validated['from_address'] ?? null;
         $pending->to_address = $validated['to'];
         $pending->cc = $validated['cc'] ?? null;
@@ -197,6 +253,7 @@ class EmailController extends Controller
         $sortOrder = $request->input('sort_order', 'desc');
 
         $threads = EmailThread::with('latestEmail', 'customer', 'assignee')->withCount('threadMerges')
+            ->visibleTo($request->user()?->id)
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->orderBy($sortKey, $sortOrder);
 
@@ -272,8 +329,12 @@ class EmailController extends Controller
         return response()->json($users);
     }
 
-    public function thread(EmailThread $thread): JsonResponse
+    public function thread(EmailThread $thread, Request $request): JsonResponse
     {
+        // 個人所有スレッドへは所有者以外アクセス禁止
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== $request->user()?->id) {
+            abort(403, 'このスレッドへのアクセス権がありません。');
+        }
         $thread->load(['customer', 'assignee']);
 
         $threadIds = [$thread->id];

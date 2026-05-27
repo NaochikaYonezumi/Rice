@@ -3,49 +3,120 @@
 namespace Modules\MailClient\Services;
 
 use App\Models\Email;
-use App\Models\EmailThread;
 use App\Models\EmailAttachment;
+use App\Models\EmailThread;
+use App\Models\MailAccount;
 use App\Models\MailSetting;
-use Webklex\IMAP\Facades\Client;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Webklex\IMAP\Facades\Client;
 
 class EmailFetcher
 {
     /**
-     * Fetch emails from the server.
+     * システム既定 (mail_settings) + 全有効ユーザアカウントの順に取得する。
+     */
+    public function fetchAll(): int
+    {
+        $total = 0;
+        try {
+            $total += $this->fetch();
+        } catch (\Throwable $e) {
+            Log::error('[mail-fetch system] ' . $e->getMessage());
+        }
+
+        $accounts = MailAccount::query()
+            ->where('is_active', true)
+            ->whereIn('inbox_protocol', [MailAccount::PROTOCOL_IMAP, MailAccount::PROTOCOL_POP3])
+            ->get();
+
+        foreach ($accounts as $account) {
+            try {
+                $total += $this->fetchForAccount($account);
+            } catch (\Throwable $e) {
+                Log::error('[mail-fetch account#' . $account->id . '] ' . $e->getMessage());
+            }
+        }
+        return $total;
+    }
+
+    /**
+     * 互換: 引数なしならシステム既定 (MailSetting singleton) を取得する。
      */
     public function fetch(): int
     {
         $settings = MailSetting::getSettings();
         $protocol = $settings->inbox_protocol ?? 'imap';
-
-        $config = [];
         if ($protocol === 'pop3') {
-            $config = [
-                'host'          => $settings->pop_host,
-                'port'          => $settings->pop_port,
-                'encryption'    => $settings->pop_encryption === 'null' ? false : $settings->pop_encryption,
-                'validate_cert' => false,
-                'username'      => $settings->pop_username,
-                'password'      => $settings->pop_password,
-                'protocol'      => 'pop3',
-            ];
+            $config = $this->buildConfig('pop3', [
+                'host' => $settings->pop_host, 'port' => $settings->pop_port,
+                'encryption' => $settings->pop_encryption,
+                'username' => $settings->pop_username, 'password' => $settings->pop_password,
+            ]);
             $folderName = 'INBOX';
         } else {
-            $config = [
-                'host'          => $settings->imap_host,
-                'port'          => $settings->imap_port,
-                'encryption'    => $settings->imap_encryption === 'null' ? false : $settings->imap_encryption,
-                'validate_cert' => false,
-                'username'      => $settings->imap_username,
-                'password'      => $settings->imap_password,
-                'protocol'      => 'imap',
-            ];
+            $config = $this->buildConfig('imap', [
+                'host' => $settings->imap_host, 'port' => $settings->imap_port,
+                'encryption' => $settings->imap_encryption,
+                'username' => $settings->imap_username, 'password' => $settings->imap_password,
+            ]);
             $folderName = $settings->imap_folder ?: 'INBOX';
         }
+        return $this->runFetch($config, $folderName, ownerUserId: null, mailAccountId: null);
+    }
 
+    /**
+     * 個人アカウント (MailAccount) で取得。fetched email/thread に owner と account をタグ付け。
+     */
+    public function fetchForAccount(MailAccount $account): int
+    {
+        if (!$account->canReceive()) {
+            Log::info('[mail-fetch] account ' . $account->id . ' skipped (incomplete config)');
+            return 0;
+        }
+        if ($account->inbox_protocol === MailAccount::PROTOCOL_POP3) {
+            $config = $this->buildConfig('pop3', [
+                'host' => $account->pop_host, 'port' => $account->pop_port,
+                'encryption' => $account->pop_encryption,
+                'username' => $account->pop_username, 'password' => $account->pop_password,
+            ]);
+            $folderName = 'INBOX';
+        } else {
+            $config = $this->buildConfig('imap', [
+                'host' => $account->imap_host, 'port' => $account->imap_port,
+                'encryption' => $account->imap_encryption,
+                'username' => $account->imap_username, 'password' => $account->imap_password,
+            ]);
+            $folderName = $account->imap_folder ?: 'INBOX';
+        }
+        $imported = $this->runFetch(
+            config: $config,
+            folderName: $folderName,
+            ownerUserId: $account->user_id,
+            mailAccountId: $account->id,
+        );
+        $account->forceFill(['last_fetched_at' => now()])->save();
+        return $imported;
+    }
+
+    protected function buildConfig(string $protocol, array $cred): array
+    {
+        return [
+            'host' => $cred['host'] ?? null,
+            'port' => $cred['port'] ?? null,
+            'encryption' => ($cred['encryption'] ?? null) === 'null' ? false : ($cred['encryption'] ?? false),
+            'validate_cert' => false,
+            'username' => $cred['username'] ?? null,
+            'password' => $cred['password'] ?? null,
+            'protocol' => $protocol,
+        ];
+    }
+
+    /**
+     * 接続+メッセージ取り込みの共通処理。
+     */
+    protected function runFetch(array $config, string $folderName, ?int $ownerUserId, ?int $mailAccountId): int
+    {
         if (empty($config['host']) || empty($config['username'])) {
             Log::warning('Mail fetch skipped: Host or username not configured.');
             return 0;
@@ -61,30 +132,40 @@ class EmailFetcher
 
         $folders = $client->getFolders();
         $imported = 0;
+        $protocol = $config['protocol'] ?? 'imap';
 
         foreach ($folders as $folder) {
-            if ($protocol === 'imap' && strcasecmp($folder->name, $folderName) !== 0 && strcasecmp($folder->path, $folderName) !== 0) {
+            if ($protocol === 'imap'
+                && strcasecmp($folder->name, $folderName) !== 0
+                && strcasecmp($folder->path, $folderName) !== 0) {
                 continue;
             }
 
             $messages = $folder->messages()->all()->limit(50)->get();
 
             foreach ($messages as $message) {
-                // 重複検出 (Message-ID)
                 $messageId = (string) $message->getMessageId();
-                if ($messageId && Email::where('message_id', $messageId)->exists()) {
-                    continue;
+
+                // 重複検出: 同じユーザコンテキスト (owner_user_id) 内で重複を弾く。
+                // システム = 全員共有プールなので owner_user_id IS NULL でも重複判定。
+                $dupQ = Email::query()->where('message_id', $messageId);
+                if ($messageId === '') {
+                    // 空 message-id は重複判定不能 → 取り込む (情報損失より重複)
+                } else {
+                    if ($ownerUserId === null) {
+                        $dupQ->whereNull('owner_user_id');
+                    } else {
+                        $dupQ->where('owner_user_id', $ownerUserId);
+                    }
+                    if ($dupQ->exists()) {
+                        continue;
+                    }
                 }
 
-                // スレッドの特定または作成
-                $thread = $this->findOrCreateThread($message);
+                $thread = $this->findOrCreateThread($message, $ownerUserId, $mailAccountId);
 
-                $receivedAt = $message->getDate();
-                if (!$receivedAt) {
-                    $receivedAt = now();
-                }
+                $receivedAt = $message->getDate() ?: now();
 
-                // cc extraction
                 $ccParts = [];
                 $ccList = $message->getCc();
                 if ($ccList instanceof \Webklex\PHPIMAP\Attribute) {
@@ -99,29 +180,27 @@ class EmailFetcher
                 }
                 $cc = implode(', ', $ccParts);
 
-                // メールの保存
                 $inReplyTo = (string) $message->getInReplyTo();
                 $email = Email::create([
-                    'thread_id'    => $thread->id,
-                    'message_id'   => $messageId ?: null,
-                    'in_reply_to'  => $inReplyTo ?: null,
-                    'subject'      => $message->getSubject() ?: '(件名なし)',
-                    'from_address' => $message->getFrom()[0]->mail ?? 'unknown@example.com',
-                    'from_name'    => $message->getFrom()[0]->personal ?? null,
-                    'to_address'   => $message->getTo()[0]->mail ?? '',
-                    'cc'           => $cc ?: null,
-                    'body_text'    => $message->getTextBody() ?: '',
-                    'body_html'    => $message->getHTMLBody() ?: '',
-                    'received_at'  => $receivedAt,
+                    'thread_id'       => $thread->id,
+                    'message_id'      => $messageId ?: null,
+                    'in_reply_to'     => $inReplyTo ?: null,
+                    'subject'         => $message->getSubject() ?: '(件名なし)',
+                    'from_address'    => $message->getFrom()[0]->mail ?? 'unknown@example.com',
+                    'from_name'       => $message->getFrom()[0]->personal ?? null,
+                    'to_address'      => $message->getTo()[0]->mail ?? '',
+                    'cc'              => $cc ?: null,
+                    'body_text'       => $message->getTextBody() ?: '',
+                    'body_html'       => $message->getHTMLBody() ?: '',
+                    'received_at'     => $receivedAt,
+                    'owner_user_id'   => $ownerUserId,
+                    'mail_account_id' => $mailAccountId,
                 ]);
 
-                // 添付ファイルの処理
                 $this->handleAttachments($message, $email);
 
-                // スレッドの最終更新日時を更新
                 $thread->update(['last_email_at' => $receivedAt]);
-                
-                // 保留・完了タグを削除
+
                 $tags = $thread->tags ?? [];
                 $newTags = array_values(array_filter($tags, fn($t) => !in_array($t, ['保留', '完了'])));
                 if (count($tags) !== count($newTags)) {
@@ -148,12 +227,11 @@ class EmailFetcher
 
         if (!$thread) {
             $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
-            $thread     = EmailThread::where('subject', 'like', "%{$normalized}%")
+            $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
                 ->orderByDesc('last_email_at')
                 ->first();
 
             if (!$thread) {
-                // スレッドを新規作成する場合、顧客がいれば自動で紐付け
                 $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
                 $thread = EmailThread::create([
                     'subject'       => $normalized,
@@ -164,19 +242,16 @@ class EmailFetcher
             }
         }
 
-        // 新しいメールを受信した場合は保留・完了タグを削除
         $tags = $thread->tags ?? [];
         $newTags = array_values(array_filter($tags, fn($t) => !in_array($t, ['保留', '完了'])));
         if (count($tags) !== count($newTags)) {
             $thread->update(['tags' => $newTags]);
         }
-        
         return $thread;
     }
 
-    protected function findOrCreateThread($message)
+    protected function findOrCreateThread($message, ?int $ownerUserId, ?int $mailAccountId): EmailThread
     {
-        // In-Reply-To または References に基づくスレッド検索
         $referencesAttr = $message->getReferences();
         $references = [];
         if ($referencesAttr instanceof \Webklex\PHPIMAP\Attribute) {
@@ -191,19 +266,30 @@ class EmailFetcher
         if ($inReplyTo && !in_array($inReplyTo, $references)) {
             $references[] = $inReplyTo;
         }
-
         $references = array_filter($references);
 
+        // 自分の owner スコープ内でスレッド検索
+        $threadQuery = EmailThread::query();
+        if ($ownerUserId === null) {
+            $threadQuery->whereNull('owner_user_id');
+        } else {
+            $threadQuery->where('owner_user_id', $ownerUserId);
+        }
+
         if (!empty($references)) {
-            $parentEmail = Email::whereIn('message_id', $references)->first();
+            $parentEmail = Email::whereIn('message_id', $references)
+                ->when($ownerUserId === null,
+                    fn($q) => $q->whereNull('owner_user_id'),
+                    fn($q) => $q->where('owner_user_id', $ownerUserId))
+                ->first();
             if ($parentEmail && $parentEmail->thread) {
                 return $parentEmail->thread;
             }
         }
-        
+
         $subject = $message->getSubject() ?: '(件名なし)';
         $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
-        $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
+        $thread = $threadQuery->where('subject', 'like', "%{$normalized}%")
             ->orderByDesc('last_email_at')
             ->first();
 
@@ -214,26 +300,24 @@ class EmailFetcher
         $fromAddress = $message->getFrom()[0]->mail ?? null;
         $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
 
-        // 新規スレッド作成
         return EmailThread::create([
-            'subject'       => $normalized,
-            'status'        => 'inbox',
-            'last_email_at' => now(),
-            'customer_id'   => $customer?->id,
+            'subject'         => $normalized,
+            'status'          => 'inbox',
+            'last_email_at'   => now(),
+            'customer_id'     => $customer?->id,
+            'owner_user_id'   => $ownerUserId,
+            'mail_account_id' => $mailAccountId,
         ]);
     }
 
-    protected function handleAttachments($message, $email)
+    protected function handleAttachments($message, $email): void
     {
         $attachments = $message->getAttachments();
-
         foreach ($attachments as $attachment) {
             $filename = $attachment->getName() ?: 'attachment';
             $safeName = preg_replace('/[^A-Za-z0-9._\-]/u', '_', $filename);
             $path = "attachments/{$email->id}/{$safeName}";
-
             Storage::disk('local')->put($path, $attachment->getContent());
-
             EmailAttachment::create([
                 'email_id'  => $email->id,
                 'filename'  => $filename,

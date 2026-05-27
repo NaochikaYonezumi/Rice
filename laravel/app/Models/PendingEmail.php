@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PendingEmail extends Model
 {
     protected $fillable = [
-        'in_reply_to_email_id', 'reply_type', 'from_address', 'to_address', 'cc', 'bcc', 'subject', 'body',
+        'in_reply_to_email_id', 'reply_type', 'mail_account_id', 'from_address', 'to_address', 'cc', 'bcc', 'subject', 'body',
         'attachment_paths', 'status', 'approved_at', 'created_by', 'memo',
         'created_by_user_id', 'approved_by_user_id', 'rejected_by_user_id',
     ];
@@ -44,6 +44,11 @@ class PendingEmail extends Model
     public function rejecter(): BelongsTo
     {
         return $this->belongsTo(User::class, 'rejected_by_user_id');
+    }
+
+    public function mailAccount(): BelongsTo
+    {
+        return $this->belongsTo(MailAccount::class);
     }
 
     public function getReplyTypeLabelAttribute(): string

@@ -1778,6 +1778,22 @@
                 <h3>ルーム</h3>
             </div>
 
+            {{-- 共有 / 個人 切替タブ (個人受信箱機能) --}}
+            <div style="display:flex;border-bottom:1px solid #e5e7eb;background:#f9fafb;">
+                <button @click="setInboxScope('shared')"
+                        :style="inboxScope === 'shared'
+                            ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
+                            : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
+                    <i class="fas fa-users" style="margin-right:4px;"></i>共有
+                </button>
+                <button @click="setInboxScope('personal')"
+                        :style="inboxScope === 'personal'
+                            ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
+                            : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
+                    <i class="fas fa-user" style="margin-right:4px;"></i>個人
+                </button>
+            </div>
+
             {{-- ルーム/スレッド 横断検索 --}}
             <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">
                 <div style="position:relative;">
@@ -4354,6 +4370,13 @@ function emailApp() {
         statusCounts: { inbox: 0, hold: 0, completed: 0, no_action: 0, pending: 0, spam: 0 },
         allStatusMode: (() => { try { return JSON.parse(localStorage.getItem('allStatusMode')) === true; } catch(_) { return false; } })(),
         pinnedOnlyMode: {{ isset($isPinnedView) && $isPinnedView ? 'true' : 'false' }},
+        // 個人受信箱 / 共有プール 切替. 既定は「共有」.
+        // 切替えると emails/search に scope パラメータが付与されてフィルタが効く.
+        // 個人 = owner_user_id = self / 共有 = owner_user_id IS NULL.
+        inboxScope: (() => {
+            const v = localStorage.getItem('inboxScope');
+            return (v === 'personal' || v === 'shared') ? v : 'shared';
+        })(),
         assigneeFilterId: localStorage.getItem('assigneeFilterId') || 'all',
         // ルームフィルター (チャットのルーム概念をメール一覧側にも反映)
         emailRoomFilterId: localStorage.getItem('emailRoomFilterId') || 'all',
@@ -6053,7 +6076,8 @@ function emailApp() {
                 all_status: this.allStatusMode ? '1' : '0',
                 is_pinned: this.pinnedOnlyMode ? '1' : '0',
                 status: this.leftTab,
-                sort_order: this.sortOrder
+                sort_order: this.sortOrder,
+                scope: this.inboxScope || 'shared',
             });
             if (this.assigneeFilterId !== 'all') params.append('assigned_user_id', this.assigneeFilterId);
             if (this.emailRoomFilterId && this.emailRoomFilterId !== 'all') params.append('chat_room_id', this.emailRoomFilterId);
@@ -6109,6 +6133,13 @@ function emailApp() {
             this.loadThreads();
         },
         setAssigneeFilter(id) { this.assigneeFilterId = id; localStorage.setItem('assigneeFilterId', id); this.loadThreads(); },
+        setInboxScope(scope) {
+            if (scope !== 'shared' && scope !== 'personal') return;
+            if (this.inboxScope === scope) return;
+            this.inboxScope = scope;
+            localStorage.setItem('inboxScope', scope);
+            this.loadThreads();
+        },
         setRoomFilter(id) {
             // 同じルームを再度クリックしたら "すべて" に切り替えるトグル動作
             if (id !== 'all' && String(this.emailRoomFilterId) === String(id)) {

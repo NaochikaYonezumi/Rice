@@ -1331,9 +1331,19 @@ class EmailController extends Controller
         $sortOrder = $request->input('sort_order', 'desc');
         // ルームフィルター: 指定 chat_room に紐付けられたスレッドのみ表示
         $chatRoomId = $request->input('chat_room_id');
+        // 個人 / 共有 切替: 'shared' (default) = owner_user_id IS NULL,
+        // 'personal' = owner_user_id = current user. 他ユーザの個人メールは見せない.
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
 
         $threads = EmailThread::with('latestEmail', 'customer', 'assignee')->withCount('threadMerges')
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
+            ->when($inboxScope === 'personal',
+                fn($q) => $q->where('owner_user_id', auth()->id()),
+                fn($q) => $q->whereNull('owner_user_id')
+            )
             // 添付ファイル管理画面の「アップロード」で作られた合成スレッドは
             // メール一覧からは除外する (添付一覧 / ルームのバンドル先には引き続き出す)
             ->where(function ($q) {
@@ -1624,6 +1634,12 @@ class EmailController extends Controller
 
     public function thread(EmailThread $thread): JsonResponse
     {
+        // 個人スレッドへのアクセス制御: 所有者本人以外はアクセス不可。
+        // owner_user_id IS NULL (共有) は全員可。
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== auth()->id()) {
+            abort(403, 'このスレッドへのアクセス権がありません。');
+        }
+
         $thread->load(['customer', 'assignee']);
 
         $threadIds = [$thread->id];

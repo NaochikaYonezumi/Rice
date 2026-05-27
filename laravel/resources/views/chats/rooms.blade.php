@@ -3,7 +3,7 @@
 
 @section('css')
 <style>
-    /* ===== Discord 風カラー ===== */
+    /* ===== ダークサイドバー配色 ===== */
     .chat-sidebar      { background-color: #2b2d31; color: #dbdee1; }
     .chat-sidebar-head { background-color: #1e1f22; border-bottom: 1px solid #1e1f22; }
     .chat-channel      { color: #b5bac1; padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 6px; margin: 1px 8px; }
@@ -25,7 +25,7 @@
     .chat-header       { background-color: #313338; border-bottom: 1px solid #1e1f22; color: #f2f3f5; }
     .chat-messages     { background-color: #313338; }
 
-    /* ===== メッセージ行 (Discord ライク) ===== */
+    /* ===== メッセージ行レイアウト ===== */
     .msg-row { padding: 4px 16px 4px 64px; position: relative; min-height: 32px; }
     .msg-row:hover { background-color: #2e3035; }
     .msg-row .avatar { position: absolute; left: 16px; top: 4px; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
@@ -72,7 +72,7 @@
 @section('content')
 <div class="flex flex-1 h-full" x-data="chatRoomsApp()">
 
-    {{-- 左: ルーム一覧 (Discord サイドバー) --}}
+    {{-- 左: ルーム一覧 --}}
     <aside class="w-60 shrink-0 chat-sidebar flex flex-col">
         <div class="chat-sidebar-head px-3 py-3 flex items-center gap-2">
             <h3 class="text-sm font-bold flex-1" style="color:#f2f3f5;">チャットルーム</h3>

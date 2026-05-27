@@ -363,9 +363,9 @@
         .content-wrapper .rounded-2xl { border-radius: 10px !important; }
     </style>
 
-    {{-- ===== ダークモード (Discord 配色ベース) ===== --}}
+    {{-- ===== ダークモード (落ち着いた濃灰ベースの配色) ===== --}}
     <style>
-        /* Discord パレット */
+        /* ダークパレット */
         html.theme-dark {
             --rd-bg:        #36393f; /* メインエリア */
             --rd-bg-2:      #2f3136; /* サイドバー */
@@ -418,7 +418,7 @@
         html.theme-dark *::-webkit-scrollbar-thumb:hover { background:#5e6166 !important; }
         html.theme-dark *::-webkit-scrollbar-track { background: transparent; }
 
-        /* 汎用: Tailwind のホワイトベース系を上書き — Discord 流に控えめに */
+        /* 汎用: Tailwind のホワイトベース系を上書き — ダークテーマで控えめに */
         html.theme-dark .bg-white { background-color: var(--rd-bg-2) !important; color: var(--rd-text); }
         html.theme-dark .bg-gray-50 { background-color: var(--rd-bg) !important; color: var(--rd-text); }
         html.theme-dark .bg-gray-100 { background-color: var(--rd-bg-hover) !important; color: var(--rd-text); }
@@ -534,7 +534,7 @@
         html.theme-dark .chat-sidebar-section { color: var(--rd-text-dim) !important; }
         html.theme-dark .chat-channel { color: var(--rd-text-mute); }
         html.theme-dark .chat-channel:hover { background: var(--rd-bg-hover); color: #fff; }
-        /* 選択中: 派手な青塗りはやめ Discord 風のニュートラル濃灰 + 白文字に */
+        /* 選択中: 派手な青塗りはやめ、ニュートラル濃灰 + 白文字に */
         html.theme-dark .chat-channel.active { background: var(--rd-bg-active) !important; color: #fff !important; }
         html.theme-dark .chat-channel .name { color: inherit; }
         html.theme-dark .chat-channel .hash { color: var(--rd-text-dim); }
@@ -597,7 +597,7 @@
         /* AdminLTE 左サイドバーの active ナビは派手な青塗りを抑える */
         html.theme-dark .nav-sidebar .nav-link.active { background-color: var(--rd-bg-active) !important; color: #fff !important; }
 
-        /* ===== Discord 風の落ち着いた配色補正 (派手なハイライト抑制) ===== */
+        /* ===== ダークテーマの落ち着いた配色補正 (派手なハイライト抑制) ===== */
         /* メンション行: 明るいオレンジを抑える */
         html.theme-dark .msg-row.is-mentioned-me {
             background: rgba(250,166,26,0.08) !important;
@@ -883,7 +883,7 @@
         html.theme-dark .bg-gray-200\/50 > button.shadow.text-green-600 { color: #6ee7a7 !important; box-shadow: inset 0 -2px 0 #6ee7a7 !important; }
         html.theme-dark .bg-gray-200\/50 > button.shadow.text-red-600   { color: #ff9a9c !important; box-shadow: inset 0 -2px 0 #ff9a9c !important; }
 
-        /* 束ねたスレッドの帯 + チップを十分暗く (Discord 風 #36393F)
+        /* 束ねたスレッドの帯 + チップを十分暗く (#36393F)
            x-show が display プロパティを書き換えるため [style*="display:flex"] では当たらない。
            .bundle-band クラスをマーカとして利用する。 */
         html.theme-dark .bundle-band {
@@ -1353,7 +1353,7 @@
             color: var(--rd-text) !important;
         }
 
-        /* C. <table> 一般化 — テーブル全体を Discord グレーへ */
+        /* C. <table> 一般化 — テーブル全体をダークグレーへ */
         html.theme-dark table {
             background-color: var(--rd-bg-2) !important;
             color: var(--rd-text) !important;
@@ -1540,7 +1540,7 @@
         }
 
         /* ============================================================
-           スレッドチャットパネル (.thread-chat-*) を Discord 系ダークへ
+           スレッドチャットパネル (.thread-chat-*) をダーク配色へ
            emails/index.blade.php のスコープ css がライト固定なので、
            dark テーマでは ! important で全部上書き
            ============================================================ */
@@ -1724,7 +1724,7 @@
         html.theme-dark [style*="background-color: #1d4ed8"],
         html.theme-dark [style*="background-color:#3b82f6"],
         html.theme-dark [style*="background-color: #3b82f6"] {
-            background-color: #5865f2 !important;   /* Discord blurple */
+            background-color: #5865f2 !important;   /* アクセント青紫 */
             color: #ffffff !important;
         }
         html.theme-dark [style*="background-color:#7c3aed"],
@@ -1768,7 +1768,7 @@
             background-color: rgba(168,85,247,0.15) !important;
             color: #d8b4fe !important;
         }
-        /* Discord red #f23f42 (削除 / 危険系 ホバー) → 控えめ赤 */
+        /* 危険系赤 #f23f42 (削除 / 危険系 ホバー) → 控えめ赤 */
         html.theme-dark [style*="background:#f23f42"],
         html.theme-dark [style*="background: #f23f42"],
         html.theme-dark [style*="background-color:#f23f42"],
@@ -1777,7 +1777,7 @@
             color: #ffffff !important;
         }
         /* 既に暗めの hex (gray-900 #111827 / gray-700 #374151 / 中間グレー / 暗赤) を
-           背景に使うパターンも、Discord ダーク基調に揃える */
+           背景に使うパターンも、ダーク基調に揃える */
         html.theme-dark [style*="background:#111827"],
         html.theme-dark [style*="background: #111827"],
         html.theme-dark [style*="background-color:#111827"],

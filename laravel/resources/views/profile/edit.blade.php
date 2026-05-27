@@ -35,7 +35,7 @@
                     <input type="radio" value="dark" x-model="theme" @change="apply()" style="margin:0;">
                     <div style="flex:1;">
                         <p style="margin:0;font-weight:700;font-size:13px;color:#111827;">
-                            <i class="fas fa-moon" style="color:#5865f2;margin-right:6px;"></i>ダーク (Discord 風)
+                            <i class="fas fa-moon" style="color:#5865f2;margin-right:6px;"></i>ダーク
                         </p>
                         <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">目に優しい暗い配色</p>
                     </div>

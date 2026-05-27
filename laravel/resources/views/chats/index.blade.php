@@ -106,7 +106,7 @@
     .chat-messages::-webkit-scrollbar-thumb { background:#d1d5db; border-radius:4px; }
     .chat-messages::-webkit-scrollbar-thumb:hover { background:#9ca3af; }
 
-    /* ===== メッセージ行 (Discord 風レイアウト — 色は当アプリのライト系) ===== */
+    /* ===== メッセージ行レイアウト (アバター左寄せ + 余白付き) ===== */
     .msg-row {
         position:relative;
         padding: 4px 16px 4px 72px;

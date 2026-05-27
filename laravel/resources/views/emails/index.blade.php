@@ -9405,7 +9405,7 @@ function emailApp() {
             }
         },
 
-        // Discord 風: Ctrl/Cmd + Enter で送信、Enter は改行 (デフォルト)
+        // チャット入力: Ctrl/Cmd + Enter で送信、Enter は改行 (デフォルト)
         onChatKeydown(e) {
             if (e.key !== 'Enter') return;
             if (this.mentionOpen && this.mentionMatches.length > 0) {

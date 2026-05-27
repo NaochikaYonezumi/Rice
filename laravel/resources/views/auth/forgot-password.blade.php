@@ -1,33 +1,72 @@
-<x-guest-layout>
-    <h2 class="text-2xl font-black text-center text-gray-900 mb-4 tracking-tighter uppercase">パスワード再設定</h2>
-
-    <div class="mb-8 text-sm text-gray-500 font-medium text-center leading-relaxed">
-        パスワードをお忘れですか？ご登録のメールアドレスを入力していただければ、新しいパスワードを選択するためのリンクをメールでお送りします。
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>パスワード再設定 | Rice</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/admin-lte@3.2/dist/css/adminlte.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body class="hold-transition login-page bg-light">
+<div class="login-box">
+    <div class="login-logo">
+        <b>Rice</b>
     </div>
-
-    <!-- Session Status -->
-    <x-auth-session-status class="mb-6" :status="session('status')" />
-
-    <form method="POST" action="{{ route('password.email') }}" class="space-y-6">
-        @csrf
-
-        <!-- Email Address -->
-        <div class="space-y-1">
-            <label for="email" class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">メールアドレス</label>
-            <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus
-                class="block w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner" />
-            <x-input-error :messages="$errors->get('email')" class="mt-2" />
+    <div class="card card-outline card-primary">
+        <div class="card-header text-center">
+            <h1 class="h4"><i class="fas fa-key mr-1"></i> パスワード再設定</h1>
         </div>
+        <div class="card-body">
+            <p class="text-sm text-muted mb-3">
+                ご登録のメールアドレスを入力してください。<br>
+                新しいパスワードを設定するためのリンクをメールでお送りします。
+            </p>
 
-        <div class="pt-4 flex flex-col gap-4">
-            <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-[0.98]">
-                パスワード再設定リンクを送信
-            </button>
-            <a class="text-center text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors" href="{{ route('login') }}">
-                ログイン画面に戻る
-            </a>
+            @if(session('status'))
+                <div class="alert alert-success text-sm">
+                    <i class="fas fa-check-circle mr-1"></i> {{ session('status') }}
+                </div>
+            @endif
+
+            @if($errors->any())
+                <div class="alert alert-danger text-sm mb-3">
+                    <i class="fas fa-exclamation-circle mr-1"></i>
+                    <ul class="mb-0 mt-1 pl-3" style="list-style: disc;">
+                        @foreach($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
+            <form action="{{ route('password.email') }}" method="post">
+                @csrf
+                <div class="input-group mb-3">
+                    <input type="email" name="email" value="{{ old('email') }}"
+                           class="form-control @error('email') is-invalid @enderror"
+                           placeholder="メールアドレス" required autofocus>
+                    <div class="input-group-append">
+                        <div class="input-group-text">
+                            <span class="fas fa-envelope"></span>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">
+                    <i class="fas fa-paper-plane mr-1"></i> 再設定リンクを送信
+                </button>
+            </form>
+
+            <hr>
+            <p class="mb-1 text-center">
+                <a href="{{ route('login') }}" class="text-sm">
+                    <i class="fas fa-arrow-left mr-1"></i> ログイン画面に戻る
+                </a>
+            </p>
         </div>
-    </form>
-</x-guest-layout>
+    </div>
+</div>
 
-</x-guest-layout>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

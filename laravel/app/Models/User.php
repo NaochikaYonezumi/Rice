@@ -136,6 +136,14 @@ class User extends Authenticatable
     }
 
     /**
+     * パスワード再設定メールを日本語のカスタム Notification で送る。
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new \App\Notifications\PasswordResetNotification($token));
+    }
+
+    /**
      * 与えられた平文コードが残っていれば消費して true。
      */
     public function consumeRecoveryCode(string $code): bool

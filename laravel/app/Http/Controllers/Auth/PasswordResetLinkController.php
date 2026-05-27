@@ -27,16 +27,27 @@ class PasswordResetLinkController extends Controller
     {
         $request->validate([
             'email' => ['required', 'email'],
+        ], [
+            'email.required' => 'メールアドレスを入力してください。',
+            'email.email'    => 'メールアドレスの形式が正しくありません。',
         ]);
 
-        // We're using the standard Laravel password reset functionality.
-        // It requires a users table and a password_reset_tokens table.
         $status = Password::sendResetLink(
             $request->only('email')
         );
 
-        return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', __($status))
-                    : back()->withErrors(['email' => __($status)]);
+        $messages = [
+            Password::RESET_LINK_SENT => 'パスワード再設定リンクをメールでお送りしました。受信箱をご確認ください。',
+            Password::INVALID_USER    => 'そのメールアドレスのアカウントが見つかりません。',
+            Password::RESET_THROTTLED => 'しばらく時間をおいてから再度お試しください。',
+        ];
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return back()->with('status', $messages[$status]);
+        }
+
+        return back()->withErrors([
+            'email' => $messages[$status] ?? __($status),
+        ])->onlyInput('email');
     }
 }

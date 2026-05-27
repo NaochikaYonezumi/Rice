@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PendingEmail extends Model
 {
     protected $fillable = [
-        'in_reply_to_email_id', 'reply_type', 'from_address', 'to_address', 'cc', 'bcc', 'subject',
+        'in_reply_to_email_id', 'reply_type', 'mail_account_id', 'from_address', 'to_address', 'cc', 'bcc', 'subject',
         // body は互換用のプレーンテキスト本文。 body_html は HTML 本文 (リッチエディタの出力)。
         // 送信時は両方を multipart に乗せる。
         'body', 'body_html',
@@ -65,6 +65,11 @@ class PendingEmail extends Model
     public function targetApprover(): BelongsTo
     {
         return $this->belongsTo(User::class, 'target_approver_user_id');
+    }
+
+    public function mailAccount(): BelongsTo
+    {
+        return $this->belongsTo(MailAccount::class);
     }
 
     public function getReplyTypeLabelAttribute(): string

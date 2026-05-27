@@ -1766,4 +1766,178 @@ class EmailFetcher
             ]);
         }
     }
+
+    // ===== 個人メールアカウント対応 (追加機能) =====
+
+    /**
+     * システム既定 (mail_settings) + 全ユーザの有効アカウントを順に取得する。
+     * 既存 fetch() の挙動には手を入れず、個人アカウント分を「追加で」取得する。
+     */
+    public function fetchAll(): int
+    {
+        $total = 0;
+        try {
+            $total += $this->fetch();
+        } catch (\Throwable $e) {
+            Log::error('[mail-fetch system] ' . $e->getMessage());
+        }
+        $accounts = \App\Models\MailAccount::query()
+            ->where('is_active', true)
+            ->whereIn('inbox_protocol', [\App\Models\MailAccount::PROTOCOL_IMAP, \App\Models\MailAccount::PROTOCOL_POP3])
+            ->get();
+        foreach ($accounts as $account) {
+            try {
+                $total += $this->fetchForAccount($account);
+            } catch (\Throwable $e) {
+                Log::error('[mail-fetch account#' . $account->id . '] ' . $e->getMessage());
+            }
+        }
+        return $total;
+    }
+
+    /**
+     * 個人アカウント (MailAccount) で取得。owner_user_id / mail_account_id でタグ付け。
+     * 既存 fetch() とは独立したシンプル版。50件取得 / message-id 重複弾き / スレッド連結のみ。
+     */
+    public function fetchForAccount(\App\Models\MailAccount $account): int
+    {
+        if (!$account->canReceive()) {
+            Log::info('[mail-fetch] account ' . $account->id . ' skipped (incomplete config)');
+            return 0;
+        }
+        if ($account->inbox_protocol === \App\Models\MailAccount::PROTOCOL_POP3) {
+            $config = [
+                'host' => $account->pop_host, 'port' => $account->pop_port,
+                'encryption' => $account->pop_encryption === 'null' ? false : $account->pop_encryption,
+                'validate_cert' => false,
+                'username' => $account->pop_username, 'password' => $account->pop_password,
+                'protocol' => 'pop3',
+            ];
+            $folderName = 'INBOX';
+        } else {
+            $config = [
+                'host' => $account->imap_host, 'port' => $account->imap_port,
+                'encryption' => $account->imap_encryption === 'null' ? false : $account->imap_encryption,
+                'validate_cert' => false,
+                'username' => $account->imap_username, 'password' => $account->imap_password,
+                'protocol' => 'imap',
+            ];
+            $folderName = $account->imap_folder ?: 'INBOX';
+        }
+
+        try {
+            $client = \Webklex\IMAP\Facades\Client::make($config);
+            $client->connect();
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('メールサーバーに接続できませんでした: ' . $e->getMessage());
+        }
+
+        $protocol = $config['protocol'];
+        $folders = $client->getFolders();
+        $imported = 0;
+
+        foreach ($folders as $folder) {
+            if ($protocol === 'imap'
+                && strcasecmp($folder->name, $folderName) !== 0
+                && strcasecmp($folder->path, $folderName) !== 0) {
+                continue;
+            }
+            $messages = $folder->messages()->all()->limit(50)->get();
+            foreach ($messages as $message) {
+                $messageId = (string) $message->getMessageId();
+                if ($messageId !== '' && Email::query()
+                    ->where('message_id', $messageId)
+                    ->where('owner_user_id', $account->user_id)
+                    ->exists()) {
+                    continue;
+                }
+
+                // スレッド: 個人スコープ内で In-Reply-To 連結 or 件名一致
+                $thread = $this->findOrCreateThreadForOwner($message, $account->user_id, $account->id);
+
+                $receivedAt = $message->getDate() ?: now();
+
+                $ccParts = [];
+                $ccList = $message->getCc();
+                if ($ccList instanceof \Webklex\PHPIMAP\Attribute) {
+                    $ccList = $ccList->all();
+                }
+                if (is_iterable($ccList)) {
+                    foreach ($ccList as $ccItem) {
+                        if (isset($ccItem->mail)) {
+                            $ccParts[] = $ccItem->mail;
+                        }
+                    }
+                }
+                $cc = implode(', ', $ccParts);
+                $inReplyTo = (string) $message->getInReplyTo();
+
+                $email = Email::create([
+                    'thread_id'       => $thread->id,
+                    'message_id'      => $messageId ?: null,
+                    'in_reply_to'     => $inReplyTo ?: null,
+                    'subject'         => $message->getSubject() ?: '(件名なし)',
+                    'from_address'    => $message->getFrom()[0]->mail ?? 'unknown@example.com',
+                    'from_name'       => $message->getFrom()[0]->personal ?? null,
+                    'to_address'      => $message->getTo()[0]->mail ?? '',
+                    'cc'              => $cc ?: null,
+                    'body_text'       => $message->getTextBody() ?: '',
+                    'body_html'       => $message->getHTMLBody() ?: '',
+                    'received_at'     => $receivedAt,
+                    'owner_user_id'   => $account->user_id,
+                    'mail_account_id' => $account->id,
+                ]);
+                $this->handleAttachments($message, $email);
+                $thread->update(['last_email_at' => $receivedAt]);
+                $imported++;
+            }
+        }
+
+        $account->forceFill(['last_fetched_at' => now()])->save();
+        return $imported;
+    }
+
+    protected function findOrCreateThreadForOwner($message, int $ownerUserId, int $accountId): EmailThread
+    {
+        $inReplyTo = (string) $message->getInReplyTo();
+        $references = [];
+        $refAttr = $message->getReferences();
+        if ($refAttr instanceof \Webklex\PHPIMAP\Attribute) {
+            $references = $refAttr->all();
+        } elseif (is_array($refAttr)) {
+            $references = $refAttr;
+        } elseif (is_string($refAttr)) {
+            $references = explode(' ', $refAttr);
+        }
+        if ($inReplyTo && !in_array($inReplyTo, $references)) {
+            $references[] = $inReplyTo;
+        }
+        $references = array_filter($references);
+
+        if (!empty($references)) {
+            $parentEmail = Email::whereIn('message_id', $references)
+                ->where('owner_user_id', $ownerUserId)
+                ->first();
+            if ($parentEmail && $parentEmail->thread) {
+                return $parentEmail->thread;
+            }
+        }
+
+        $subject = $message->getSubject() ?: '(件名なし)';
+        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
+        $thread = EmailThread::query()
+            ->where('owner_user_id', $ownerUserId)
+            ->where('subject', 'like', "%{$normalized}%")
+            ->orderByDesc('last_email_at')
+            ->first();
+        if ($thread) return $thread;
+
+        return EmailThread::create([
+            'subject'         => $normalized,
+            'status'          => 'inbox',
+            'last_email_at'   => now(),
+            'owner_user_id'   => $ownerUserId,
+            'mail_account_id' => $accountId,
+        ]);
+    }
 }

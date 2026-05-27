@@ -353,6 +353,18 @@
             {{-- ドラフトフォーム --}}
             <div class="flex-1 min-w-0 overflow-y-auto custom-scrollbar">
                 <form @submit.prevent="submitDraft()" class="p-6 space-y-4">
+                    <template x-if="sendableAccounts.length > 1">
+                        <div class="relative">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase absolute left-3 top-2 tracking-wider">送信アカウント</label>
+                            <select @change="pickSendableAccount($event.target.value)"
+                                    class="w-full pt-7 pb-2.5 px-3 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 transition-all font-semibold appearance-none">
+                                <template x-for="acc in sendableAccounts" :key="acc.id ?? 'system'">
+                                    <option :value="acc.id ?? ''" :selected="(acc.id ?? null) === form.mail_account_id"
+                                            x-text="acc.label + ' <' + acc.from_address + '>'"></option>
+                                </template>
+                            </select>
+                        </div>
+                    </template>
                     <div class="grid grid-cols-2 gap-3">
                         <div class="relative">
                             <label data-test-id="compose-from-label" class="text-[10px] font-bold text-gray-500 uppercase absolute left-3 top-2 tracking-wider">差出人 (From)</label>
@@ -1070,6 +1082,16 @@ function composeWindowApp() {
             approver_id: '',
             // 予約送信用 (タスク #112). datetime-local 入力. 空 = 即時 / 通常承認フロー.
             scheduled_for: @json($draftScheduledFor ?? ''),
+            // 個人メールアカウント機能: SMTP送信時に使うアカウント (null=システム既定)
+            mail_account_id: null,
+        },
+        // 送信に使えるアカウント一覧 (システム既定 + 自分のSMTP有効アカウント)
+        sendableAccounts: @json($sendableAccounts ?? []),
+        pickSendableAccount(idOrEmpty) {
+            const id = idOrEmpty === '' || idOrEmpty === null ? null : Number(idOrEmpty);
+            const acc = this.sendableAccounts.find(a => (a.id ?? null) === id);
+            this.form.mail_account_id = id;
+            if (acc) this.form.from = acc.from_address;
         },
         // 旧 Quill 関連 state は残骸として残さない。テキストエリアは form.body と直接バインドされる。
         selectedFiles: [],
@@ -1760,6 +1782,9 @@ function composeWindowApp() {
             fd.append('body_html', this.form.body_html || '');
             fd.append('to', this.form.to || '');
             fd.append('from_address', this.form.from || '');
+            if (this.form.mail_account_id !== null && this.form.mail_account_id !== undefined) {
+                fd.append('mail_account_id', this.form.mail_account_id);
+            }
             fd.append('cc', this.form.cc || '');
             fd.append('bcc', this.form.bcc || '');
             fd.append('subject', this.form.subject || (asDraft ? '(下書き)' : ''));

@@ -15,6 +15,8 @@ class Email extends Model
         // 個別メール単位のゴミ箱フラグ. trashed_at IS NOT NULL = ゴミ箱に入っている.
         // 30 日経過後に mail:purge-trash でハード削除される.
         'trashed_at',
+        // 個人メールアカウント機能用. owner_user_id = null は共有プール、それ以外は個人取得.
+        'owner_user_id', 'mail_account_id',
     ];
 
     protected $casts = [
@@ -44,6 +46,30 @@ class Email extends Model
     public function attachments(): HasMany
     {
         return $this->hasMany(EmailAttachment::class);
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
+    public function mailAccount(): BelongsTo
+    {
+        return $this->belongsTo(MailAccount::class);
+    }
+
+    /**
+     * 個人所有 (owner_user_id != null) のメールは所有者しか閲覧できない。
+     * システム共有 (owner_user_id == null) は誰でも閲覧可能。
+     */
+    public function scopeVisibleTo($query, ?int $userId)
+    {
+        return $query->where(function ($q) use ($userId) {
+            $q->whereNull('owner_user_id');
+            if ($userId !== null) {
+                $q->orWhere('owner_user_id', $userId);
+            }
+        });
     }
 
     public function getFromLabelAttribute(): string

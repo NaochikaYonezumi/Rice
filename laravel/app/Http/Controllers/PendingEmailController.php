@@ -255,7 +255,7 @@ class PendingEmailController extends Controller
 
         // 即時送信パス
         $settings = MailSetting::getSettings();
-        $this->applySmtpConfig($settings);
+        $this->applyEffectiveSmtpConfig($pending, $settings);
 
         try {
             DB::transaction(function () use ($pending, $settings, $fetchService) {
@@ -571,7 +571,7 @@ class PendingEmailController extends Controller
     public function executeSend(PendingEmail $pending, EmailFetcher $fetchService, ?int $approvedBy = null): void
     {
         $settings = MailSetting::getSettings();
-        $this->applySmtpConfig($settings);
+        $this->applyEffectiveSmtpConfig($pending, $settings);
 
         DB::transaction(function () use ($pending, $settings, $fetchService, $approvedBy) {
             $inReplyToId = $pending->inReplyToEmail?->message_id;
@@ -910,5 +910,40 @@ class PendingEmailController extends Controller
 
         app()->forgetInstance('mail.manager');
         app()->forgetInstance('mailer');
+    }
+
+    /**
+     * 個人 MailAccount を使って一時的に SMTP 設定を上書きする。
+     * approve / 予約送信などで pending->mail_account_id が指定されている時に呼ぶ。
+     */
+    private function applyAccountSmtpConfig(\App\Models\MailAccount $account): void
+    {
+        config([
+            'mail.mailers.smtp.host'       => $account->smtp_host,
+            'mail.mailers.smtp.port'       => $account->smtp_port,
+            'mail.mailers.smtp.encryption' => $account->smtp_encryption === 'null' ? null : $account->smtp_encryption,
+            'mail.mailers.smtp.username'   => $account->smtp_username,
+            'mail.mailers.smtp.password'   => $account->smtp_password,
+            'mail.from.address'            => $account->email_address,
+            'mail.from.name'               => $account->smtp_from_name ?: $account->name,
+        ]);
+        app()->forgetInstance('mail.manager');
+        app()->forgetInstance('mailer');
+    }
+
+    /**
+     * pending に紐づく MailAccount があり SMTP 有効ならそれを適用、そうでなければシステム設定。
+     * 共通呼び出しヘルパー。
+     */
+    private function applyEffectiveSmtpConfig(PendingEmail $pending, MailSetting $settings): void
+    {
+        if ($pending->mail_account_id) {
+            $account = \App\Models\MailAccount::find($pending->mail_account_id);
+            if ($account && $account->canSend()) {
+                $this->applyAccountSmtpConfig($account);
+                return;
+            }
+        }
+        $this->applySmtpConfig($settings);
     }
 }

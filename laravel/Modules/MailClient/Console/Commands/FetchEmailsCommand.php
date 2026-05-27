@@ -12,8 +12,8 @@ class FetchEmailsCommand extends Command
 
     public function handle(EmailFetcher $fetcher)
     {
-        $this->info('Starting email fetch...');
-        $fetcher->fetch();
-        $this->info('Email fetch completed.');
+        $this->info('Starting email fetch (system + per-user accounts)...');
+        $count = $fetcher->fetchAll();
+        $this->info("Email fetch completed: {$count} new email(s).");
     }
 }

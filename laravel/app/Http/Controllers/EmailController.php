@@ -34,6 +34,7 @@ class EmailController extends Controller
             'userAiSkills'        => $this->skillService->getSkillsForUser(auth()->user()),
             'userSummarySkills'   => $this->skillService->getSkillsForUser(auth()->user(), 'summary'),
             'userReplySkills'     => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
+            'sendableAccounts'    => $this->loadSendableAccounts(auth()->user()),
         ]);
     }
 
@@ -44,7 +45,40 @@ class EmailController extends Controller
             'userAiSkills'        => $this->skillService->getSkillsForUser(auth()->user()),
             'userSummarySkills'   => $this->skillService->getSkillsForUser(auth()->user(), 'summary'),
             'userReplySkills'     => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
+            'sendableAccounts'    => $this->loadSendableAccounts(auth()->user()),
         ]);
+    }
+
+    /**
+     * 送信に使えるアカウント一覧を返す。システム既定 + 自分が SMTP 有効化した個人アカウント。
+     */
+    protected function loadSendableAccounts(?\App\Models\User $user): array
+    {
+        $items = [];
+        try {
+            $settings = MailSetting::getSettings();
+            if (!empty($settings->smtp_from_address)) {
+                $items[] = [
+                    'id' => null,
+                    'label' => 'システム既定',
+                    'from_address' => $settings->smtp_from_address,
+                    'from_name' => $settings->smtp_from_name ?? '',
+                ];
+            }
+        } catch (\Throwable) {}
+        if ($user) {
+            try {
+                foreach ($user->mailAccounts()->where('smtp_enabled', true)->where('is_active', true)->get() as $a) {
+                    $items[] = [
+                        'id' => $a->id,
+                        'label' => $a->name,
+                        'from_address' => $a->email_address,
+                        'from_name' => $a->smtp_from_name ?: $a->name,
+                    ];
+                }
+            } catch (\Throwable) {}
+        }
+        return $items;
     }
 
     /**
@@ -68,6 +102,7 @@ class EmailController extends Controller
             'approvers'    => $this->getApproverCandidates(),
             'userAiSkills' => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
             'sendPolicy'   => $settings->send_policy ?? 'flexible',
+            'sendableAccounts' => $this->loadSendableAccounts(auth()->user()),
         ]);
     }
 
@@ -246,6 +281,7 @@ class EmailController extends Controller
             'approvers'    => $this->getApproverCandidates(),
             'userAiSkills' => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
             'sendPolicy'   => \App\Models\MailSetting::getSettings()->send_policy ?? 'flexible',
+            'sendableAccounts' => $this->loadSendableAccounts(auth()->user()),
         ]);
     }
 
@@ -368,6 +404,7 @@ class EmailController extends Controller
             'approvers'    => $this->getApproverCandidates(),
             'userAiSkills' => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
             'sendPolicy'   => $settings->send_policy ?? 'flexible',
+            'sendableAccounts' => $this->loadSendableAccounts(auth()->user()),
         ]);
     }
 
@@ -762,6 +799,7 @@ class EmailController extends Controller
             'created_by' => 'nullable|string',
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
+            'mail_account_id' => 'nullable|integer|exists:mail_accounts,id',
             'attachments.*' => 'file|max:20480', // 20MB
             // 下書き編集時に保持する既存添付のパス (storePendingAttachments で保存されたもの)
             'keep_attachments'   => 'nullable|array',
@@ -770,6 +808,14 @@ class EmailController extends Controller
             // 過去日時 / 空 は「即時送信を希望」とみなす.
             'scheduled_for' => 'nullable|date',
         ]);
+
+        // 指定された送信アカウントが自分のものか検証
+        if (!empty($validated['mail_account_id'])) {
+            $account = \App\Models\MailAccount::find($validated['mail_account_id']);
+            if (!$account || $account->user_id !== auth()->id()) {
+                abort(403, '指定された送信アカウントは利用できません。');
+            }
+        }
 
         $saveAsDraft = $request->boolean('save_as_draft');
         // 既存下書きの再保存ケース (save_as_draft=1 かつ draft_id 指定 かつ本人の下書き) は
@@ -789,6 +835,7 @@ class EmailController extends Controller
         $pending = $reuseDraft ?: new PendingEmail();
         $pending->in_reply_to_email_id = $email->id;
         $pending->reply_type = PendingEmail::TYPE_REPLY;
+        $pending->mail_account_id = $validated['mail_account_id'] ?? null;
         $pending->from_address = $validated['from_address'] ?? null;
         $pending->to_address = $validated['to'] ?? '';
         $pending->cc = $validated['cc'] ?? null;
@@ -999,6 +1046,7 @@ class EmailController extends Controller
             'created_by' => 'nullable|string',
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
+            'mail_account_id' => 'nullable|integer|exists:mail_accounts,id',
             'attachments.*' => 'file|max:20480',
             // 下書き編集時に保持する既存添付のパス
             'keep_attachments'   => 'nullable|array',
@@ -1006,6 +1054,13 @@ class EmailController extends Controller
             // 予約送信の希望日時 (ヒント). 承認時に判定 (上の reply() と同じ仕様).
             'scheduled_for' => 'nullable|date',
         ]);
+
+        if (!empty($validated['mail_account_id'])) {
+            $account = \App\Models\MailAccount::find($validated['mail_account_id']);
+            if (!$account || $account->user_id !== auth()->id()) {
+                abort(403, '指定された送信アカウントは利用できません。');
+            }
+        }
 
         $saveAsDraft = $request->boolean('save_as_draft');
         // 既存下書きの再保存ケース (save_as_draft=1 かつ draft_id 指定 かつ本人の下書き) は
@@ -1023,6 +1078,7 @@ class EmailController extends Controller
 
         $pending = $reuseDraft ?: new PendingEmail();
         $pending->reply_type = PendingEmail::TYPE_COMPOSE;
+        $pending->mail_account_id = $validated['mail_account_id'] ?? null;
         $pending->from_address = $validated['from_address'] ?? null;
         $pending->to_address = $validated['to'] ?? '';
         $pending->cc = $validated['cc'] ?? null;

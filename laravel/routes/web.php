@@ -12,6 +12,7 @@ use App\Http\Controllers\CustomerGroupController;
 use App\Http\Controllers\DocumentController;
 use App\Http\Controllers\EmailController;
 use App\Http\Controllers\InvitationAcceptController;
+use App\Http\Controllers\MailAccountController;
 use App\Http\Controllers\PendingEmailController;
 use App\Http\Controllers\ScrapeController;
 use App\Http\Controllers\SettingsController;
@@ -57,6 +58,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // メール
+    // 個人メールアカウント (IMAP/POP3/SMTP)
+    Route::get('/mail-accounts', [MailAccountController::class, 'index'])->name('mail-accounts.index');
+    Route::get('/mail-accounts/create', [MailAccountController::class, 'create'])->name('mail-accounts.create');
+    Route::post('/mail-accounts', [MailAccountController::class, 'store'])->name('mail-accounts.store');
+    Route::get('/mail-accounts/{mailAccount}/edit', [MailAccountController::class, 'edit'])->name('mail-accounts.edit');
+    Route::put('/mail-accounts/{mailAccount}', [MailAccountController::class, 'update'])->name('mail-accounts.update');
+    Route::delete('/mail-accounts/{mailAccount}', [MailAccountController::class, 'destroy'])->name('mail-accounts.destroy');
+    Route::post('/mail-accounts/{mailAccount}/fetch', [MailAccountController::class, 'fetchNow'])->name('mail-accounts.fetch');
+
     Route::get('/', [EmailController::class, 'index'])->name('emails.index');
     Route::get('/emails/pinned', [EmailController::class, 'pinned'])->name('emails.pinned');
     Route::get('/emails/search', [EmailController::class, 'search'])->name('emails.search');

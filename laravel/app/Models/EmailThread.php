@@ -31,7 +31,7 @@ class EmailThread extends Model
     public const TRASH_RETENTION_DAYS = 30;
     public const SPAM_RETENTION_DAYS  = 30;
 
-    protected $fillable = ['subject', 'ticket_number', 'last_email_at', 'tags', 'customer_id', 'status', 'is_pinned', 'assigned_user_id', 'is_manual_upload', 'trashed_at', 'spammed_at'];
+    protected $fillable = ['subject', 'ticket_number', 'last_email_at', 'tags', 'customer_id', 'status', 'is_pinned', 'assigned_user_id', 'is_manual_upload', 'trashed_at', 'spammed_at', 'owner_user_id', 'mail_account_id'];
 
     protected $casts = [
         'last_email_at' => 'datetime',
@@ -177,5 +177,28 @@ class EmailThread extends Model
     public function chatRooms(): BelongsToMany
     {
         return $this->belongsToMany(ChatRoom::class, 'chat_room_thread', 'email_thread_id', 'chat_room_id')->withTimestamps();
+    }
+
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_user_id');
+    }
+
+    public function mailAccount(): BelongsTo
+    {
+        return $this->belongsTo(MailAccount::class);
+    }
+
+    /**
+     * 個人所有スレッドは所有者にのみ閲覧可。owner_user_id IS NULL のスレッドは全員可。
+     */
+    public function scopeVisibleTo($query, ?int $userId)
+    {
+        return $query->where(function ($q) use ($userId) {
+            $q->whereNull('owner_user_id');
+            if ($userId !== null) {
+                $q->orWhere('owner_user_id', $userId);
+            }
+        });
     }
 }

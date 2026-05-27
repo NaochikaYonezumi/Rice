@@ -31,9 +31,14 @@ class ChatRoomController extends Controller
         if (!in_array($inboxScope, ['shared', 'personal'], true)) {
             $inboxScope = 'shared';
         }
-        $applyScope = function ($q) use ($inboxScope, $userId) {
+        // 個人モード時に特定アカウントへ絞る (複数アカウント切替プルダウン用)
+        $personalAccountId = $request->input('mail_account_id');
+        $applyScope = function ($q) use ($inboxScope, $userId, $personalAccountId) {
             if ($inboxScope === 'personal') {
                 $q->where('owner_user_id', $userId);
+                if ($personalAccountId) {
+                    $q->where('mail_account_id', (int) $personalAccountId);
+                }
             } else {
                 $q->whereNull('owner_user_id');
             }

@@ -35,6 +35,7 @@ class EmailController extends Controller
             'userSummarySkills'   => $this->skillService->getSkillsForUser(auth()->user(), 'summary'),
             'userReplySkills'     => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
             'sendableAccounts'    => $this->loadSendableAccounts(auth()->user()),
+            'personalMailAccounts' => $this->loadPersonalAccountsLite(auth()->user()),
         ]);
     }
 
@@ -46,7 +47,29 @@ class EmailController extends Controller
             'userSummarySkills'   => $this->skillService->getSkillsForUser(auth()->user(), 'summary'),
             'userReplySkills'     => $this->skillService->getSkillsForUser(auth()->user(), 'reply'),
             'sendableAccounts'    => $this->loadSendableAccounts(auth()->user()),
+            'personalMailAccounts' => $this->loadPersonalAccountsLite(auth()->user()),
         ]);
+    }
+
+    /**
+     * 個人メール切替プルダウン用に、自分のアカウントを最小限のフィールドだけで返す。
+     */
+    protected function loadPersonalAccountsLite(?\App\Models\User $user): array
+    {
+        if (!$user) return [];
+        try {
+            return $user->mailAccounts()
+                ->where('is_active', true)
+                ->orderBy('created_at')
+                ->get(['id', 'name', 'email_address'])
+                ->map(fn($a) => [
+                    'id' => $a->id,
+                    'name' => $a->name,
+                    'email_address' => $a->email_address,
+                ])->all();
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /**
@@ -1261,6 +1284,7 @@ class EmailController extends Controller
             $inboxScope = 'shared';
         }
 
+        $personalAccountId = $request->input('mail_account_id');
         $base = EmailThread::query()
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->where(function ($q) {
@@ -1270,6 +1294,9 @@ class EmailController extends Controller
             ->when($inboxScope === 'personal',
                 fn($q) => $q->where('owner_user_id', auth()->id()),
                 fn($q) => $q->whereNull('owner_user_id')
+            )
+            ->when($inboxScope === 'personal' && $personalAccountId,
+                fn($q) => $q->where('mail_account_id', (int) $personalAccountId)
             );
 
         if ($query !== '') {
@@ -1347,11 +1374,16 @@ class EmailController extends Controller
             $inboxScope = 'shared';
         }
 
+        // 個人モード時の特定アカウント絞り込み (複数アカウント時のプルダウン用)
+        $personalAccountId = $request->input('mail_account_id');
         $threads = EmailThread::with('latestEmail', 'customer', 'assignee')->withCount('threadMerges')
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->when($inboxScope === 'personal',
                 fn($q) => $q->where('owner_user_id', auth()->id()),
                 fn($q) => $q->whereNull('owner_user_id')
+            )
+            ->when($inboxScope === 'personal' && $personalAccountId,
+                fn($q) => $q->where('mail_account_id', (int) $personalAccountId)
             )
             // 添付ファイル管理画面の「アップロード」で作られた合成スレッドは
             // メール一覧からは除外する (添付一覧 / ルームのバンドル先には引き続き出す)
@@ -1641,7 +1673,7 @@ class EmailController extends Controller
         return response()->json($users);
     }
 
-    public function thread(EmailThread $thread): JsonResponse
+    public function thread(EmailThread $thread, Request $request): JsonResponse
     {
         // 個人スレッドへのアクセス制御: 所有者本人以外はアクセス不可。
         // owner_user_id IS NULL (共有) は全員可。

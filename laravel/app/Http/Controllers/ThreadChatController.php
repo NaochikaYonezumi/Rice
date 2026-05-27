@@ -61,6 +61,10 @@ class ThreadChatController extends Controller
             ->when($inboxScope === 'personal',
                 fn($qq) => $qq->where('owner_user_id', $myId),
                 fn($qq) => $qq->whereNull('owner_user_id')
+            )
+            // 複数アカウント切替プルダウンでの絞り込み (個人モード時のみ意味を持つ)
+            ->when($inboxScope === 'personal' && $request->input('mail_account_id'),
+                fn($qq) => $qq->where('mail_account_id', (int) $request->input('mail_account_id'))
             );
 
         if ($q !== '') {

@@ -1800,6 +1800,20 @@
                 </button>
             </div>
 
+            {{-- 個人メール時に複数アカウントあれば切替プルダウン --}}
+            <template x-if="inboxScope === 'personal' && personalMailAccounts.length >= 2">
+                <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;background:#fafafa;">
+                    <select :value="selectedPersonalAccountId === null ? 'all' : String(selectedPersonalAccountId)"
+                            @change="setPersonalAccount($event.target.value)"
+                            style="width:100%;background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:4px 8px;font-size:11px;outline:none;font-weight:600;color:#374151;">
+                        <option value="all">すべての個人アカウント</option>
+                        <template x-for="a in personalMailAccounts" :key="a.id">
+                            <option :value="String(a.id)" x-text="a.name + ' (' + a.email_address + ')'"></option>
+                        </template>
+                    </select>
+                </div>
+            </template>
+
             {{-- ルーム/スレッド 横断検索 --}}
             <div style="padding:6px 8px;border-bottom:1px solid #f3f4f6;">
                 <div style="position:relative;">
@@ -4386,6 +4400,21 @@ function emailApp() {
         // 共有メール / 個人メール タブ横の inbox 新着バッジ件数
         sharedInboxCount: 0,
         personalInboxCount: 0,
+        // 個人メールアカウント一覧 (複数あればプルダウンで切替) + 選択中アカウント ID
+        personalMailAccounts: @json($personalMailAccounts ?? []),
+        selectedPersonalAccountId: (() => {
+            const v = localStorage.getItem('selectedPersonalAccountId');
+            return v && v !== 'all' ? Number(v) : null;
+        })(),
+        setPersonalAccount(idOrNull) {
+            const id = idOrNull && idOrNull !== 'all' ? Number(idOrNull) : null;
+            this.selectedPersonalAccountId = id;
+            try { localStorage.setItem('selectedPersonalAccountId', id ? String(id) : 'all'); } catch (_) {}
+            this.loadThreads();
+            this.loadEmailRooms();
+            this.loadSidebarThreads();
+            this.loadInboxScopeBadges();
+        },
         assigneeFilterId: localStorage.getItem('assigneeFilterId') || 'all',
         // ルームフィルター (チャットのルーム概念をメール一覧側にも反映)
         emailRoomFilterId: localStorage.getItem('emailRoomFilterId') || 'all',
@@ -6092,6 +6121,10 @@ function emailApp() {
             if (this.assigneeFilterId !== 'all') params.append('assigned_user_id', this.assigneeFilterId);
             if (this.emailRoomFilterId && this.emailRoomFilterId !== 'all') params.append('chat_room_id', this.emailRoomFilterId);
             if (this.searchQuery && this.searchQuery.trim()) params.append('q', this.searchQuery.trim());
+            // 個人モードでアカウントが選択されていれば絞り込み
+            if ((this.inboxScope || 'shared') === 'personal' && this.selectedPersonalAccountId) {
+                params.append('mail_account_id', String(this.selectedPersonalAccountId));
+            }
 
             try {
                 const res = await fetch('/emails/search?' + params.toString(), { headers: { 'Accept': 'application/json' } });
@@ -6119,6 +6152,9 @@ function emailApp() {
             if (this.assigneeFilterId !== 'all') params.append('assigned_user_id', this.assigneeFilterId);
             if (this.emailRoomFilterId && this.emailRoomFilterId !== 'all') params.append('chat_room_id', this.emailRoomFilterId);
             if (this.searchQuery && this.searchQuery.trim()) params.append('q', this.searchQuery.trim());
+            if ((this.inboxScope || 'shared') === 'personal' && this.selectedPersonalAccountId) {
+                params.append('mail_account_id', String(this.selectedPersonalAccountId));
+            }
             try {
                 const res = await fetch('/emails/status-counts?' + params.toString(), { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) return;
@@ -6322,7 +6358,11 @@ function emailApp() {
                 // show_hidden=1 で非表示スレッドも含めて取得 (クライアント側でフィルタ)
                 // scope を渡してサイドバーも個人/共有で切り替える
                 const scope = this.inboxScope || 'shared';
-                const r = await fetch('/chats/threads?show_hidden=1&scope=' + encodeURIComponent(scope), { headers: { Accept:'application/json' } });
+                let url = '/chats/threads?show_hidden=1&scope=' + encodeURIComponent(scope);
+                if (scope === 'personal' && this.selectedPersonalAccountId) {
+                    url += '&mail_account_id=' + this.selectedPersonalAccountId;
+                }
+                const r = await fetch(url, { headers: { Accept:'application/json' } });
                 if (!r.ok) return;
                 const d = await r.json();
                 this.sidebarThreadList = (d.threads || []).map(t => ({
@@ -7295,7 +7335,11 @@ function emailApp() {
         async loadEmailRooms() {
             try {
                 const scope = this.inboxScope || 'shared';
-                const res = await fetch('/api/chat-rooms?scope=' + encodeURIComponent(scope), { headers: { 'Accept': 'application/json' } });
+                let url = '/api/chat-rooms?scope=' + encodeURIComponent(scope);
+                if (scope === 'personal' && this.selectedPersonalAccountId) {
+                    url += '&mail_account_id=' + this.selectedPersonalAccountId;
+                }
+                const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) return;
                 const d = await res.json();
                 const rooms = d.rooms || [];

@@ -1784,13 +1784,13 @@
                         :style="inboxScope === 'shared'
                             ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
                             : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
-                    <i class="fas fa-users" style="margin-right:4px;"></i>共有
+                    <i class="fas fa-users" style="margin-right:4px;"></i>共有メール
                 </button>
                 <button @click="setInboxScope('personal')"
                         :style="inboxScope === 'personal'
                             ? 'flex:1;padding:8px 4px;font-size:11px;font-weight:700;border:none;background:#fff;color:#2563eb;border-bottom:2px solid #2563eb;cursor:pointer;'
                             : 'flex:1;padding:8px 4px;font-size:11px;font-weight:600;border:none;background:transparent;color:#6b7280;border-bottom:2px solid transparent;cursor:pointer;'">
-                    <i class="fas fa-user" style="margin-right:4px;"></i>個人
+                    <i class="fas fa-user" style="margin-right:4px;"></i>個人メール
                 </button>
             </div>
 
@@ -6139,6 +6139,8 @@ function emailApp() {
             this.inboxScope = scope;
             localStorage.setItem('inboxScope', scope);
             this.loadThreads();
+            // ルーム件数バッジも scope 連動で再集計したいので一緒にリロード
+            this.loadEmailRooms();
         },
         setRoomFilter(id) {
             // 同じルームを再度クリックしたら "すべて" に切り替えるトグル動作
@@ -7246,7 +7248,8 @@ function emailApp() {
         },
         async loadEmailRooms() {
             try {
-                const res = await fetch('/api/chat-rooms', { headers: { 'Accept': 'application/json' } });
+                const scope = this.inboxScope || 'shared';
+                const res = await fetch('/api/chat-rooms?scope=' + encodeURIComponent(scope), { headers: { 'Accept': 'application/json' } });
                 if (!res.ok) return;
                 const d = await res.json();
                 const rooms = d.rooms || [];

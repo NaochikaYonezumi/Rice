@@ -21,9 +21,24 @@ class ChatRoomController extends Controller
         return view('rooms.index');
     }
 
-    public function index(): JsonResponse
+    public function index(\Illuminate\Http\Request $request): JsonResponse
     {
         $userId = auth()->id();
+        // 個人 / 共有 切替: バッジカウントを scope に応じて絞り込む。
+        // shared (default): owner_user_id IS NULL のスレッドのみカウント
+        // personal: owner_user_id = 自分 のスレッドのみカウント
+        $inboxScope = $request->input('scope', 'shared');
+        if (!in_array($inboxScope, ['shared', 'personal'], true)) {
+            $inboxScope = 'shared';
+        }
+        $applyScope = function ($q) use ($inboxScope, $userId) {
+            if ($inboxScope === 'personal') {
+                $q->where('owner_user_id', $userId);
+            } else {
+                $q->whereNull('owner_user_id');
+            }
+            return $q;
+        };
         // bundled_thread_ids も含めて返す。クライアントの「ルーム未設定」フィルタが
         // 「全ルームのバンドル ID 集合」を必要とするため。
         $roomsRaw = ChatRoom::visibleTo($userId)
@@ -61,6 +76,7 @@ class ChatRoomController extends Controller
                 ->where(function ($q) {
                     $q->where('is_manual_upload', false)->orWhereNull('is_manual_upload');
                 })
+                ->tap($applyScope)
                 ->get(['id', 'status']);
             foreach ($rows as $r) {
                 $threadStatusMap[(int) $r->id] = (string) $r->status;
@@ -97,6 +113,7 @@ class ChatRoomController extends Controller
             ->where(function ($q) {
                 $q->where('is_manual_upload', false)->orWhereNull('is_manual_upload');
             })
+            ->tap($applyScope)
             ->get(['id', 'status']);
         $inboxThreadIdsGlobal   = [];
         $globalInboxCount       = 0;

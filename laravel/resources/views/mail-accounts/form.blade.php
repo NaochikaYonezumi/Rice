@@ -29,15 +29,30 @@
                       this.testResult = null;
                       try {
                           const fd = new FormData(document.getElementById('mailAccountForm'));
+                          // Alpine の reactive state を信頼ソースにして上書き
+                          // (hidden + checkbox の二重 name で smtp_enabled が hidden 側の '0' に
+                          //  なってしまうケースを潰す)
+                          fd.set('inbox_protocol', this.inbox);
+                          fd.set('smtp_enabled', this.smtp ? '1' : '0');
+                          fd.set('is_active', this.active ? '1' : '0');
                           @if($account->exists)
-                            fd.append('mail_account_id', '{{ $account->id }}');
+                            fd.set('mail_account_id', '{{ $account->id }}');
                           @endif
                           const res = await fetch('{{ route('mail-accounts.test') }}', {
                               method: 'POST',
                               headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                               body: fd,
                           });
-                          this.testResult = await res.json();
+                          const body = await res.json();
+                          // 422 (validation エラー) の場合は本文を error 表示にまとめる
+                          if (!res.ok) {
+                              const msgs = body && body.errors
+                                  ? Object.values(body.errors).flat().join(' / ')
+                                  : (body && body.message) || 'HTTP ' + res.status;
+                              this.testResult = { error: msgs };
+                          } else {
+                              this.testResult = body;
+                          }
                       } catch (e) {
                           this.testResult = { error: e.message };
                       } finally {

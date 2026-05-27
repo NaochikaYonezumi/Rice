@@ -211,6 +211,17 @@
                             <label for="compose-file-input" class="cursor-pointer bg-gray-50 hover:bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-xs font-bold border border-gray-200 transition-all flex items-center gap-2">
                                 <i class="fas fa-paperclip"></i> 追加 (最大20MB)
                             </label>
+                            {{-- 下書き編集モードで引き継いだ既存添付 (削除可) --}}
+                            <template x-for="(att, i) in existingAttachments" :key="att.path">
+                                <span class="bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-emerald-200"
+                                      :title="'既存の添付 (下書きから引き継ぎ)'">
+                                    <i class="fas fa-paperclip text-emerald-500 text-[10px]"></i>
+                                    <span x-text="att.filename" class="max-w-[220px] truncate"></span>
+                                    <span class="text-emerald-400" x-text="att.size ? formatBytes(att.size) : ''"></span>
+                                    <button type="button" @click="removeExistingAttachment(i)" class="hover:text-red-500" title="この添付を削除"><i class="fas fa-times-circle"></i></button>
+                                </span>
+                            </template>
+                            {{-- 新規アップロード分 --}}
                             <template x-for="(f, i) in selectedFiles" :key="i">
                                 <span class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 border border-blue-100">
                                     <span x-text="f.name" class="max-w-[220px] truncate"></span>
@@ -345,7 +356,7 @@
         <footer class="shrink-0 px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
             <div class="text-xs text-gray-500 flex items-center gap-3">
                 <span x-show="lastSavedLabel"><i class="fas fa-save text-gray-400 mr-1"></i><span x-text="lastSavedLabel"></span></span>
-                <button type="button" @click="saveDraftToServer()" :disabled="savingDraft"
+                <button type="button" @click="saveDraftAndClose()" :disabled="savingDraft"
                         class="text-blue-600 hover:text-blue-800 font-bold underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
                     <span x-show="!savingDraft">下書き保存</span>
                     <span x-show="savingDraft">保存中...</span>
@@ -590,6 +601,8 @@ function composeWindowApp() {
         // 下書き編集モード用
         draftId: @json($draftId ?? null),
         draftMemo: @json($draftMemo ?? null),
+        // 下書きから引き継いだ既存添付 (削除すると keep_attachments[] から外れて送信時に削除される)
+        existingAttachments: @json($draftAttachments ?? []),
         rejectionInfo: @json($rejectionInfo ?? null),
         form: {
             from:    @json($defaultFrom),
@@ -760,6 +773,11 @@ function composeWindowApp() {
         },
         removeSelectedFile(i) { this.selectedFiles.splice(i, 1); },
 
+        // 既存添付 (下書きから引き継いだファイル) の削除
+        // 配列から外しておくと buildFormData の keep_attachments[] に含まれなくなり、
+        // バックエンドで新 pending に引き継がれなくなる
+        removeExistingAttachment(i) { this.existingAttachments.splice(i, 1); },
+
         toggleAi() {
             this.aiPanelOpen = !this.aiPanelOpen;
         },
@@ -823,6 +841,11 @@ function composeWindowApp() {
             if (this.form.approver_id) fd.append('approver_id', this.form.approver_id);
             if (this.draftId) fd.append('draft_id', this.draftId);
             if (asDraft) fd.append('save_as_draft', '1');
+            // 下書き編集時、削除されずに残っている既存添付のパスを送信
+            // (UI で削除されたものは existingAttachments から外れているので含まれない。
+            //  全て削除した場合は keep_attachments を送らないが、backend は draft_id を見て
+            //  「keep_attachments が空 = 全削除」と解釈する)
+            this.existingAttachments.forEach(att => fd.append('keep_attachments[]', att.path));
             this.selectedFiles.forEach(f => fd.append('attachments[]', f));
             return fd;
         },
@@ -934,6 +957,12 @@ function composeWindowApp() {
                 this.selectedFiles = [];
                 this.closeConfirmOpen = false;
                 this.sentCompleted = true; // beforeunload 抑止
+                // メール一覧 (opener) に下書き保存完了を通知してから閉じる
+                try {
+                    if (window.opener && !window.opener.closed) {
+                        window.opener.postMessage({ type: 'rice-mail-draft-saved', mode: this.mode }, window.location.origin);
+                    }
+                } catch (_) {}
                 try { window.close(); } catch(_) {}
             } catch (_) {
                 // エラー時は閉じない

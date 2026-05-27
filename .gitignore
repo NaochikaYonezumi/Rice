@@ -1,0 +1,15 @@
+# Phase 6 backups (DB dumps + volume archives, can be GB-scale)
+backups/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temp files
+*.bak
+*.bak[0-9]
+*.tmp
+.pr-body.json
+.pr-response.json

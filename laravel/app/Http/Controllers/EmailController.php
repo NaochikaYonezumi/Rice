@@ -389,6 +389,9 @@ class EmailController extends Controller
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
             'attachments.*' => 'file|max:20480', // 20MB
+            // 下書き編集時に保持する既存添付のパス (storePendingAttachments で保存されたもの)
+            'keep_attachments'   => 'nullable|array',
+            'keep_attachments.*' => 'string|max:512',
         ]);
 
         $pending = new PendingEmail();
@@ -406,7 +409,8 @@ class EmailController extends Controller
         $pending->created_by_user_id = auth()->id();
         $pending->target_approver_user_id = $validated['approver_id'] ?? null;
 
-        $pending->attachment_paths = $this->storePendingAttachments($request);
+        // 既存添付 (下書き編集元) + 新規アップロードファイルを統合
+        $pending->attachment_paths = $this->resolvePendingAttachments($request, $validated['draft_id'] ?? null);
         $pending->save();
 
         if (!$saveAsDraft) {
@@ -434,6 +438,9 @@ class EmailController extends Controller
             'approver_id' => 'nullable|integer|exists:users,id',
             'draft_id' => 'nullable|integer|exists:pending_emails,id',
             'attachments.*' => 'file|max:20480',
+            // 下書き編集時に保持する既存添付のパス
+            'keep_attachments'   => 'nullable|array',
+            'keep_attachments.*' => 'string|max:512',
         ]);
 
         $pending = new PendingEmail();
@@ -450,7 +457,8 @@ class EmailController extends Controller
         $pending->created_by_user_id = auth()->id();
         $pending->target_approver_user_id = $validated['approver_id'] ?? null;
 
-        $pending->attachment_paths = $this->storePendingAttachments($request);
+        // 既存添付 (下書き編集元) + 新規アップロードファイルを統合
+        $pending->attachment_paths = $this->resolvePendingAttachments($request, $validated['draft_id'] ?? null);
         $pending->save();
 
         if (!$saveAsDraft) {
@@ -473,7 +481,89 @@ class EmailController extends Controller
         if (!$draft) return;
         if ($draft->status !== PendingEmail::STATUS_DRAFT) return;
         if ($draft->created_by_user_id !== auth()->id()) return;
+
+        // 却下からの再生成下書きの場合、元の却下済レコードも合わせて削除し、
+        // 却下済一覧に重複したレコードが残らないようにする。
+        $sourceRejectedId = $draft->source_rejected_id ?? null;
+        if ($sourceRejectedId) {
+            $sourceRejected = PendingEmail::find($sourceRejectedId);
+            if ($sourceRejected
+                && $sourceRejected->status === PendingEmail::STATUS_REJECTED
+                && $sourceRejected->created_by_user_id === auth()->id()
+            ) {
+                $sourceRejected->delete();
+            }
+        }
+
         $draft->delete();
+    }
+
+    /**
+     * 下書き編集時の既存添付 (draft_id 指定) + 新規アップロードを統合し、
+     * 新 pending_email の attachment_paths として使う配列を返す。
+     *
+     * - $draftId が指定されている場合、その下書きの既存添付のうち
+     *   keep_attachments[] に含まれるパスだけを新 pending に引き継ぐ。
+     *   UI 側で「削除」されたものはこのリストから外れているため、ストレージからも削除。
+     * - 新規アップロードファイルは storePendingAttachments で保存して結合。
+     */
+    private function resolvePendingAttachments(Request $request, ?int $draftId): array
+    {
+        $merged = [];
+
+        // (1) 既存添付の引き継ぎ
+        if ($draftId) {
+            $sourceDraft = PendingEmail::find($draftId);
+            if ($sourceDraft
+                && $sourceDraft->status === PendingEmail::STATUS_DRAFT
+                && $sourceDraft->created_by_user_id === auth()->id()
+                && is_array($sourceDraft->attachment_paths)
+            ) {
+                $keep = array_filter((array) $request->input('keep_attachments', []), fn($v) => is_string($v) && $v !== '');
+                foreach ($sourceDraft->attachment_paths as $att) {
+                    $info = $this->normalizeAttachment($att);
+                    if (!$info) continue;
+                    if (!in_array($info['path'], $keep, true)) {
+                        // UI で削除された (keep に含まれない) 添付はストレージからも削除
+                        try { Storage::disk('private')->delete($info['path']); } catch (\Throwable $e) { /* noop */ }
+                        continue;
+                    }
+                    $merged[] = $info;
+                }
+            }
+        }
+
+        // (2) 新規アップロード
+        foreach ($this->storePendingAttachments($request) as $att) {
+            $merged[] = $att;
+        }
+
+        return $merged;
+    }
+
+    /**
+     * attachment_paths の各要素を {path, filename, mime_type, size} 形式に整える。
+     * 旧形式 (path のみの文字列等) にも耐性を持たせる。
+     */
+    private function normalizeAttachment($att): ?array
+    {
+        if (is_string($att)) {
+            return [
+                'path'      => $att,
+                'filename'  => basename($att),
+                'mime_type' => 'application/octet-stream',
+                'size'      => 0,
+            ];
+        }
+        if (is_array($att) && isset($att['path'])) {
+            return [
+                'path'      => (string) $att['path'],
+                'filename'  => (string) ($att['filename'] ?? basename($att['path'])),
+                'mime_type' => (string) ($att['mime_type'] ?? 'application/octet-stream'),
+                'size'      => (int) ($att['size'] ?? 0),
+            ];
+        }
+        return null;
     }
 
     /**
@@ -645,7 +735,7 @@ class EmailController extends Controller
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
         $validated = $request->validate([
-            'status' => 'required|string|in:inbox,hold,completed,pending',
+            'status' => 'required|string|in:inbox,hold,completed,no_action,pending',
         ]);
         $thread->update(['status' => $validated['status']]);
         return response()->json(['status' => 'ok']);

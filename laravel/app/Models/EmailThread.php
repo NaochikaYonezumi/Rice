@@ -11,6 +11,7 @@ class EmailThread extends Model
     public const STATUS_INBOX = 'inbox';
     public const STATUS_HOLD = 'hold';
     public const STATUS_DONE = 'completed';
+    public const STATUS_NO_ACTION = 'no_action';
     public const STATUS_AWAITING_APPROVAL = 'pending';
 
     protected $fillable = ['subject', 'ticket_number', 'last_email_at', 'tags', 'customer_id', 'status', 'is_pinned', 'assigned_user_id'];

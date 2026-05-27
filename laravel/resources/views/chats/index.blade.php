@@ -63,49 +63,45 @@
 
 <div class="chats-root flex bg-gray-50" x-data="threadChatApp()" x-init="init()" x-cloak>
 
-    {{-- 左ペイン: チャットがあるスレッドのリスト --}}
-    <aside class="w-[340px] shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden min-h-0"
-           style="max-width:340px;">
+    {{-- 左ペイン: チャットがあるスレッドのリスト (メール一覧と同じパネルスタイル) --}}
+    <aside class="flex flex-col flex-shrink-0 overflow-hidden bg-white border-r border-gray-200 relative z-20 shadow-sm min-h-0"
+           :style="'width:' + panelWidth + 'px'">
 
-        {{-- ヘッダー --}}
-        <div class="shrink-0 px-5 py-4 border-b border-gray-100 bg-white">
-            <div class="flex items-center justify-between mb-3">
-                <h2 class="text-base font-extrabold text-gray-900 inline-flex items-center gap-2">
-                    <i class="fas fa-comments text-emerald-500"></i> チャット一覧
+        {{-- ヘッダー (タイトル + 更新 + 検索) --}}
+        <div class="shrink-0 px-4 py-3 border-b border-gray-200 bg-white flex flex-col gap-2 relative">
+            <div class="flex items-center justify-between gap-2">
+                <h2 class="text-sm font-extrabold text-gray-900 inline-flex items-center gap-2 truncate">
+                    <i class="fas fa-comments text-emerald-500 text-xs"></i> チャット一覧
                 </h2>
                 <button @click="load()"
-                    class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-50 transition-all"
+                    class="h-9 w-9 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-50 transition-all"
                     :class="{ 'animate-spin text-emerald-600': loading }"
-                    title="更新">
-                    <i class="fas fa-sync-alt text-xs"></i>
+                    title="一覧を更新">
+                    <i class="fas fa-sync-alt text-sm"></i>
                 </button>
             </div>
-
-            {{-- 検索 --}}
-            <div class="relative mb-2">
+            <div class="relative">
                 <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
                 <input type="text" x-model="searchQuery" @input.debounce.300ms="load()"
                        placeholder="件名・本文で検索..."
                        class="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-300">
             </div>
+        </div>
 
-            {{-- フィルタタブ --}}
-            <div class="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+        {{-- フィルタタブ (メール一覧と同じスタイル) --}}
+        <div class="shrink-0 px-3 py-2 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
+            <div class="flex items-center gap-1 bg-gray-200/50 p-1 rounded-xl shadow-inner flex-1 overflow-hidden">
                 <button @click="setFilter('all')"
-                        :class="filter === 'all' ? 'bg-white shadow-sm text-emerald-700' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1">
-                    <i class="fas fa-list text-[10px]"></i> すべて
-                </button>
+                        :class="filter === 'all' ? 'bg-white shadow text-emerald-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">すべて</button>
                 <button @click="setFilter('mentioned')"
-                        :class="filter === 'mentioned' ? 'bg-white shadow-sm text-amber-700' : 'text-gray-500 hover:text-gray-800'"
-                        class="flex-1 py-1 rounded-md text-[11px] font-bold transition-all inline-flex items-center justify-center gap-1">
-                    <i class="fas fa-at text-[10px]"></i> 自分宛
-                </button>
+                        :class="filter === 'mentioned' ? 'bg-white shadow text-amber-600' : 'text-gray-500 hover:text-gray-800'"
+                        class="flex-1 py-1.5 rounded-lg text-[10px] font-black transition-all truncate">自分宛</button>
             </div>
         </div>
 
-        {{-- スレッドリスト --}}
-        <div class="flex-1 overflow-y-auto custom-scrollbar">
+        {{-- スレッドリスト (メール一覧と同じフラット行スタイル) --}}
+        <div class="flex-1 min-h-0 overflow-y-auto bg-white custom-scrollbar relative">
             <template x-if="loading">
                 <div class="flex items-center justify-center py-12 text-emerald-300">
                     <i class="fas fa-circle-notch fa-spin fa-lg"></i>
@@ -123,23 +119,26 @@
                 </div>
             </template>
             <template x-for="t in threads" :key="t.id">
-                <button type="button" @click="selectThread(t)"
-                        :class="selectedThreadId === t.id ? 'bg-emerald-50 border-l-4 border-l-emerald-500' : 'hover:bg-gray-50 border-l-4 border-l-transparent'"
-                        class="w-full text-left px-4 py-3 border-b border-gray-100 transition-all overflow-hidden">
-                    <div class="flex items-center justify-between gap-2 mb-1 min-w-0">
-                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                <div @click="selectThread(t)"
+                     class="group/row w-full cursor-pointer border-b border-gray-100 hover:bg-blue-50 transition-all duration-200 relative"
+                     :class="selectedThreadId === t.id ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : ''">
+                    <div class="px-5 py-2 flex flex-col justify-center gap-1">
+                        {{-- 1 行目: 件名 + 日時 --}}
+                        <div class="flex items-center gap-2 min-w-0">
                             <i x-show="t.is_pinned" class="fas fa-thumbtack text-amber-500 text-[10px] shrink-0"></i>
-                            <span class="text-sm font-bold text-gray-900 truncate min-w-0" x-text="t.subject"></span>
+                            <span class="text-[12px] font-bold text-gray-900 truncate flex-1" x-text="t.subject"></span>
+                            <span class="text-[10px] text-gray-400 font-medium shrink-0 whitespace-nowrap" x-text="t.last_comment?.created_at"></span>
                         </div>
-                        <span class="text-[10px] text-gray-400 font-medium shrink-0 whitespace-nowrap" x-text="t.last_comment?.created_at"></span>
-                    </div>
-                    <div class="flex items-start gap-1.5 mt-1 min-w-0">
-                        <span class="text-[10px] font-bold shrink-0 max-w-[80px] truncate"
-                              :class="t.last_comment?.is_mine ? 'text-emerald-600' : 'text-gray-500'"
-                              x-text="(t.last_comment?.author || '') + ':'"></span>
-                        <span class="text-[11px] text-gray-600 clamp-2 leading-snug min-w-0 flex-1" x-text="t.last_comment?.preview"></span>
-                    </div>
-                    <div class="flex items-center gap-1.5 mt-2 flex-wrap min-w-0">
+                        {{-- 2 行目: 最新コメント著者 + プレビュー --}}
+                        <div class="text-[11px] text-gray-700 font-medium leading-snug break-words flex items-start gap-1.5"
+                             style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                            <span class="text-[10px] font-bold shrink-0 max-w-[80px] truncate"
+                                  :class="t.last_comment?.is_mine ? 'text-emerald-600' : 'text-gray-500'"
+                                  x-text="(t.last_comment?.author || '') + ':'"></span>
+                            <span class="text-gray-600 min-w-0 flex-1" x-text="t.last_comment?.preview"></span>
+                        </div>
+                        {{-- 3 行目: メタデータ (メンション数 / コメント数 / 担当者) --}}
+                        <div class="flex items-center gap-1.5 flex-wrap min-h-[18px]">
                         <template x-if="t.mention_count > 0">
                             <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 shrink-0">
                                 <i class="fas fa-at"></i><span x-text="t.mention_count"></span>
@@ -149,14 +148,21 @@
                             <i class="fas fa-comment-dots"></i><span x-text="t.comment_count"></span>
                         </span>
                         <template x-if="t.assignee">
-                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 max-w-[140px] truncate">
-                                <i class="fas fa-user shrink-0"></i><span class="truncate" x-text="t.assignee.name"></span>
+                            <span class="bg-gray-100 px-2 py-0.5 rounded text-[9px] font-black text-gray-600 border border-gray-200 inline-flex items-center gap-1 shadow-sm max-w-[140px]">
+                                <i class="fas fa-user-circle text-gray-400 text-[8px]"></i>
+                                <span class="truncate" x-text="t.assignee.name"></span>
                             </span>
                         </template>
+                        </div>
                     </div>
-                </button>
+                    {{-- 選択中の左ライン --}}
+                    <div x-show="selectedThreadId === t.id" class="absolute left-0 top-0 w-1.5 h-full bg-blue-600"></div>
+                </div>
             </template>
         </div>
+        {{-- ドラッグリサイズハンドル (メール一覧と同じ) --}}
+        <div class="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-500 z-50"
+             @mousedown.prevent="startResizePanel($event)"></div>
     </aside>
 
     {{-- 右ペイン: 選択スレッドのチャット --}}
@@ -175,6 +181,19 @@
         {{-- スレッドヘッダー --}}
         <div x-show="selectedThreadId"
              class="shrink-0 px-5 py-3 bg-white border-b border-gray-200 flex items-center justify-between gap-3 min-w-0">
+            {{-- 前/次のスレッドナビゲーション (メール一覧と同じパターン) --}}
+            <div class="flex items-center gap-0.5 shrink-0 border-r border-gray-100 pr-3 mr-1">
+                <button @click="goToPrevThread()" title="前のスレッド"
+                        :disabled="!hasPrevThread"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                    <i class="fas fa-chevron-up text-xs"></i>
+                </button>
+                <button @click="goToNextThread()" title="次のスレッド"
+                        :disabled="!hasNextThread"
+                        class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-gray-400 hover:text-emerald-600 hover:bg-gray-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">
+                    <i class="fas fa-chevron-down text-xs"></i>
+                </button>
+            </div>
             <div class="min-w-0 flex-1 overflow-hidden">
                 <h2 class="text-base font-extrabold text-gray-900 truncate" x-text="selectedThread?.subject || ''"></h2>
                 <div class="flex items-center gap-2 mt-1 flex-wrap min-w-0">
@@ -195,10 +214,11 @@
                     </span>
                 </div>
             </div>
-            <a :href="`/?thread=${selectedThreadId}`" target="_blank"
-               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-all shrink-0"
-               title="受信トレイで開く">
-                <i class="fas fa-external-link-alt"></i><span class="hidden sm:inline">メールを開く</span>
+            {{-- 元メールへのリンク (新規タブで開いて、現在のチャット画面はそのまま残す) --}}
+            <a :href="`/?thread=${selectedThreadId}`" target="_blank" rel="noopener"
+               class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-all shrink-0 shadow-sm"
+               title="このチャットの元メールスレッドを新規タブで開く">
+                <i class="fas fa-envelope"></i><span>元メールを開く</span><i class="fas fa-external-link-alt text-[10px] opacity-75"></i>
             </a>
         </div>
 
@@ -224,7 +244,8 @@
             {{-- メッセージリスト --}}
             <div class="space-y-3" x-show="!chatLoading && chatComments.length > 0">
                 <template x-for="c in chatComments" :key="c.id">
-                    <div class="flex" :class="c.is_author ? 'justify-end' : 'justify-start'">
+                    <div class="flex" :class="c.is_author ? 'justify-end' : 'justify-start'"
+                         :id="'comment-' + c.id">
                         <div class="max-w-[75%] group">
                             <div class="flex items-center gap-2 mb-1"
                                  :class="c.is_author ? 'justify-end' : 'justify-start'">
@@ -241,6 +262,7 @@
                                  :style="c.is_author
                                     ? 'background-color:#10b981;color:#ffffff;'
                                     : 'background-color:#ffffff;color:#1f2937;border:1px solid #e5e7eb;'"
+                                 :class="highlightedCommentId === c.id ? 'ring-4 ring-amber-300 ring-offset-2 ring-offset-emerald-50' : ''"
                                  title="クリックで詳細を表示"
                                  x-html="renderMentions(c.content, c.is_author)"></div>
                             <div class="mt-1" :class="c.is_author ? 'text-right' : 'text-left'" x-show="c.is_author">
@@ -406,12 +428,13 @@
                         <i class="fas" :class="detailCopied ? 'fa-check' : 'fa-copy'"></i>
                         <span x-text="detailCopied ? 'コピーしました' : '本文をコピー'"></span>
                     </button>
-                    <a :href="`/?thread=${selectedThreadId}`" target="_blank"
-                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                       style="background-color:#ffffff;color:#374151;border:1px solid #d1d5db;"
-                       onmouseover="this.style.backgroundColor='#f3f4f6';"
-                       onmouseout="this.style.backgroundColor='#ffffff';">
-                        <i class="fas fa-external-link-alt"></i> メールを開く
+                    <a :href="`/?thread=${selectedThreadId}`" target="_blank" rel="noopener"
+                       class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors text-white"
+                       style="background-color:#2563eb;"
+                       onmouseover="this.style.backgroundColor='#1d4ed8';"
+                       onmouseout="this.style.backgroundColor='#2563eb';"
+                       title="このチャットの元メールスレッドを新規タブで開く">
+                        <i class="fas fa-envelope"></i> 元メールを開く <i class="fas fa-external-link-alt text-[10px] opacity-75"></i>
                     </a>
                 </div>
                 <div class="flex items-center gap-2">
@@ -467,6 +490,14 @@ function threadChatApp() {
         detail: null,
         detailCopied: false,
 
+        // 通知ベルからの遷移でハイライトするコメント ID
+        highlightedCommentId: null,
+        // 次の loadComments() 完了後にスクロール対象とするコメント ID (一時保持)
+        pendingScrollCommentId: null,
+
+        // 左パネル幅 (ドラッグで調整可能、localStorage に永続化)
+        panelWidth: parseInt(localStorage.getItem('chatsPanelWidth')) || 340,
+
         get csrfToken() {
             return document.querySelector('meta[name="csrf-token"]')?.content || '';
         },
@@ -485,7 +516,11 @@ function threadChatApp() {
         },
 
         restoreFromHash() {
-            const m = (location.hash || '').match(/^#thread-(\d+)$/);
+            // 受け付けるハッシュ:
+            //   #thread-<id>
+            //   #thread-<id>&comment=<commentId>  (ベル通知から特定コメントへ遷移)
+            const raw = location.hash || '';
+            const m = raw.match(/^#thread-(\d+)(?:&comment=(\d+))?$/);
             if (!m) {
                 if (this.selectedThreadId !== null) {
                     this.selectedThreadId = null;
@@ -496,7 +531,13 @@ function threadChatApp() {
                 return;
             }
             const id = parseInt(m[1], 10);
-            if (this.selectedThreadId === id) return;
+            const commentId = m[2] ? parseInt(m[2], 10) : null;
+            // 同じスレッドだが特定コメントへスクロールしたい場合
+            if (this.selectedThreadId === id) {
+                if (commentId) this.scrollToComment(commentId);
+                return;
+            }
+            this.pendingScrollCommentId = commentId;
             const t = this.threads.find(x => x.id === id);
             if (t) {
                 this.selectThread(t, /*updateHash*/ false);
@@ -504,6 +545,23 @@ function threadChatApp() {
                 // 一覧フィルタで非表示でも、IDだけで開けるようにする
                 this.selectThread({ id, subject: '読み込み中...', assignee: null, customer_name: null, thread_last_email_at: null }, false);
             }
+        },
+
+        // 指定 ID のコメントへスクロール + 一時ハイライト
+        scrollToComment(commentId) {
+            if (!commentId) return;
+            this.$nextTick(() => {
+                const el = document.getElementById('comment-' + commentId);
+                if (!el) return;
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                this.highlightedCommentId = commentId;
+                // 数秒後に強調表示を解除
+                setTimeout(() => {
+                    if (this.highlightedCommentId === commentId) {
+                        this.highlightedCommentId = null;
+                    }
+                }, 3000);
+            });
         },
 
         async loadUsers() {
@@ -542,6 +600,44 @@ function threadChatApp() {
             this.load();
         },
 
+        // ============= 前/次のスレッドナビゲーション (メール一覧と同じパターン) =============
+        get _currentThreadIndex() {
+            if (!this.selectedThreadId) return -1;
+            return this.threads.findIndex(t => t.id === this.selectedThreadId);
+        },
+        get hasPrevThread() {
+            return this._currentThreadIndex > 0;
+        },
+        get hasNextThread() {
+            const idx = this._currentThreadIndex;
+            return idx !== -1 && idx < this.threads.length - 1;
+        },
+        goToPrevThread() {
+            const idx = this._currentThreadIndex;
+            if (idx > 0) this.selectThread(this.threads[idx - 1]);
+        },
+        goToNextThread() {
+            const idx = this._currentThreadIndex;
+            if (idx !== -1 && idx < this.threads.length - 1) {
+                this.selectThread(this.threads[idx + 1]);
+            }
+        },
+
+        // 左パネルのドラッグリサイズ (260〜600px)
+        startResizePanel(e) {
+            const startX = e.clientX, startW = this.panelWidth;
+            const onMove = (me) => {
+                this.panelWidth = Math.max(260, Math.min(600, startW + (me.clientX - startX)));
+            };
+            const onUp = () => {
+                localStorage.setItem('chatsPanelWidth', this.panelWidth);
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        },
+
         async selectThread(t, updateHash = true) {
             this.selectedThreadId = t.id;
             this.selectedThread = t;
@@ -565,7 +661,12 @@ function threadChatApp() {
                 const data = await res.json();
                 const before = this.chatComments.length;
                 this.chatComments = data.comments || [];
-                if (!silent || this.chatComments.length > before) {
+                // 通知ベルから特定コメントを開く要求があれば優先してスクロール
+                if (!silent && this.pendingScrollCommentId) {
+                    const target = this.pendingScrollCommentId;
+                    this.pendingScrollCommentId = null;
+                    this.scrollToComment(target);
+                } else if (!silent || this.chatComments.length > before) {
                     this.$nextTick(() => this.scrollToBottom(silent));
                 }
             } catch (e) {

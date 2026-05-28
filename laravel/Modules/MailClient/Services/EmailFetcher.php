@@ -1852,8 +1852,14 @@ class EmailFetcher
         $folders = $client->getFolders();
         $imported = 0;
 
+        // imap_folder='*' (ワイルドカード) や空文字なら全フォルダ走査.
+        // 旧実装は完全一致のみで, ユーザが '*' を入れていると loop が全 continue して
+        // 「取得 0 件 / エラー 0 件」という無音失敗になっていた.
+        $fetchAllFolders = ($folderName === '*' || $folderName === '');
+
         foreach ($folders as $folder) {
             if ($protocol === 'imap'
+                && !$fetchAllFolders
                 && strcasecmp($folder->name, $folderName) !== 0
                 && strcasecmp($folder->path, $folderName) !== 0) {
                 continue;

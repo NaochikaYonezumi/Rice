@@ -1,6 +1,31 @@
 @extends('layouts.app')
 @section('title', 'AI設定')
 
+@section('css')
+<style>
+    /* ===== ダークモードで AI 設定ページのラベルが見えない問題を解消 =====
+       プロバイダ選択 (Ollama/Claude/Gemini) のラジオラベルやセクションタイトルが
+       暗背景に対して同系色になってしまうため、明示的に白系へ上書き. */
+    html.theme-dark .text-gray-600,
+    html.theme-dark .text-gray-700,
+    html.theme-dark .text-gray-800,
+    html.theme-dark .text-gray-900 { color: #ffffff !important; }
+    /* ラジオ/チェックボックスのラベルテキスト */
+    html.theme-dark label,
+    html.theme-dark label .text-sm,
+    html.theme-dark label .text-xs,
+    html.theme-dark label > span { color: #ffffff !important; }
+    /* 補足の (APIキー要) などはやや薄めで OK */
+    html.theme-dark label .text-gray-400 { color: #b9bbbe !important; }
+    /* h1/h2 (AI設定 / デフォルトモデル / Gemini APIキー 等) も白に */
+    html.theme-dark h1,
+    html.theme-dark h2 { color: #ffffff !important; }
+    /* セクション本文の説明文は若干薄めの白 (var(--rd-text-mute)) のまま見えるよう調整 */
+    html.theme-dark .text-xs.text-gray-400,
+    html.theme-dark .text-xs.text-gray-500 { color: #dcddde !important; }
+</style>
+@endsection
+
 @section('content')
 <div class="flex-1 overflow-y-auto p-6">
     <div class="max-w-2xl mx-auto">
@@ -181,7 +206,7 @@
                                 @endforelse
                             </select>
                             @if(empty($models['ollama']))
-                                <p class="text-xs text-amber-500 mt-1">Ollamaにモデルがインストールされていません。<code class="bg-gray-100 px-1 rounded">ollama pull llama3.1</code> で追加できます。</p>
+                                <p class="text-xs text-amber-500 mt-1">Ollamaにモデルがインストールされていません。<code class="bg-gray-100 px-1 rounded">docker compose exec ollama ollama pull llama3.2:1b</code> で追加できます（CPU向け軽量モデル）。</p>
                             @endif
                         </div>
 

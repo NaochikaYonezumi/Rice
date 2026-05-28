@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+# ============================================================
+# pre-commit: ステージング内の機密情報 / 個人情報 / DB 内容を検出して push を止める.
+#
+# 有効化方法:
+#   1) git config core.hooksPath .githooks   (1 回だけ実行. clone ごと)
+#   2) chmod +x .githooks/pre-commit
+#
+# 検出対象 (ヒット 1 件で commit 拒否):
+#   - .env / .env.local (envファイル本体. .env.example は許可)
+#   - *.sql / *.dump / *.dmp / *.sqlite* (DB ダンプ系)
+#   - laravel/storage/app/private/attachments/* (添付実体)
+#   - 顧客企業ドメイン (DENY_DOMAINS, 下で編集) を含む追加行
+#   - API キー / トークンっぽい文字列
+#       sk-ant-XXX / sk-XXX / AKIA[0-9A-Z]{16} / ghp_/gho_/ghu_/ghs_/ghr_
+#   - パスワード / シークレットの値が hardcode された行
+#       DB_PASSWORD=*** / SMTP_PASSWORD=*** など
+#
+# 検出を回避するには:
+#   git commit --no-verify   (緊急時のみ. CI でも同じ check を回す想定)
+# ============================================================
+set -euo pipefail
+
+# ---- 顧客企業ドメイン (= 公開リポジトリに出したくない実ドメイン) ----
+# 公開コミットしたくない実ドメインをここに足す.
+# 既定は空 (公開 OSS では空 / プライベートリポジトリでは社内ドメインを追記).
+#
+# ローカルだけで運用したい場合:
+#   git update-index --skip-worktree .githooks/pre-commit
+# で追跡を抑止すれば、ここの編集は commit に乗らない.
+#
+# 例: 顧客 acme 社のドメイン "acme.co.jp" を block したいなら:
+#   DENY_DOMAINS=("acme.co.jp")
+DENY_DOMAINS=()
+
+# ---- 検査対象: 今回 commit にステージングされたファイルのみ ----
+# diff --cached --name-only -z は NUL 区切り (スペース含むファイル名対応).
+# このフック自身 (.githooks/pre-commit) は DENY_DOMAINS の定義リストとして
+# 顧客企業ドメインを抱える必要があるので、自己ファイルだけ検査対象から外す.
+STAGED=$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null \
+         | grep -v '^\.githooks/pre-commit$' || true)
+if [ -z "$STAGED" ]; then
+    exit 0
+fi
+
+# 結果集約: HITS にヒット理由を 1 行ずつ詰めていく.
+HITS=()
+
+# (1) ファイル名そのものでブロック判定 ---------------------------
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    base=$(basename -- "$f")
+    case "$base" in
+        .env|.env.local|.env.production|.env.staging|.env.development)
+            HITS+=("env-file: $f")
+            ;;
+    esac
+    case "$f" in
+        *.sql|*.dump|*.dmp|*.sqlite|*.sqlite3|*.sqlite-journal)
+            HITS+=("db-dump: $f")
+            ;;
+        laravel/storage/app/private/attachments/*|laravel/storage/app/attachments/*)
+            HITS+=("attachment-body: $f")
+            ;;
+    esac
+done <<< "$STAGED"
+
+# (2) 内容スキャン (バイナリは skip) -----------------------------
+# diff --cached -U0 で追加行 (^+) だけを抽出. STAGED に残ったファイルだけが対象.
+# (フック自身は STAGED で除外済みなので、その追加行はスキャンされない)
+STAGED_PATHS=()
+while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    STAGED_PATHS+=("$f")
+done <<< "$STAGED"
+
+if [ ${#STAGED_PATHS[@]} -gt 0 ]; then
+    ADDED_LINES=$(git diff --cached -U0 --no-color -- "${STAGED_PATHS[@]}" 2>/dev/null \
+                  | grep -E '^\+[^+]' || true)
+else
+    ADDED_LINES=""
+fi
+
+if [ -n "$ADDED_LINES" ]; then
+    # (2a) DENY_DOMAINS 検出
+    for dom in "${DENY_DOMAINS[@]}"; do
+        # 大文字小文字無視 + ドットは literal で固定.
+        pattern=$(printf '%s' "$dom" | sed 's/\./\\./g')
+        if echo "$ADDED_LINES" | grep -iqE "$pattern"; then
+            HITS+=("deny-domain: $dom が追加行に含まれます")
+        fi
+    done
+
+    # (2b) API キー系
+    #   Anthropic    : sk-ant-[A-Za-z0-9_-]+
+    #   OpenAI       : sk-[A-Za-z0-9]{20,}
+    #   AWS Access   : AKIA[0-9A-Z]{16}
+    #   GitHub Token : gh[psour]_[A-Za-z0-9_]{30,}
+    if echo "$ADDED_LINES" | grep -qE 'sk-ant-[A-Za-z0-9_-]{20,}'; then
+        HITS+=("api-key: Anthropic API key っぽい文字列が追加行にあります")
+    fi
+    if echo "$ADDED_LINES" | grep -qE '\bsk-[A-Za-z0-9]{20,}\b'; then
+        HITS+=("api-key: OpenAI 形式 API key っぽい文字列があります")
+    fi
+    if echo "$ADDED_LINES" | grep -qE '\bAKIA[0-9A-Z]{16}\b'; then
+        HITS+=("api-key: AWS Access Key ID っぽい文字列があります")
+    fi
+    if echo "$ADDED_LINES" | grep -qE '\bgh[psour]_[A-Za-z0-9_]{30,}\b'; then
+        HITS+=("api-key: GitHub Token っぽい文字列があります")
+    fi
+
+    # (2c) パスワード / シークレットの hardcode
+    # DB_PASSWORD=foo, SMTP_PASSWORD=foo, "password" => "foo" 等.
+    # 「validation rule」(= 'nullable|string' などの文字列) や「フィールド名のみ」は除外したい
+    # ので、=foo / => "foo" / : "foo" など「値が後続する」形だけを拾う.
+    # nullable | required | string などの validation 単語は除外する.
+    if echo "$ADDED_LINES" | grep -iqE '(DB_PASSWORD|SMTP_PASSWORD|REDIS_PASSWORD|MAIL_PASSWORD|APP_KEY|JWT_SECRET)\s*=\s*[A-Za-z0-9_!@#$%^&*+/=\-]{6,}' \
+       && ! echo "$ADDED_LINES" | grep -iqE 'PASSWORD=\s*$' \
+       ; then
+        HITS+=("hardcoded-secret: 環境変数値 (DB_PASSWORD 等) が hardcode されてそう")
+    fi
+fi
+
+# ---- 結果 ----
+if [ ${#HITS[@]} -gt 0 ]; then
+    echo "❌ pre-commit: 以下を検出したため commit を拒否しました." >&2
+    echo "   (緊急時のみ --no-verify で迂回可能. その場合は中身を必ず目視確認.)" >&2
+    echo "" >&2
+    for h in "${HITS[@]}"; do
+        echo "  - $h" >&2
+    done
+    echo "" >&2
+    echo "対応方法:" >&2
+    echo "  - 環境変数値 / API キー: .env に置き、コードからは env('KEY') で読む." >&2
+    echo "  - 顧客企業ドメイン: example.com / Acme などの架空名に置換." >&2
+    echo "  - DB ダンプ / 添付実体: コミット対象外 (.gitignore + storage/ で除外)." >&2
+    exit 1
+fi
+
+exit 0

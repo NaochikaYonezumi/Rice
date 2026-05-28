@@ -30,6 +30,9 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            // テストユーザはデフォルトでリカバリーコード生成済み扱い
+            // (EnsureRecoveryCodesAcknowledged middleware の強制リダイレクトを回避)
+            'two_factor_recovery_generated_at' => now(),
         ];
     }
 
@@ -40,6 +43,16 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    /**
+     * リカバリーコード未取得状態 (新規登録直後相当) のユーザを作る。
+     */
+    public function withoutRecoveryCodes(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'two_factor_recovery_generated_at' => null,
         ]);
     }
 }

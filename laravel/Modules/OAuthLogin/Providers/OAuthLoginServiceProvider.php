@@ -8,7 +8,10 @@ class OAuthLoginServiceProvider extends ServiceProvider
 {
     public function boot()
     {
-        $this->loadViewsFrom(__DIR__ . '/../Resources/views', 'oauthlogin');
+        $viewsDir = __DIR__ . '/../Resources/views';
+        if (is_dir($viewsDir)) {
+            $this->loadViewsFrom($viewsDir, 'oauthlogin');
+        }
         $this->loadRoutesFrom(__DIR__ . '/../routes.php');
     }
 

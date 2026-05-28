@@ -21,6 +21,21 @@
         </div>
 
         <div>
+            <label for="display_name" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">表示名 (任意)</label>
+            <input id="display_name" name="display_name" type="text" maxlength="128"
+                   value="{{ old('display_name', $user->display_name) }}"
+                   placeholder="メール署名や AI 生成に使われる表示名"
+                   class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+            <p class="mt-1 text-xs text-gray-500">空ならアカウント名 (Name) が使われます。</p>
+            @error('display_name')
+                <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+            @enderror
+        </div>
+
+        {{-- メール署名はメール作成画面の「✍️ 署名挿入」(UserSignature) で複数管理できるため、
+             プロフィール画面の単一署名フィールドは廃止しました (重複設定の混乱を避けるため). --}}
+
+        <div>
             <label for="email" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Email</label>
             <input id="email" name="email" type="email" class="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" value="{{ old('email', $user->email) }}" required autocomplete="username" />
             @error('email')

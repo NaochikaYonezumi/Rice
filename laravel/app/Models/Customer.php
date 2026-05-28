@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
 {
-    protected $fillable = ['name', 'email', 'domain', 'notes', 'group_id', 'sort_order'];
+    protected $fillable = ['name', 'email', 'domain', 'rag_collection', 'notes', 'group_id', 'sort_order'];
 
     public function group(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {

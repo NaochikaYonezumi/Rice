@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\URL;
 use SocialiteProviders\Manager\SocialiteWasCalled;
 
 class AppServiceProvider extends ServiceProvider
@@ -23,15 +24,35 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Register Module Views & Migrations (Manual since ServiceProviders aren't loading due to cache permissions)
-        $this->loadViewsFrom(base_path('Modules/Knowledge/Resources/views'), 'knowledge');
-        $this->loadViewsFrom(base_path('Modules/Workflow/Resources/views'), 'workflow');
-        $this->loadViewsFrom(base_path('Modules/AIReply/Resources/views'), 'aireply');
-        $this->loadViewsFrom(base_path('Modules/OAuthLogin/Resources/views'), 'oauthlogin');
+        // APP_URL が https の場合、route()/url() で生成される全URLを https に強制。
+        // 招待メール/パスワード再設定メール内のリンクが http で送られないようにするため。
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
 
-        $this->loadMigrationsFrom(base_path('Modules/Workflow/Database/Migrations'));
-        $this->loadMigrationsFrom(base_path('Modules/AIReply/Database/Migrations'));
-        $this->loadMigrationsFrom(base_path('Modules/MailClient/Database/Migrations'));
+        // Register Module Views & Migrations (Manual since ServiceProviders aren't loading due to cache permissions)
+        // 存在しないディレクトリを loadViewsFrom すると view:cache が
+        // Symfony Finder の DirectoryNotFoundException で落ちるためガード
+        foreach ([
+            'knowledge'  => base_path('Modules/Knowledge/Resources/views'),
+            'workflow'   => base_path('Modules/Workflow/Resources/views'),
+            'aireply'    => base_path('Modules/AIReply/Resources/views'),
+            'oauthlogin' => base_path('Modules/OAuthLogin/Resources/views'),
+        ] as $ns => $path) {
+            if (is_dir($path)) {
+                $this->loadViewsFrom($path, $ns);
+            }
+        }
+
+        foreach ([
+            base_path('Modules/Workflow/Database/Migrations'),
+            base_path('Modules/AIReply/Database/Migrations'),
+            base_path('Modules/MailClient/Database/Migrations'),
+        ] as $migrationPath) {
+            if (is_dir($migrationPath)) {
+                $this->loadMigrationsFrom($migrationPath);
+            }
+        }
 
         Event::listen(
             \SocialiteProviders\Manager\SocialiteWasCalled::class,

@@ -1,81 +1,118 @@
 @extends('layouts.app')
 @section('title', 'SSO設定')
 
-@section('content')
-<div class="flex flex-col h-full bg-gray-50 overflow-hidden">
-    {{-- ヘッダー --}}
-    <div class="shrink-0 px-10 py-8 bg-white border-b border-gray-200">
-        <h1 class="text-3xl font-black text-gray-900 tracking-tighter uppercase mb-2">SSO設定</h1>
-        <p class="text-sm text-gray-400 font-bold uppercase tracking-widest">Single Sign-On Configuration</p>
-    </div>
+@section('css')
+<style>
+    /* ===== SSO設定ページのダークモード上書き =====
+       他の設定ページと統一感を持たせるため、ラベル・見出しを明示的に白系で上書き. */
+    html.theme-dark .text-gray-600,
+    html.theme-dark .text-gray-700,
+    html.theme-dark .text-gray-800,
+    html.theme-dark .text-gray-900 { color: #ffffff !important; }
+    html.theme-dark label,
+    html.theme-dark label > span { color: #ffffff !important; }
+    html.theme-dark h1,
+    html.theme-dark h2 { color: #ffffff !important; }
+    html.theme-dark .text-xs.text-gray-400,
+    html.theme-dark .text-xs.text-gray-500 { color: #dcddde !important; }
+    /* オレンジ系警告ブロックは背景が暗いと文字が見えなくなるので少し色味を上げる */
+    html.theme-dark .text-amber-700,
+    html.theme-dark .text-amber-600 { color: #fcd34d !important; }
+</style>
+@endsection
 
-    <div class="flex-1 overflow-y-auto p-10 space-y-10 custom-scrollbar">
+@section('content')
+<div class="flex-1 overflow-y-auto p-6">
+    <div class="max-w-2xl mx-auto">
+        <h1 class="text-xl font-semibold text-gray-800 mb-6">SSO設定</h1>
+
         @if(session('success'))
-            <div class="max-w-4xl bg-green-50 border border-green-100 text-green-700 px-6 py-4 rounded-2xl font-bold text-sm shadow-sm animate-in slide-in-from-top duration-300">
+            <div class="mb-4 px-4 py-3 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm">
                 {{ session('success') }}
             </div>
         @endif
 
-        <div class="max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
-            <form action="{{ route('settings.sso.update') }}" method="POST">
-                @csrf
-                <div class="p-8 space-y-8">
-                    {{-- 有効化スイッチ --}}
-                    <div class="flex items-center justify-between p-6 bg-gray-50 rounded-2xl border border-gray-100">
-                        <div>
-                            <h3 class="text-base font-black text-gray-800 uppercase tracking-tighter">Google SSO を有効にする</h3>
-                            <p class="text-xs text-gray-400 font-bold mt-1">Enable or disable Google authentication</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="is_enabled" value="1" class="sr-only peer" {{ $settings->is_enabled ? 'checked' : '' }}>
-                            <div class="w-14 h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                    </div>
+        @if(session('error'))
+            <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                {{ session('error') }}
+            </div>
+        @endif
 
-                    {{-- クライアントID --}}
-                    <div class="space-y-2">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Google Client ID</label>
-                        <input type="text" name="google_client_id" value="{{ old('google_client_id', $settings->google_client_id) }}" 
-                            class="w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner"
-                            placeholder="xxxxxxxxxxxx.apps.googleusercontent.com">
-                    </div>
+        @if($errors->any())
+            <div class="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+                <ul class="list-disc list-inside space-y-0.5">
+                    @foreach($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
 
-                    {{-- クライアントシークレット --}}
-                    <div class="space-y-2">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Google Client Secret</label>
-                        <input type="password" name="google_client_secret" value="{{ old('google_client_secret', $settings->google_client_secret) }}" 
-                            class="w-full bg-gray-50 border-0 rounded-2xl px-5 py-4 focus:ring-4 focus:ring-blue-100 transition-all text-gray-900 font-bold outline-none shadow-inner"
-                            placeholder="••••••••••••••••••••">
+        <form action="{{ route('settings.sso.update') }}" method="POST"
+              class="bg-white rounded-lg border border-gray-200 shadow-sm">
+            @csrf
+            <div class="p-6 space-y-5">
+                {{-- 有効化スイッチ --}}
+                <div class="flex items-center justify-between gap-4 px-4 py-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-bold text-gray-800">Google SSO を有効にする</h3>
+                        <p class="text-xs text-gray-500 mt-0.5">Google アカウントでのログインを許可します</p>
                     </div>
-
-                    {{-- リダイレクトURI --}}
-                    <div class="space-y-2">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest px-1">Redirect URI (ReadOnly)</label>
-                        <input type="text" readonly value="{{ $settings->google_redirect_uri }}" 
-                            class="w-full bg-gray-100 border-0 rounded-2xl px-5 py-4 text-gray-500 font-bold outline-none cursor-not-allowed">
-                        <p class="text-[10px] text-amber-600 font-bold px-1">※Google Cloud Consoleの「承認済みのリダイレクト URI」にこれを登録してください。</p>
-                    </div>
-
-                    {{-- 招待必須スイッチ --}}
-                    <div class="flex items-center justify-between p-6 bg-amber-50/30 rounded-2xl border border-amber-100">
-                        <div>
-                            <h3 class="text-base font-black text-amber-700 uppercase tracking-tighter">ログインに招待を必須とする</h3>
-                            <p class="text-xs text-amber-600 font-bold mt-1">Restrict login to invited users only</p>
-                        </div>
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" name="require_invitation" value="1" class="sr-only peer" {{ $settings->require_invitation ? 'checked' : '' }}>
-                            <div class="w-14 h-8 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-amber-500"></div>
-                        </label>
-                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" name="is_enabled" value="1" class="sr-only peer" {{ $settings->is_enabled ? 'checked' : '' }}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
                 </div>
 
-                <div class="px-8 py-6 bg-gray-50 border-t border-gray-100 flex justify-end">
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-black px-12 py-4 rounded-2xl shadow-xl shadow-blue-100 transition-all active:scale-[0.98]">
-                        設定を保存する
-                    </button>
+                {{-- クライアントID --}}
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Google Client ID</label>
+                    <input type="text" name="google_client_id"
+                           value="{{ old('google_client_id', $settings->google_client_id) }}"
+                           placeholder="xxxxxxxxxxxx.apps.googleusercontent.com"
+                           class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400">
                 </div>
-            </form>
-        </div>
+
+                {{-- クライアントシークレット --}}
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Google Client Secret</label>
+                    <input type="password" name="google_client_secret"
+                           value="{{ old('google_client_secret', $settings->google_client_secret) }}"
+                           placeholder="••••••••••••••••••••"
+                           class="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400">
+                </div>
+
+                {{-- リダイレクトURI --}}
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 mb-1">Redirect URI <span class="text-gray-400 font-normal">(読み取り専用)</span></label>
+                    <input type="text" readonly value="{{ $settings->google_redirect_uri }}"
+                           class="w-full bg-gray-100 border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-500 cursor-not-allowed font-mono">
+                    <p class="text-xs text-amber-600 mt-1">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Google Cloud Console の「承認済みのリダイレクト URI」にこの値を登録してください。
+                    </p>
+                </div>
+
+                {{-- 招待必須スイッチ --}}
+                <div class="flex items-center justify-between gap-4 px-4 py-3 bg-amber-50/40 rounded-lg border border-amber-100">
+                    <div class="min-w-0">
+                        <h3 class="text-sm font-bold text-amber-700">ログインに招待を必須とする</h3>
+                        <p class="text-xs text-amber-600 mt-0.5">招待されたメールアドレスのみログイン可能になります</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" name="require_invitation" value="1" class="sr-only peer" {{ $settings->require_invitation ? 'checked' : '' }}>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+                <button type="submit"
+                        class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-5 py-2 rounded-md shadow-sm transition-colors">
+                    設定を保存
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 @endsection

@@ -8,6 +8,8 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
+use App\Http\Controllers\Auth\TwoFactorRecoveryCodesController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
@@ -31,6 +33,18 @@ Route::middleware('guest')->group(function () {
                 ->name('password.reset');
     Route::post('reset-password', [NewPasswordController::class, 'store'])
                 ->name('password.store');
+
+    Route::get('two-factor/challenge', [TwoFactorChallengeController::class, 'show'])
+                ->name('two-factor.challenge');
+    Route::post('two-factor/verify', [TwoFactorChallengeController::class, 'verify'])
+                ->middleware('throttle:6,1')
+                ->name('two-factor.verify');
+    Route::post('two-factor/resend', [TwoFactorChallengeController::class, 'resend'])
+                ->middleware('throttle:3,1')
+                ->name('two-factor.resend');
+    Route::post('two-factor/recovery', [TwoFactorChallengeController::class, 'recovery'])
+                ->middleware('throttle:6,1')
+                ->name('two-factor.recovery');
 });
 
 Route::middleware('auth')->group(function () {
@@ -50,6 +64,13 @@ Route::middleware('auth')->group(function () {
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
 
     Route::put('password', [PasswordController::class, 'update'])->name('password.update');
+
+    Route::get('two-factor/recovery-codes', [TwoFactorRecoveryCodesController::class, 'show'])
+                ->name('two-factor.recovery-codes.show');
+    Route::post('two-factor/recovery-codes/acknowledge', [TwoFactorRecoveryCodesController::class, 'acknowledge'])
+                ->name('two-factor.recovery-codes.acknowledge');
+    Route::post('two-factor/recovery-codes/regenerate', [TwoFactorRecoveryCodesController::class, 'regenerate'])
+                ->name('two-factor.recovery-codes.regenerate');
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
                 ->name('logout');

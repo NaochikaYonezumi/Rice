@@ -3,41 +3,56 @@
 namespace Modules\AIReply\Services;
 
 use App\Models\EmailThread;
-use Modules\Knowledge\Services\NeuronService;
+use App\Services\RagApiService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
+use Modules\AIReply\Services\RagCollectionResolver;
+use Modules\Knowledge\Services\NeuronService;
 
 class AIReplyService
 {
-    protected $neuron;
-
-    public function __construct(NeuronService $neuron)
-    {
-        $this->neuron = $neuron;
-    }
+    public function __construct(
+        protected NeuronService $neuron,
+        protected RagCollectionResolver $collectionResolver,
+        protected RagApiService $ragApi,
+    ) {}
 
     /**
      * Generate a reply draft based on thread context and knowledge base.
+     *
+     * @param  EmailThread  $thread
+     * @param  ?string  $provider   AI プロバイダー (ollama|claude|gemini)。null なら AiSetting デフォルト
+     * @param  ?string  $model      モデル ID。null なら AiSetting デフォルト
      */
-    public function generate(EmailThread $thread)
+    public function generate(EmailThread $thread, ?string $provider = null, ?string $model = null)
     {
         $latestEmail = $thread->emails()->orderByDesc('received_at')->first();
         if (!$latestEmail) return null;
 
+        // ▼ Phase 6-1: 顧客 (or 送信元ドメイン) から RAG コレクションを決定
+        $collection = $this->collectionResolver->resolve($thread);
+
+        // ▼ provider / model のフォールバック
+        $aiSettings = \App\Models\AiSetting::getSettings();
+        $provider = $provider ?: $aiSettings->default_provider;
+        $model    = $model    ?: $aiSettings->default_model;
+
         // 1. ナレッジベースから関連情報を検索 (RAG)
         $query = $latestEmail->subject . " " . $latestEmail->plain_body;
-        $context = $this->neuron->query($query);
+        $context = $this->ragApi->query($query, 5, $provider, $model, $collection);
 
         // 2. プロンプトの構築 (指示書に基づいたセーフティルール含む)
         $prompt = $this->buildPrompt($latestEmail, $context);
 
-        // 3. AI プロバイダ経由で生成 (現在は rag-python 側に LLM 呼び出しを委譲する想定)
-        // 本来は OpenAI / Ollama の切り替えロジックが入る
-        $aiResult = $this->neuron->query($prompt); // 暫定的に同じエンドポイントを使用
+        // 3. AI プロバイダ経由で生成 (collection を渡して Python 側で切替)
+        $aiResult = $this->ragApi->query($prompt, 5, $provider, $model, $collection);
 
-        // 4. ログの保存
-        $this->logGeneration($thread, $prompt, $aiResult);
+        // 4. ログの保存 (collection を含めて記録)
+        $this->logGeneration($thread, $prompt, $aiResult, $collection, $provider, $model);
 
+        $aiResult['provider'] = $provider;
+        $aiResult['model']    = $model;
         return $aiResult;
     }
 
@@ -64,17 +79,41 @@ class AIReplyService
 最後に「確信度スコア: 0-100」を付与してください。";
     }
 
-    protected function logGeneration($thread, $prompt, $result)
-    {
-        DB::table('ext_ai_logs')->insert([
+    protected function logGeneration(
+        $thread,
+        $prompt,
+        $result,
+        ?string $collection = null,
+        ?string $provider = null,
+        ?string $model = null,
+    ) {
+        $row = [
             'email_thread_id' => $thread->id,
             'user_id'         => Auth::id(),
-            'provider'        => 'default',
+            'provider'        => $provider ?: 'default',
             'prompt_summary'  => mb_substr($prompt, 0, 500),
             'generated_reply' => $result['answer'] ?? '',
             'confidence_score' => 85, // 実際はパースして取得
             'created_at'      => now(),
             'updated_at'      => now(),
-        ]);
+        ];
+
+        // model カラムが存在する場合のみセット
+        try {
+            if ($model && Schema::hasColumn('ext_ai_logs', 'model')) {
+                $row['model'] = $model;
+            }
+        } catch (\Throwable) { /* noop */ }
+
+        // Phase 6-3 で ext_ai_logs に collection カラムが追加される。あれば書き込む。
+        try {
+            if ($collection !== null && Schema::hasColumn('ext_ai_logs', 'collection')) {
+                $row['collection'] = $collection;
+            }
+        } catch (\Throwable $e) {
+            // テーブル未マイグレ等は無視
+        }
+
+        DB::table('ext_ai_logs')->insert($row);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Mail\InvitationMail;
 use App\Models\Invitation;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -19,7 +20,8 @@ class InvitationController extends Controller
     public function index(): View
     {
         $invitations = Invitation::with('inviter')->orderByDesc('created_at')->get();
-        return view('admin.invitations.index', compact('invitations'));
+        $users = User::orderBy('created_at')->get();
+        return view('admin.invitations.index', compact('invitations', 'users'));
     }
 
     /**

@@ -21,6 +21,7 @@ class CustomerController extends Controller
             'name'   => 'required|string|max:255',
             'email'  => 'nullable|email|max:255|unique:customers',
             'domain' => 'nullable|string|max:255',
+            'rag_collection' => 'nullable|string|max:100',
             'notes'  => 'nullable|string',
         ]);
 
@@ -31,10 +32,20 @@ class CustomerController extends Controller
             $threadIds = Email::where('from_address', $customer->email)
                 ->pluck('thread_id')
                 ->unique();
-            
+
             EmailThread::whereIn('id', $threadIds)
                 ->whereNull('customer_id')
                 ->update(['customer_id' => $customer->id]);
+        }
+
+        // 顧客名と一致する共有ルームがあれば、この顧客のスレッドを一括振り分け。
+        // (代表メール経由で取り込まれた過去スレッドにも適用される)
+        try {
+            \App\Services\ChatRoomAutoBundler::bundleByCustomer($customer);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('auto-bundle on customer store failed', [
+                'customer_id' => $customer->id, 'error' => $e->getMessage(),
+            ]);
         }
 
         return response()->json($customer);
@@ -46,10 +57,25 @@ class CustomerController extends Controller
             'name'   => 'required|string|max:255',
             'email'  => 'nullable|email|max:255|unique:customers,email,' . $customer->id,
             'domain' => 'nullable|string|max:255',
+            'rag_collection' => 'nullable|string|max:100',
             'notes'  => 'nullable|string',
         ]);
 
+        $oldName = $customer->name;
         $customer->update($validated);
+
+        // 名前が変わった場合、新しい名前と一致するルームへ再振り分け
+        // (元の名前に対応していたルームには既に bundle 済みなので detach はしない)
+        if ($oldName !== $customer->name) {
+            try {
+                \App\Services\ChatRoomAutoBundler::bundleByCustomer($customer->fresh());
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('auto-bundle on customer update failed', [
+                    'customer_id' => $customer->id, 'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return response()->json($customer);
     }
 
@@ -60,6 +86,16 @@ class CustomerController extends Controller
         ]);
 
         $thread->update(['customer_id' => $validated['customer_id']]);
+
+        // 顧客割り当て直後に、その顧客名と一致する共有ルームへ自動振り分け
+        try {
+            \App\Services\ChatRoomAutoBundler::bundleThread($thread->fresh());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('auto-bundle on customer assign failed', [
+                'thread_id' => $thread->id, 'error' => $e->getMessage(),
+            ]);
+        }
+
         return response()->json(['status' => 'ok', 'customer' => $thread->customer]);
     }
     

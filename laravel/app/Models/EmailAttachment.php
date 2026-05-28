@@ -7,7 +7,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class EmailAttachment extends Model
 {
-    protected $fillable = ['email_id', 'filename', 'mime_type', 'size', 'disk_path'];
+    protected $fillable = ['email_id', 'filename', 'mime_type', 'size', 'disk_path', 'hidden_from_list'];
+
+    protected $casts = [
+        'hidden_from_list' => 'boolean',
+    ];
 
     public function email(): BelongsTo
     {

@@ -2,7 +2,7 @@
 @section('title', 'タグ・顧客リスト')
 
 @section('content')
-<div class="flex h-full" x-data="tagApp()" x-init="init()" x-cloak>
+<div class="flex h-full" x-data="tagApp()" x-cloak>
 
     {{-- 左パネル: タグ / 顧客 一覧 --}}
     <div class="w-72 shrink-0 border-r border-gray-200 bg-white flex flex-col">
@@ -10,7 +10,7 @@
             <div class="flex items-center justify-between">
                 <h2 class="font-semibold text-gray-800">リスト一覧</h2>
                 <div class="flex items-center gap-1">
-                    <button x-show="leftTab === 'customers'" @click="customerModalOpen = true"
+                    <button x-show="leftTab === 'customers'" @click="customerModalOpen = true; loadRagCollections()"
                         class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-full transition-colors font-medium">
                         + 新規顧客
                     </button>
@@ -353,6 +353,29 @@
                         <input type="email" x-model="newCustomerEmail" placeholder="info@example.com"
                             class="w-full text-sm border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
                     </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1">ドメイン（任意）</label>
+                        <input type="text" x-model="newCustomerDomain" placeholder="example.com"
+                            class="w-full text-sm border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                        <p class="text-[10px] text-gray-400 mt-1">この顧客からのメールを RAG コレクションでマッチングするのに使用</p>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 mb-1">RAG コレクション（任意）</label>
+                        <div class="flex gap-2">
+                            <select x-model="newCustomerRagCollection"
+                                    class="flex-1 text-sm border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-400">
+                                <option value="">自動判定（設定なし）</option>
+                                <template x-for="c in ragCollections" :key="c.name">
+                                    <option :value="c.name" x-text="c.name + ' (' + c.source + ')'"></option>
+                                </template>
+                            </select>
+                            <button type="button" @click="loadRagCollections()" title="一覧を更新"
+                                    class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+                                <i class="fas fa-sync-alt text-gray-500" :class="ragCollectionsLoading ? 'animate-spin' : ''"></i>
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">この顧客への AI 返信生成時に参照するナレッジコレクション</p>
+                    </div>
                 </div>
                 <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
                     <button @click="customerModalOpen = false" class="px-4 py-2 text-sm text-gray-500 hover:bg-gray-200 rounded-xl transition-colors">キャンセル</button>
@@ -385,6 +408,27 @@ function tagApp() {
         customerModalOpen: false,
         newCustomerName: '',
         newCustomerEmail: '',
+        newCustomerDomain: '',
+        newCustomerRagCollection: '',
+        // Phase 6-1: RAG コレクション選択肢
+        ragCollections: [],
+        ragCollectionsLoading: false,
+
+        async loadRagCollections() {
+            if (this.ragCollectionsLoading) return;
+            this.ragCollectionsLoading = true;
+            try {
+                const res = await fetch('/api/knowledge/collections', { headers: { 'Accept': 'application/json' } });
+                if (res.ok) {
+                    const data = await res.json();
+                    this.ragCollections = data.collections || [];
+                }
+            } catch (e) {
+                console.error('RAG コレクション取得失敗:', e);
+            } finally {
+                this.ragCollectionsLoading = false;
+            }
+        },
 
         async addCustomer() {
             if (!this.newCustomerName) return;
@@ -396,11 +440,18 @@ function tagApp() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
                     },
-                    body: JSON.stringify({ name: this.newCustomerName, email: this.newCustomerEmail }),
+                    body: JSON.stringify({
+                        name: this.newCustomerName,
+                        email: this.newCustomerEmail,
+                        domain: this.newCustomerDomain || null,
+                        rag_collection: this.newCustomerRagCollection || null,
+                    }),
                 });
                 if (res.ok) {
                     this.newCustomerName = '';
                     this.newCustomerEmail = '';
+                    this.newCustomerDomain = '';
+                    this.newCustomerRagCollection = '';
                     this.customerModalOpen = false;
                     await this.reloadData();
                 }

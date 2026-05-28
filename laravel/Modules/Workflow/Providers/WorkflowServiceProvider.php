@@ -9,8 +9,14 @@ class WorkflowServiceProvider extends ServiceProvider
 {
     public function boot()
     {
-        $this->loadMigrationsFrom(__DIR__ . '/../Database/Migrations');
-        $this->loadViewsFrom(__DIR__ . '/../Resources/views', 'workflow');
+        $migDir = __DIR__ . '/../Database/Migrations';
+        if (is_dir($migDir)) {
+            $this->loadMigrationsFrom($migDir);
+        }
+        $viewsDir = __DIR__ . '/../Resources/views';
+        if (is_dir($viewsDir)) {
+            $this->loadViewsFrom($viewsDir, 'workflow');
+        }
         $this->registerRoutes();
     }
 

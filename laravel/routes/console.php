@@ -218,6 +218,97 @@ Artisan::command('mail:repair-bodies {--apply} {--limit=}', function () {
     return 0;
 })->purpose('Repair already-stored garbled email bodies (binary stored as text)');
 
+
+/**
+ * mail:repair-subjects
+ *
+ * DB に既に保存されている件名のうち, =?CHARSET?B?...?= / =?CHARSET?Q?...?= の
+ * encoded-word が残っているものを再デコードして書き換える.
+ *
+ * 背景: 旧個人メール取り込み (fetchForAccount) が MIME ヘッダの再デコードをしておらず,
+ *      Webklex の getSubject() で部分的にしか decode されなかった件名がそのまま
+ *      DB に格納されていた. 取り込み自体は最新コードで直したが, 既存行は救済できない.
+ *
+ * 使い方:
+ *   php artisan mail:repair-subjects               # ドライラン (件数と先頭サンプル)
+ *   php artisan mail:repair-subjects --apply       # 書き換え
+ *   php artisan mail:repair-subjects --apply --limit=500
+ */
+Artisan::command('mail:repair-subjects {--apply} {--limit=}', function (\Modules\MailClient\Services\EmailFetcher $fetcher) {
+    /** @var \Illuminate\Console\Command $this */
+    $apply = (bool) $this->option('apply');
+    $limit = $this->option('limit');
+    $limit = $limit !== null ? (int) $limit : null;
+
+    // protected method を Closure::bind で呼び出す.
+    $decode = \Closure::bind(function (string $s): string {
+        /** @var \Modules\MailClient\Services\EmailFetcher $this */
+        return $this->decodeMimeHeaderRobust($s);
+    }, $fetcher, \Modules\MailClient\Services\EmailFetcher::class);
+    $clean = \Closure::bind(function (?string $s, int $max = 255): string {
+        /** @var \Modules\MailClient\Services\EmailFetcher $this */
+        return $this->cleanUtf8($s, $max);
+    }, $fetcher, \Modules\MailClient\Services\EmailFetcher::class);
+
+    $needsRepair = function (string $s): bool {
+        // encoded-word が残っている = デコード漏れ.
+        return (bool) preg_match('/=\?[A-Za-z0-9_\-\.:]+\?[BbQq]\?[^?]*\?=/', $s);
+    };
+
+    $emailCount = 0; $emailFixed = 0;
+    \App\Models\Email::query()
+        ->where('subject', 'like', '%=?%?=%')
+        ->when($limit, fn($q) => $q->limit($limit))
+        ->orderByDesc('id')
+        ->chunkById(200, function ($rows) use (&$emailCount, &$emailFixed, $apply, $needsRepair, $decode, $clean) {
+            foreach ($rows as $email) {
+                $cur = (string) ($email->subject ?? '');
+                if (!$needsRepair($cur)) continue;
+                $emailCount++;
+                $next = $decode($cur);
+                $next = $clean($next !== '' ? $next : $cur, 255);
+                if ($next === '' || $next === $cur) continue;
+                if ($emailFixed < 5) {
+                    $this->line('  email#' . $email->id . ': ' . mb_substr($cur, 0, 60) . '  →  ' . mb_substr($next, 0, 60));
+                }
+                if ($apply) { $email->subject = $next; $email->save(); }
+                $emailFixed++;
+            }
+        });
+
+    $threadCount = 0; $threadFixed = 0;
+    \App\Models\EmailThread::query()
+        ->where('subject', 'like', '%=?%?=%')
+        ->when($limit, fn($q) => $q->limit($limit))
+        ->orderByDesc('id')
+        ->chunkById(200, function ($rows) use (&$threadCount, &$threadFixed, $apply, $needsRepair, $decode, $clean) {
+            foreach ($rows as $thread) {
+                $cur = (string) ($thread->subject ?? '');
+                if (!$needsRepair($cur)) continue;
+                $threadCount++;
+                $next = $decode($cur);
+                $next = $clean($next !== '' ? $next : $cur, 255);
+                if ($next === '' || $next === $cur) continue;
+                if ($threadFixed < 5) {
+                    $this->line('  thread#' . $thread->id . ': ' . mb_substr($cur, 0, 60) . '  →  ' . mb_substr($next, 0, 60));
+                }
+                if ($apply) { $thread->subject = $next; $thread->save(); }
+                $threadFixed++;
+            }
+        });
+
+    if ($apply) {
+        $this->info("emails: scanned={$emailCount} fixed={$emailFixed}");
+        $this->info("threads: scanned={$threadCount} fixed={$threadFixed}");
+    } else {
+        $this->info("emails: scanned={$emailCount} would_fix={$emailFixed}  (dry-run)");
+        $this->info("threads: scanned={$threadCount} would_fix={$threadFixed}  (dry-run)");
+        $this->warn('実行するには --apply を付けて再実行してください.');
+    }
+    return 0;
+})->purpose('Re-decode MIME encoded-words remaining in already-stored subjects (emails + email_threads).');
+
+
 /**
  * 孤児スレッド (Email 行が 0 件の EmailThread) を検出し、必要に応じて削除する。
  *

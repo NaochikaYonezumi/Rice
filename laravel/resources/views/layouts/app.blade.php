@@ -97,6 +97,11 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
+        /* Alpine x-cloak: 外部CSSが head にあるうちに効かせて初回ペイント前から隠す.
+           各ページの body 末尾に書いていた頃は、外部CSSロード完了→ペイント→
+           body 内 <style> 解釈の間に cloak 対象が一瞬見える FOUC があった. */
+        [x-cloak] { display: none !important; }
+
         /* 左右の余白は基本ゼロにする (フル幅レイアウト) */
         .content,
         .content > .container-fluid,

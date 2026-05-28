@@ -84,10 +84,38 @@ Artisan::command('mail:fetch', function (\Modules\MailClient\Services\EmailFetch
     $settings = \App\Models\MailSetting::getSettings();
     $this->info('Starting email fetch...');
     try {
+        // 1) system / 共有メール (MailSetting からの IMAP/POP3)
         $count  = $fetcher->fetch();
         $errors = $fetcher->getLastErrors();
         $settings->recordFetchSuccess((int) $count, $errors['errors'] ?? []);
-        $this->info("Email fetch completed. imported={$count}, errors={$errors['count']}");
+
+        // 2) 個人メールアカウント (MailAccount). 1 アカウントの失敗で全体を落とさず, ログに残す.
+        //    旧実装は fetch() だけを呼んでいて, 個人メールが永遠に取得されない不具合だった.
+        $personalAccounts = \App\Models\MailAccount::query()
+            ->where('is_active', true)
+            ->whereIn('inbox_protocol', [
+                \App\Models\MailAccount::PROTOCOL_IMAP,
+                \App\Models\MailAccount::PROTOCOL_POP3,
+            ])
+            ->get();
+        $accountImported = 0;
+        $accountErrors   = 0;
+        foreach ($personalAccounts as $account) {
+            try {
+                $accountImported += $fetcher->fetchForAccount($account);
+            } catch (\Throwable $e) {
+                $accountErrors++;
+                \Illuminate\Support\Facades\Log::error(
+                    '[mail-fetch account#' . $account->id . '] ' . $e->getMessage()
+                );
+                $this->warn(sprintf(
+                    '  account#%d (%s) fetch failed: %s',
+                    $account->id, $account->email_address, $e->getMessage()
+                ));
+            }
+        }
+        $count += $accountImported;
+        $this->info("Email fetch completed. imported={$count} (system+personal={$accountImported} from " . $personalAccounts->count() . " accts), errors={$errors['count']}, account_errors={$accountErrors}");
 
         // 個別エラーがあった場合は CLI でも要約を表示する
         if (($errors['count'] ?? 0) > 0) {

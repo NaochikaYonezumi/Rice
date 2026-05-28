@@ -37,6 +37,9 @@ class ProcessAiChatMessage implements ShouldQueue
     /** メール 1 通あたりの本文を切り詰める文字数. summarizeThread() と同等. */
     private const EMAIL_BODY_LIMIT = 800;
 
+    /** 返信モードで「過去メール」の本文を切り詰める文字数 (要約用なので短く). */
+    private const REPLY_PAST_BODY_LIMIT = 200;
+
     public function __construct(public int $assistantMessageId) {}
 
     public function handle(RagApiService $ragApi): void
@@ -97,7 +100,10 @@ class ProcessAiChatMessage implements ShouldQueue
         $thread = $session->thread;
         $threadSubject = $thread?->subject ?: '(件名なし)';
 
-        // スレッド本文 (毎回最新の email をシリアライズ) — system context に固定で 1 回だけ入れる.
+        // スレッド本文 (毎回最新の email をシリアライズ).
+        //   summary: 全メールを時系列フラットに並べる (= 全体像が大事).
+        //   reply:   最新メール (= 返信対象) を「返信対象メール」ブロックで強調し,
+        //            他のメールは「過去のやりとり」として本文 200 字に圧縮する.
         $threadContext = '';
         if ($thread) {
             $emails = Email::where('thread_id', $thread->id)
@@ -105,15 +111,45 @@ class ProcessAiChatMessage implements ShouldQueue
                 ->orderBy('received_at')
                 ->limit(50)
                 ->get();
-            foreach ($emails as $i => $e) {
-                $threadContext .= "[#" . ($i + 1) . "] ";
-                $threadContext .= "From: " . ($e->from_label ?: $e->from_address ?: '不明') . "\n";
-                $threadContext .= "To: "   . ($e->to_address ?: '—') . "\n";
-                if ($e->cc) $threadContext .= "Cc: " . $e->cc . "\n";
-                $threadContext .= "Date: " . ($e->received_at?->format('Y/m/d H:i') ?: '—') . "\n";
-                $threadContext .= "Subject: " . ($e->subject ?: '(件名なし)') . "\n";
-                $threadContext .= "Body:\n" . Str::limit((string) $e->plain_body, self::EMAIL_BODY_LIMIT, '...(省略)') . "\n";
+
+            if ($session->kind === AiChatSession::KIND_REPLY && $emails->count() > 0) {
+                // 最新メール (返信対象). 末尾 = 一番新しい.
+                $latest = $emails->last();
+                $past   = $emails->slice(0, -1)->values();
+
+                if ($past->count() > 0) {
+                    $threadContext .= "【過去のやりとり (参考. 古い順)】\n";
+                    foreach ($past as $i => $e) {
+                        $threadContext .= "[#" . ($i + 1) . "] ";
+                        $threadContext .= "From: " . ($e->from_label ?: $e->from_address ?: '不明') . "  ";
+                        $threadContext .= "Date: " . ($e->received_at?->format('Y/m/d H:i') ?: '—') . "\n";
+                        $threadContext .= "Subject: " . ($e->subject ?: '(件名なし)') . "\n";
+                        $threadContext .= "  抜粋: " . Str::limit((string) $e->plain_body, self::REPLY_PAST_BODY_LIMIT, '...') . "\n";
+                        $threadContext .= "----\n";
+                    }
+                    $threadContext .= "\n";
+                }
+
+                $threadContext .= "【返信対象メール (= 今回返信するべき最新メール)】\n";
+                $threadContext .= "From: " . ($latest->from_label ?: $latest->from_address ?: '不明') . "\n";
+                $threadContext .= "To: "   . ($latest->to_address ?: '—') . "\n";
+                if ($latest->cc) $threadContext .= "Cc: " . $latest->cc . "\n";
+                $threadContext .= "Date: " . ($latest->received_at?->format('Y/m/d H:i') ?: '—') . "\n";
+                $threadContext .= "Subject: " . ($latest->subject ?: '(件名なし)') . "\n";
+                $threadContext .= "Body:\n" . Str::limit((string) $latest->plain_body, self::EMAIL_BODY_LIMIT, '...(省略)') . "\n";
                 $threadContext .= "----\n";
+            } else {
+                // summary kind (および reply で本文 0 通の縮退) は従来通り全メール時系列.
+                foreach ($emails as $i => $e) {
+                    $threadContext .= "[#" . ($i + 1) . "] ";
+                    $threadContext .= "From: " . ($e->from_label ?: $e->from_address ?: '不明') . "\n";
+                    $threadContext .= "To: "   . ($e->to_address ?: '—') . "\n";
+                    if ($e->cc) $threadContext .= "Cc: " . $e->cc . "\n";
+                    $threadContext .= "Date: " . ($e->received_at?->format('Y/m/d H:i') ?: '—') . "\n";
+                    $threadContext .= "Subject: " . ($e->subject ?: '(件名なし)') . "\n";
+                    $threadContext .= "Body:\n" . Str::limit((string) $e->plain_body, self::EMAIL_BODY_LIMIT, '...(省略)') . "\n";
+                    $threadContext .= "----\n";
+                }
             }
         }
 
@@ -163,13 +199,27 @@ class ProcessAiChatMessage implements ShouldQueue
         }
         $prompt .= "\n";
         if ($threadContext !== '') {
-            $prompt .= "【スレッド本文 (時系列)】\n" . $threadContext . "\n";
+            // reply モードは threadContext 側で 【過去のやりとり】+【返信対象メール】 と
+            // 既に明示ブロック化済みなので外側ラベルは付けない. summary は時系列フラット.
+            if ($session->kind === AiChatSession::KIND_REPLY) {
+                $prompt .= $threadContext . "\n";
+            } else {
+                $prompt .= "【スレッド本文 (時系列)】\n" . $threadContext . "\n";
+            }
         }
         if ($historyBlock !== '') {
             $prompt .= "【これまでの対話】\n" . $historyBlock . "\n";
         }
         $prompt .= "【今回のユーザ指示】\n" . ($latestUserContent !== '' ? $latestUserContent : '(空)') . "\n\n";
-        $prompt .= "【出力】上記指示に従ってアシスタントとして応答してください. 余計な前置きや挨拶は不要.";
+        if ($session->kind === AiChatSession::KIND_REPLY) {
+            $prompt .= "【出力ルール】\n"
+                . "- 上記 【返信対象メール】 への返信本文だけを出力してください.\n"
+                . "- 【過去のやりとり】 は文脈把握のための参考情報. 過去メールへの返信ではありません.\n"
+                . "- 署名・件名・宛先などのヘッダは含めず, 本文だけを書いてください.\n"
+                . "- 過去のやりとりで「すでに合意した内容」「すでに伝えた情報」を不必要に繰り返さないでください.\n";
+        } else {
+            $prompt .= "【出力】上記指示に従ってアシスタントとして応答してください. 余計な前置きや挨拶は不要.";
+        }
 
         return $prompt;
     }

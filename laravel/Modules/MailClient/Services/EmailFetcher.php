@@ -1894,11 +1894,20 @@ class EmailFetcher
                 $cc = implode(', ', $ccParts);
                 $inReplyTo = (string) $message->getInReplyTo();
 
+                // 件名: Webklex の getSubject() は基本 MIME デコード済みだが,
+                // 連結 encoded-word を間に空白なしで連ねた変則的な件名 (xserver のメンテ通知等) では
+                // 生のまま返り, VARCHAR(255) の subject カラムに入らず SQL エラーになる.
+                // ロバストデコーダ + cleanUtf8(255) で必ず 255 文字以内に切り詰める.
+                $rawSubject = (string) ($message->getSubject() ?: '');
+                $decoded    = $this->decodeMimeHeaderRobust($rawSubject);
+                if ($decoded === '') $decoded = $rawSubject;
+                $subjectClean = $this->cleanUtf8($decoded !== '' ? $decoded : '(件名なし)', 255);
+
                 $email = Email::create([
                     'thread_id'       => $thread->id,
                     'message_id'      => $messageId ?: null,
                     'in_reply_to'     => $inReplyTo ?: null,
-                    'subject'         => $message->getSubject() ?: '(件名なし)',
+                    'subject'         => $subjectClean,
                     'from_address'    => $message->getFrom()[0]->mail ?? 'unknown@example.com',
                     'from_name'       => $message->getFrom()[0]->personal ?? null,
                     'to_address'      => $message->getTo()[0]->mail ?? '',
@@ -1945,8 +1954,13 @@ class EmailFetcher
             }
         }
 
-        $subject = $message->getSubject() ?: '(件名なし)';
-        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
+        // 件名は MIME デコード + 255 文字以内に揃える (email_threads.subject は VARCHAR(1000) だが,
+        // 過剰に長い件名は LIKE クエリも遅くするため emails.subject と同じ 255 で統一する).
+        $rawSubject = (string) ($message->getSubject() ?: '');
+        $decoded    = $this->decodeMimeHeaderRobust($rawSubject);
+        if ($decoded === '') $decoded = $rawSubject;
+        $subject = $this->cleanUtf8($decoded !== '' ? $decoded : '(件名なし)', 255);
+        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject) ?? $subject;
         $thread = EmailThread::query()
             ->where('owner_user_id', $ownerUserId)
             ->where('subject', 'like', "%{$normalized}%")

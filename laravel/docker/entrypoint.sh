@@ -4,6 +4,19 @@
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
+# nginx の fastcgi/proxy/client_body 一時ファイル置き場を www-data に渡す。
+# Dockerfile ビルド時にも chown しているが、 base image のバージョン違い・
+# ビルドキャッシュ・volume マウント等で実 runtime には root 所有になってしまう
+# ケースがあり、 そのとき大きな PHP 出力 (受信トレイの inline CSS 等) で
+# nginx が一時ファイル書き込みに失敗し ERR_INCOMPLETE_CHUNKED_ENCODING で
+# 接続切断 → ブラウザ真っ白、になる。runtime に強制で chown して再発防止する。
+mkdir -p /var/lib/nginx/tmp/client_body \
+         /var/lib/nginx/tmp/proxy \
+         /var/lib/nginx/tmp/fastcgi \
+         /var/lib/nginx/tmp/uwsgi \
+         /var/lib/nginx/tmp/scgi
+chown -R www-data:www-data /var/lib/nginx
+
 # ----------------------------------------------------------------------
 # TLS 証明書の準備
 #   - /etc/nginx/certs/{fullchain,privkey}.pem が無い場合 (= 初回起動 or

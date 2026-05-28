@@ -442,6 +442,129 @@ docker compose restart laravel
 
 ---
 
+## 社内 LAN 公開 (HTTP + 社内DNS) — 最小構成
+
+社内のみで使うので TLS 証明書は不要、HTTP のままでよいケース。ホスト名で覚えやすくしたい・複数台のPCから同じURLでアクセスさせたい場合に使います。
+
+### 構成図
+
+```
+[LAN PC] → 社内DNS (rice.cosy.co.jp → 192.168.x.x)
+       ↓ HTTP:80
+[Windows ホスト] (192.168.11.74 / 192.168.100.2)
+       ↓ netsh portproxy : 80 → WSL:80
+[WSL2 (172.x.x.x)]
+       ↓ docker (80:80)
+[rice-laravel-1: nginx + php-fpm]
+```
+
+### 手順
+
+#### ① 社内DNS にレコード追加
+
+ドメインコントローラー (Windows Server AD DNS) で管理者 PowerShell:
+
+```powershell
+# cosy.co.jp ゾーンを社内DNSに作成 (split-horizon ※注意は HTTPS セクション参照)
+Add-DnsServerPrimaryZone -Name "cosy.co.jp" -ZoneFile "cosy.co.jp.dns" -DynamicUpdate None -ErrorAction SilentlyContinue
+
+# Rice ホストの A レコード (使うネットワーク分)
+Add-DnsServerResourceRecordA -Name "rice" -ZoneName "cosy.co.jp" -IPv4Address "192.168.11.74"  -CreatePtr $false
+Add-DnsServerResourceRecordA -Name "rice" -ZoneName "cosy.co.jp" -IPv4Address "192.168.100.2" -CreatePtr $false
+
+Get-DnsServerResourceRecord -ZoneName "cosy.co.jp" -Name "rice"
+```
+
+LAN PC 側で確認:
+```cmd
+nslookup rice.cosy.co.jp
+ping rice.cosy.co.jp
+```
+
+> **AD DNS が使えない場合の暫定対応**: 各クライアント PC の `hosts` ファイルに以下を追記しても動きます。
+> ```
+> 192.168.11.74   rice.cosy.co.jp
+> ```
+> Windows: `C:\Windows\System32\drivers\etc\hosts` (管理者で編集)
+> macOS/Linux: `/etc/hosts`
+> ただし、台数が多い・人事異動でクライアントが変わるなら DNS の方が運用しやすいです。
+
+#### ② Windows portproxy + Firewall (1回だけ管理者で実行)
+
+WSL2 は NAT 配下なので、外部から WSL に直接届きません。Windows でポート転送 + Firewall 解放が必要です。WSL の IP は再起動で変わるのでスケジューラタスクで自動同期します。
+
+PowerShell を**管理者として実行**で開いて:
+
+```powershell
+cd \\wsl.localhost\ubuntu-20.04\home\nakaochi\projects\Rice\scripts\windows
+powershell -ExecutionPolicy Bypass -File setup-wsl-portproxy.ps1
+```
+
+スクリプトは 80 と 443 の両方を扱いますが、HTTP のみ運用でも問題ありません (443 は cert 未配置時 self-signed フォールバックで応答するだけ)。
+
+確認:
+```powershell
+netsh interface portproxy show v4tov4
+# → 0.0.0.0:80 が 172.x.x.x:80 に転送されている
+```
+
+#### ③ `.env` を社内ホスト名に切り替え
+
+```bash
+cd /home/nakaochi/projects/Rice
+
+# APP_URL を http://rice.cosy.co.jp にする
+sed -i 's|^APP_URL=.*|APP_URL=http://rice.cosy.co.jp|' laravel/.env
+
+# HTTP 運用なので Secure Cookie は無効に
+grep -q '^SESSION_SECURE_COOKIE=' laravel/.env \
+    && sed -i 's|^SESSION_SECURE_COOKIE=.*|SESSION_SECURE_COOKIE=false|' laravel/.env \
+    || echo 'SESSION_SECURE_COOKIE=false' >> laravel/.env
+
+# SESSION_DOMAIN を設定 (任意。複数 LAN セグメントで同一 Cookie を共有したい場合)
+grep -q '^SESSION_DOMAIN=' laravel/.env \
+    && sed -i 's|^SESSION_DOMAIN=.*|SESSION_DOMAIN=rice.cosy.co.jp|' laravel/.env \
+    || echo 'SESSION_DOMAIN=rice.cosy.co.jp' >> laravel/.env
+
+# 設定キャッシュをクリア
+docker exec -u www-data rice-laravel-1 php artisan config:clear
+docker exec -u www-data rice-laravel-1 php artisan config:cache
+
+# 既にコンテナが上がっているなら restart で反映 / 初回ならビルド
+docker compose up -d --build
+```
+
+#### ④ 動作確認
+
+```bash
+# Windows ホストから
+curl -I http://rice.cosy.co.jp
+# → HTTP/1.1 200 OK が返れば成功
+
+# 別 LAN PC のブラウザから
+# http://rice.cosy.co.jp/login を開く → ログイン画面表示
+```
+
+メール送信テスト: パスワード再設定 → 送信されたメールのリンクが `http://rice.cosy.co.jp/reset-password/...` で、別 PC のブラウザでも開ければ OK。
+
+### HTTP 構成のトラブルシューティング
+
+| 症状 | 原因 | 対処 |
+|---|---|---|
+| `nslookup rice.cosy.co.jp` が応答なし | クライアントPCのDNSサーバー設定が社内DNSを向いていない | `ipconfig /all` で確認 → DHCPサーバーの DNS 配布設定を見直すか、クライアントPC個別に手動設定 |
+| `nslookup` は OK だが `curl` でタイムアウト | Windows Firewall / portproxy 未設定 | `Test-NetConnection rice.cosy.co.jp -Port 80` で疎通確認、 ②を再実行 |
+| WSL を再起動したらアクセス不可になった | portproxy が古い IP のまま | スケジューラタスク `Rice-WSL-PortProxy-Refresh` を手動実行: `Start-ScheduledTask -TaskName Rice-WSL-PortProxy-Refresh` |
+| ログイン後にリダイレクトループ | `SESSION_SECURE_COOKIE=true` のまま HTTP アクセス | `SESSION_SECURE_COOKIE=false` に変更 + `config:clear` + ブラウザのCookie削除 |
+| 招待 / パスワード再設定リンクが `http://localhost` | `APP_URL` 未変更 | `.env` の APP_URL を `http://rice.cosy.co.jp` に + `config:clear` |
+| `419 Page Expired` (CSRF) が頻発 | `SESSION_DOMAIN` 不一致 / Cookie 残骸 | `.env` の `SESSION_DOMAIN` を消す or 値をホスト名と完全一致させる + Cookie 全削除 |
+| 2台以上の社内PCで同時アクセスすると Cookie が混じる | `SESSION_DOMAIN` を `.cosy.co.jp` のような広域にしている | サブドメイン共有を意図しないなら `SESSION_DOMAIN` を消すか具体ホスト名のみに |
+
+### HTTPS に切り替えたくなったとき
+
+下の「社内 LAN 公開 (HTTPS + 社内DNS)」セクションへ。`.env` の `APP_URL` を `https://...` に変えて `SESSION_SECURE_COOKIE=true` に戻し、③で証明書を取得すれば移行完了です。
+
+---
+
 ## 社内 LAN 公開 (HTTPS + 社内DNS)
 
 開発機の localhost ではなく、社内 LAN の別 PC からも `https://rice.cosy.co.jp` でアクセスできるようにする手順です。WSL2 + Docker + Windows ホストの構成を想定しています。

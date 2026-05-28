@@ -3794,17 +3794,19 @@
     </div>
 
     {{-- AI チャットパネル (右側スライドイン. 要約/返信案を多ターンでブラッシュアップ)
-         既存の AI要約 (one-shot) パネルとは別経路. スレッド × kind で永続化される. --}}
+         既存の AI要約 (one-shot) パネルとは別経路. スレッド × kind で永続化される.
+         注意: x-transition で Tailwind ユーティリティ ("translate-x-full" 等) を string で
+              指定すると vite の Tailwind JIT が拾えず CSS が出ない事象あり.
+              また x-show は内部で element.style.display を toggle するため,
+              inline style に display:flex を書くと「再表示時に flex が剥がれて見えない」事故が
+              起こる. flex は CSS class 側に逃がし, transition は Alpine 標準 (フェード) のみ. --}}
     <div x-show="aiChat.open" x-cloak
          @click="closeAiChat()"
-         style="position:fixed;inset:0;z-index:1990;background-color:rgba(15,23,42,0.25);"
+         class="rice-ai-chat-backdrop"
          x-transition.opacity></div>
     <div x-show="aiChat.open" x-cloak
-         x-transition:enter="transition ease-out duration-200"
-         x-transition:enter-start="translate-x-full" x-transition:enter-end="translate-x-0"
-         x-transition:leave="transition ease-in duration-150"
-         x-transition:leave-start="translate-x-0" x-transition:leave-end="translate-x-full"
-         style="position:fixed;top:0;right:0;bottom:0;width:560px;max-width:96vw;z-index:2000;background:#ffffff;box-shadow:-12px 0 32px rgba(15,23,42,0.18);display:flex;flex-direction:column;">
+         class="rice-ai-chat-panel"
+         x-transition.opacity>
         {{-- ヘッダ --}}
         <div style="flex-shrink:0;padding:14px 16px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);">
             <div class="flex items-center justify-between gap-2 mb-2">
@@ -10341,6 +10343,23 @@ function emailApp() {
 
 <style>
 [x-cloak] { display: none !important; }
+
+/* ===== AI チャットパネル (右側スライドイン) =====
+   Tailwind ユーティリティ + x-transition の組合せで効かない事故があったため,
+   素の CSS で position / 寸法 / display を完結させる. */
+.rice-ai-chat-backdrop {
+    position: fixed; inset: 0; z-index: 1990;
+    background-color: rgba(15, 23, 42, 0.25);
+}
+.rice-ai-chat-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    width: 560px; max-width: 96vw; z-index: 2000;
+    background: #ffffff;
+    box-shadow: -12px 0 32px rgba(15, 23, 42, 0.18);
+    display: flex; flex-direction: column;
+}
+/* x-show=true 時に Alpine が style.display を強制的に '' (空) にセットして
+   CSS の display:flex を有効化させるため, !important は付けない. */
 .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }

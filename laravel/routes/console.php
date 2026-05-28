@@ -297,16 +297,66 @@ Artisan::command('mail:repair-subjects {--apply} {--limit=}', function (\Modules
             }
         });
 
+    // ===== Pass 3: thread.subject が ? 置換で壊れているものを, 同スレッド内の
+    // 健全な email.subject から Re:/Fwd: を剥がして復元する.
+    // (encoded-word 残留 = Pass 1/2 で拾えるが, 「文字バイト → '?' に置換済み」
+    //  パターンは encoded-word を含まないため別経路で救う必要がある.)
+    $looksLossy = \Closure::bind(function (string $s): bool {
+        /** @var \Modules\MailClient\Services\EmailFetcher $this */
+        return $this->subjectLooksLossy($s);
+    }, $fetcher, \Modules\MailClient\Services\EmailFetcher::class);
+
+    $threadLossyCount = 0; $threadLossyFixed = 0;
+    \App\Models\EmailThread::query()
+        ->orderByDesc('id')
+        ->when($limit, fn($q) => $q->limit($limit))
+        ->chunkById(200, function ($rows) use (&$threadLossyCount, &$threadLossyFixed, $apply, $looksLossy, $clean) {
+            foreach ($rows as $thread) {
+                $cur = trim((string) ($thread->subject ?? ''));
+                if (!$looksLossy($cur)) continue;
+                $threadLossyCount++;
+                // この thread の email 群から「lossy でない」件名を 1 件拾う.
+                // 最新 (received_at desc) から見て最初に見つかったもの.
+                $emails = \App\Models\Email::where('thread_id', $thread->id)
+                    ->orderByDesc('received_at')
+                    ->limit(20)
+                    ->get(['id', 'subject']);
+                $good = null;
+                foreach ($emails as $e) {
+                    $s = trim((string) ($e->subject ?? ''));
+                    if ($s === '' || $looksLossy($s)) continue;
+                    $good = $s;
+                    break;
+                }
+                if ($good === null) continue;
+                // Re:/Fwd: と [#TICKET] を剥がして「本文だけ」を thread.subject にする.
+                $stripped = preg_replace('/^((?:\s*(?:re|fwd|fw)\s*(?::|：)\s*)+)/iu', '', $good) ?? $good;
+                $stripped = preg_replace(\App\Models\EmailThread::TICKET_REGEX, '', $stripped) ?? $stripped;
+                $stripped = trim($stripped);
+                if ($stripped === '' || $looksLossy($stripped)) continue;
+                $stripped = $clean($stripped, 255);
+                if ($stripped === '' || $stripped === $cur) continue;
+
+                if ($threadLossyFixed < 5) {
+                    $this->line('  thread#' . $thread->id . ' (lossy): ' . mb_substr($cur, 0, 60) . '  →  ' . mb_substr($stripped, 0, 60));
+                }
+                if ($apply) { $thread->subject = $stripped; $thread->save(); }
+                $threadLossyFixed++;
+            }
+        });
+
     if ($apply) {
         $this->info("emails: scanned={$emailCount} fixed={$emailFixed}");
-        $this->info("threads: scanned={$threadCount} fixed={$threadFixed}");
+        $this->info("threads (encoded-word): scanned={$threadCount} fixed={$threadFixed}");
+        $this->info("threads (lossy ?-byte): scanned={$threadLossyCount} fixed={$threadLossyFixed}");
     } else {
         $this->info("emails: scanned={$emailCount} would_fix={$emailFixed}  (dry-run)");
-        $this->info("threads: scanned={$threadCount} would_fix={$threadFixed}  (dry-run)");
+        $this->info("threads (encoded-word): scanned={$threadCount} would_fix={$threadFixed}  (dry-run)");
+        $this->info("threads (lossy ?-byte): scanned={$threadLossyCount} would_fix={$threadLossyFixed}  (dry-run)");
         $this->warn('実行するには --apply を付けて再実行してください.');
     }
     return 0;
-})->purpose('Re-decode MIME encoded-words remaining in already-stored subjects (emails + email_threads).');
+})->purpose('Re-decode MIME encoded-words AND inherit lossy thread subjects from healthy emails.');
 
 
 /**

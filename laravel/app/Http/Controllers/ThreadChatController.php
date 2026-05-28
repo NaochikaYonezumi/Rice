@@ -61,7 +61,15 @@ class ThreadChatController extends Controller
             ->when($inboxScope === 'personal',
                 fn($qq) => $qq->where('owner_user_id', $myId),
                 fn($qq) => $qq->whereNull('owner_user_id')
-            );
+            )
+            // ゴミ箱化されたスレッドは通常一覧から除外する.
+            // (EmailController::index と同じ規約. スレッド本体の status='trash' か,
+            //  最後の生きていたメールが全てゴミ箱化されて destroyEmail が親も trash 化したケース)
+            ->where(function ($q) {
+                $q->where('status', '!=', EmailThread::STATUS_TRASH)
+                  ->orWhereNull('status');
+            })
+            ->whereNull('trashed_at');
 
         // 複数アカウント切替プルダウンでの絞り込み (個人モード時のみ意味を持つ)
         // 自分が所有する口座IDのみ通す

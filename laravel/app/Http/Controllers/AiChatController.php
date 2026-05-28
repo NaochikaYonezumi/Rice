@@ -1,0 +1,222 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Jobs\ProcessAiChatMessage;
+use App\Models\AiChatMessage;
+use App\Models\AiChatSession;
+use App\Models\AiSetting;
+use App\Models\EmailThread;
+use App\Services\AiSkillService;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+
+/**
+ * AI チャット (要約/返信案ブラッシュアップ) の REST エンドポイント.
+ *
+ * 1 ユーザ × 1 スレッド × 1 kind に対して 1 セッションが永続化される.
+ * 同じスレッドを再訪したら続きから.
+ */
+class AiChatController extends Controller
+{
+    public function __construct(protected AiSkillService $skillService) {}
+
+    /**
+     * GET /threads/{thread}/ai-chat?kind=summary|reply
+     *
+     * 既存セッションがあれば全メッセージを返す. 無ければ session=null + messages=[].
+     */
+    public function show(Request $request, EmailThread $thread): JsonResponse
+    {
+        $this->authorizeThreadAccess($request, $thread);
+        $kind = $this->validateKind($request->input('kind', 'summary'));
+        $userId = $request->user()->id;
+
+        $session = AiChatSession::where('user_id', $userId)
+            ->where('thread_id', $thread->id)
+            ->where('kind', $kind)
+            ->first();
+
+        if (!$session) {
+            return response()->json([
+                'session'  => null,
+                'messages' => [],
+                'thread'   => [
+                    'id'      => $thread->id,
+                    'subject' => $thread->subject,
+                ],
+            ]);
+        }
+
+        return response()->json([
+            'session'  => $this->serializeSession($session),
+            'messages' => $session->messages->map(fn($m) => $this->serializeMessage($m))->values(),
+            'thread'   => [
+                'id'      => $thread->id,
+                'subject' => $thread->subject,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /threads/{thread}/ai-chat
+     *
+     * 初回ターン. 既存セッションが無ければ作成 (+system_prompt を AiSkill から決定).
+     * user メッセージを append し, assistant の pending メッセージを作って Job を dispatch.
+     *
+     * body: { kind: summary|reply, message: string, provider?: string, model?: string, skill?: string }
+     */
+    public function start(Request $request, EmailThread $thread): JsonResponse
+    {
+        $this->authorizeThreadAccess($request, $thread);
+
+        $data = $request->validate([
+            'kind'     => 'nullable|string|in:summary,reply',
+            'message'  => 'required|string|max:4000',
+            'provider' => 'nullable|string|in:ollama,claude,gemini',
+            'model'    => 'nullable|string|max:128',
+            'skill'    => 'nullable|string|max:64',
+        ]);
+
+        $kind   = $data['kind'] ?? AiChatSession::KIND_SUMMARY;
+        $userId = $request->user()->id;
+
+        $session = AiChatSession::where('user_id', $userId)
+            ->where('thread_id', $thread->id)
+            ->where('kind', $kind)
+            ->first();
+
+        if (!$session) {
+            // セッション初回作成: AiSkill から system_prompt を引き写してロックする.
+            $skills = $this->skillService->getSkillsForUser($request->user(), $kind);
+            $skillKey = $data['skill'] ?? null;
+            if (!$skillKey) {
+                $skillKey = $kind === AiChatSession::KIND_REPLY
+                    ? ($this->skillService->getDefaultReplyKey($request->user()) ?? 'reply')
+                    : ($this->skillService->getDefaultSummaryKey($request->user()) ?? 'summarize');
+            }
+            $selected = $skills[$skillKey] ?? array_values($skills)[0] ?? [
+                'name'          => $kind === AiChatSession::KIND_REPLY ? '返信案' : '要約',
+                'system_prompt' => $kind === AiChatSession::KIND_REPLY
+                    ? "あなたはサポート窓口担当者として返信案を作るアシスタントです.\n直近のユーザ指示に従って返信案を 1 通分作ってください. 必要であれば前案を改稿する形でも構いません.\n署名やヘッダ (To/Subject 等) は含めず, 本文だけを出力してください."
+                    : "あなたはサポート窓口担当者です.\n以下のメールスレッドを日本語で要約してください.\n出力フォーマット:\n1. 概要 (3〜5行で何のスレッドか)\n2. 経緯 (時系列で 5〜8 行の箇条書き)\n3. 未解決事項 / ネクストアクション\n4. 重要な日付・金額・人物・固有名詞",
+            ];
+
+            $aiSettings = AiSetting::getSettings();
+            $session = AiChatSession::create([
+                'user_id'          => $userId,
+                'thread_id'        => $thread->id,
+                'kind'             => $kind,
+                'provider'         => $data['provider'] ?? $aiSettings->default_provider,
+                'model'            => $data['model']    ?? $aiSettings->default_model,
+                'system_prompt'    => (string) ($selected['system_prompt'] ?? ''),
+                'skill_key'        => $skillKey,
+                'last_activity_at' => now(),
+            ]);
+        }
+
+        return $this->appendUserAndDispatch($session, $data['message']);
+    }
+
+    /**
+     * POST /ai-chat-sessions/{session}/messages
+     *
+     * フォローアップ (2 ターン目以降). body: { message: string }
+     */
+    public function followUp(Request $request, AiChatSession $session): JsonResponse
+    {
+        if ($session->user_id !== $request->user()->id) {
+            abort(403, 'このチャットセッションへのアクセス権がありません.');
+        }
+
+        $data = $request->validate([
+            'message' => 'required|string|max:4000',
+        ]);
+
+        return $this->appendUserAndDispatch($session, $data['message']);
+    }
+
+    /**
+     * DELETE /ai-chat-sessions/{session}
+     *
+     * セッション + 配下メッセージを破棄. UI の「会話をリセット」用.
+     */
+    public function destroy(Request $request, AiChatSession $session): JsonResponse
+    {
+        if ($session->user_id !== $request->user()->id) {
+            abort(403, 'このチャットセッションへのアクセス権がありません.');
+        }
+        $session->delete();
+        return response()->json(['status' => 'ok']);
+    }
+
+    /** スレッドの所有者 (owner_user_id) と本人を照合. 共有 (NULL) は誰でも OK. */
+    protected function authorizeThreadAccess(Request $request, EmailThread $thread): void
+    {
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== $request->user()->id) {
+            abort(403, 'このスレッドへのアクセス権がありません.');
+        }
+    }
+
+    protected function validateKind(string $kind): string
+    {
+        return in_array($kind, [AiChatSession::KIND_SUMMARY, AiChatSession::KIND_REPLY], true)
+            ? $kind
+            : AiChatSession::KIND_SUMMARY;
+    }
+
+    /**
+     * user メッセージを append + pending な assistant メッセージを作って Job を dispatch する共通処理.
+     */
+    protected function appendUserAndDispatch(AiChatSession $session, string $userMessage): JsonResponse
+    {
+        $user = AiChatMessage::create([
+            'session_id' => $session->id,
+            'role'       => AiChatMessage::ROLE_USER,
+            'content'    => $userMessage,
+            'status'     => AiChatMessage::STATUS_DONE,
+        ]);
+        $assistant = AiChatMessage::create([
+            'session_id' => $session->id,
+            'role'       => AiChatMessage::ROLE_ASSISTANT,
+            'content'    => '',
+            'status'     => AiChatMessage::STATUS_PENDING,
+        ]);
+        $session->update(['last_activity_at' => now()]);
+
+        ProcessAiChatMessage::dispatch($assistant->id);
+
+        return response()->json([
+            'session'   => $this->serializeSession($session->fresh()),
+            'user'      => $this->serializeMessage($user),
+            'assistant' => $this->serializeMessage($assistant),
+        ]);
+    }
+
+    protected function serializeSession(AiChatSession $session): array
+    {
+        return [
+            'id'               => $session->id,
+            'thread_id'        => $session->thread_id,
+            'kind'             => $session->kind,
+            'provider'         => $session->provider,
+            'model'            => $session->model,
+            'skill_key'        => $session->skill_key,
+            'last_activity_at' => $session->last_activity_at?->toIso8601String(),
+        ];
+    }
+
+    protected function serializeMessage(AiChatMessage $m): array
+    {
+        return [
+            'id'            => $m->id,
+            'role'          => $m->role,
+            'content'       => $m->content,
+            'status'        => $m->status,
+            'error_code'    => $m->error_code,
+            'error_message' => $m->error_message,
+            'elapsed_ms'    => $m->elapsed_ms,
+            'created_at'    => $m->created_at?->toIso8601String(),
+        ];
+    }
+}

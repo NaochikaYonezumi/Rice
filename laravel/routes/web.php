@@ -124,6 +124,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::post('/emails/ai-compose', [EmailController::class, 'askAiCompose'])->name('emails.ai_compose');
     Route::post('/threads/{thread}/ai-summary', [EmailController::class, 'summarizeThread'])->name('threads.ai_summary');
+
+    // AI チャット (スレッド × kind=summary|reply で永続化, 何度でも追加指示でブラッシュアップ可能)
+    Route::get('/threads/{thread}/ai-chat',  [\App\Http\Controllers\AiChatController::class, 'show'])->name('threads.ai_chat.show');
+    Route::post('/threads/{thread}/ai-chat', [\App\Http\Controllers\AiChatController::class, 'start'])->name('threads.ai_chat.start');
+    Route::post('/ai-chat-sessions/{session}/messages', [\App\Http\Controllers\AiChatController::class, 'followUp'])->name('ai_chat_sessions.followup');
+    Route::delete('/ai-chat-sessions/{session}', [\App\Http\Controllers\AiChatController::class, 'destroy'])->name('ai_chat_sessions.destroy');
     Route::post('/emails/{email}/ai', [EmailController::class, 'askAi'])->name('emails.ai');
     Route::get('/ai-tasks/recent', [AiTaskController::class, 'recent'])->name('ai_tasks.recent');
     Route::get('/ai-tasks/{task}', [AiTaskController::class, 'show'])->name('ai_tasks.show');

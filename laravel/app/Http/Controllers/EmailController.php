@@ -490,18 +490,60 @@ class EmailController extends Controller
     {
         $settings = \App\Models\MailSetting::getSettings();
         try {
+            // 1) システム共有メール (MailSetting の IMAP/POP3)
             $count = $fetcher->fetch();
             $errInfo = $fetcher->getLastErrors();
             // 取得成功 (個別エラーがあっても全体としては成功扱い)
             $settings->recordFetchSuccess((int) $count, $errInfo['errors'] ?? []);
+
+            // 2) 個人メールアカウント (MailAccount). cron 側の mail:fetch クロージャと同じ規約.
+            //    1 アカウントの失敗で全体を落とさず, 各アカウントの取り込み件数とエラーを集約する.
+            //    旧実装は fetch() だけを呼んでいて, 同期ボタンを押しても個人メールが永遠に更新されない不具合だった.
+            $personalCount    = 0;
+            $personalAccounts = 0;
+            $accountErrors    = [];
+            try {
+                $personalAccounts = \App\Models\MailAccount::query()
+                    ->where('is_active', true)
+                    ->whereIn('inbox_protocol', [
+                        \App\Models\MailAccount::PROTOCOL_IMAP,
+                        \App\Models\MailAccount::PROTOCOL_POP3,
+                    ])
+                    ->get();
+                foreach ($personalAccounts as $account) {
+                    try {
+                        $personalCount += $fetcher->fetchForAccount($account);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::error(
+                            '[emails.fetch account#' . $account->id . '] ' . $e->getMessage()
+                        );
+                        $accountErrors[] = [
+                            'account_id' => $account->id,
+                            'email'      => $account->email_address,
+                            'error'      => $e->getMessage(),
+                        ];
+                    }
+                }
+                $personalAccounts = $personalAccounts->count();
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('[emails.fetch personal accounts] ' . $e->getMessage());
+            }
+
+            // フロントには合算 count を返す (ルーム件数バッジ等の差分判定に使う).
+            // 個別エラーは errors にマージし, 個人系の内訳も別フィールドで出す.
+            $mergedErrors = array_merge($errInfo['errors'] ?? [], $accountErrors);
             return response()->json([
                 'status'       => 'ok',
-                'count'        => $count,
+                'count'        => $count + $personalCount,
+                'system_count'   => (int) $count,
+                'personal_count' => (int) $personalCount,
+                'personal_accounts' => (int) $personalAccounts,
                 // 既存メールのうち「前回うまく取得できなかった」フィールドを再パースで更新した件数。
                 // 新規取り込み (count) とは別軸で UI に出すための値。
                 'backfilled'   => (int) ($errInfo['backfilled'] ?? 0),
-                'error_count'  => (int) ($errInfo['count'] ?? 0),
-                'errors'       => $errInfo['errors'] ?? [],
+                'error_count'  => (int) ($errInfo['count'] ?? 0) + count($accountErrors),
+                'errors'       => $mergedErrors,
+                'account_errors' => $accountErrors,
                 'consecutive_failures' => 0,
             ]);
         } catch (\Throwable $e) {

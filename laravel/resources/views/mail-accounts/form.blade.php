@@ -76,9 +76,9 @@
                       this.testResult = null;
                       try {
                           const fd = new FormData(document.getElementById('mailAccountForm'));
-                          // 編集画面の form には @method('PUT') の hidden があるため、
+                          // 編集画面の form には PUT 用の _method=PUT hidden が入っているため、
                           // テストエンドポイント (POST /mail-accounts/test) に流すと
-                          // PUT /mail-accounts/{mailAccount} (={test}) に再解釈されてしまう。
+                          // PUT /mail-accounts/(mailAccount) に再解釈されてしまう。事前に削除する.
                           fd.delete('_method');
                           // Alpine の reactive state を信頼ソースにして上書き
                           // (hidden + checkbox の二重 name で smtp_enabled が hidden 側の '0' に

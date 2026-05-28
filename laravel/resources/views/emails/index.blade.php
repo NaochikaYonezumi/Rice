@@ -9103,6 +9103,8 @@ function emailApp() {
 
         // ===== AI チャット (要約 / 返信案 を多ターンでブラッシュアップ) =====
         async openAiChat(kind) {
+            // 診断ログ. 後で剥がしても良いが原因究明用に当面残す.
+            console.info('[ai-chat] openAiChat called kind=', kind, 'selectedThreadId=', this.selectedThreadId);
             if (!this.selectedThreadId) {
                 this.toast('スレッドを選択してください', 'error');
                 return;
@@ -9112,6 +9114,7 @@ function emailApp() {
             if (this.aiChat.kind !== kind) this.aiChat.messages = [];
             this.aiChat.kind = kind;
             this.aiChat.open = true;
+            console.info('[ai-chat] panel open, aiChat=', this.aiChat);
             await this.loadAiChat();
             this.$nextTick(() => this._scrollAiChatToBottom());
         },

@@ -40,6 +40,10 @@ class ReportService
 
     /**
      * 共有ルーム毎のレポート (本文) と関連スレッド数/期間内メール件数
+     *
+     * レポートは「共有メール (owner_user_id IS NULL) のみ」を対象にする.
+     * 個人メール (個人受信箱) は各ユーザだけが見えるはずなので、横串レポートに
+     * 混ぜると他人に件数が漏れる + 自分の作業数が他人の集計に紛れる.
      */
     protected function getRoomReports(Carbon $from, Carbon $to): array
     {
@@ -49,12 +53,15 @@ class ReportService
             ->get();
 
         $rows = $rooms->map(function ($r) use ($from, $to) {
-            // 紐付けられたスレッド数
-            $threadIds = $r->bundledThreads()->pluck('email_threads.id')->all();
+            // 紐付けられたスレッド数 (共有スレッドだけに絞る)
+            $threadIds = $r->bundledThreads()
+                ->whereNull('email_threads.owner_user_id')
+                ->pluck('email_threads.id')->all();
             $threadsCount = count($threadIds);
-            // 期間内に受信されたメールに限定してカウント
+            // 期間内に受信されたメールに限定してカウント (共有メールのみ)
             $emailsCount = $threadsCount > 0
                 ? \App\Models\Email::whereIn('thread_id', $threadIds)
+                    ->whereNull('owner_user_id')
                     ->whereBetween('received_at', [$from, $to])
                     ->count()
                 : 0;
@@ -92,15 +99,17 @@ class ReportService
      */
     protected function getTotals(Carbon $from, Carbon $to): array
     {
-        $threadIdsInPeriod = EmailThread::where(function ($q) use ($from, $to) {
+        $threadIdsInPeriod = EmailThread::whereNull('owner_user_id')
+            ->where(function ($q) use ($from, $to) {
                 $q->whereBetween('last_email_at', [$from, $to])
                   ->orWhereBetween('created_at', [$from, $to]);
             })->pluck('id');
 
         return [
-            'threads_total'      => EmailThread::count(),
+            'threads_total'      => EmailThread::whereNull('owner_user_id')->count(),
             'threads_in_period'  => $threadIdsInPeriod->count(),
-            'emails_in_period'   => Email::whereBetween('received_at', [$from, $to])->count(),
+            'emails_in_period'   => Email::whereNull('owner_user_id')
+                ->whereBetween('received_at', [$from, $to])->count(),
             // 「未対応 (受信)」は inbox だけでなく hold / pending (承認待ち) も含めて数える。
             // さらにメール一覧・サイドバーバッチと完全に同じ可視条件を適用する:
             //   - マージ source は一覧で非表示なので除外
@@ -124,6 +133,9 @@ class ReportService
     protected function visibleThreadQuery()
     {
         return EmailThread::query()
+            // レポートは共有メール (owner_user_id IS NULL) のみを対象にする.
+            // 個人メールはユーザ毎にプライベートな受信箱なので横串集計から除外.
+            ->whereNull('owner_user_id')
             ->whereNotIn('id', \App\Models\ThreadMerge::select('source_thread_id_original'))
             ->where(function ($q) {
                 $q->where('is_manual_upload', false)
@@ -156,10 +168,11 @@ class ReportService
         $userIds = $rows->pluck('assigned_user_id')->filter()->unique();
         $users = User::whereIn('id', $userIds)->get()->keyBy('id');
 
-        // 期間内に追加されたメール (担当者ごと)
+        // 期間内に追加されたメール (担当者ごと) — 共有メールのみ
         $emailsPerAssignee = Email::query()
             ->select('email_threads.assigned_user_id as uid', DB::raw('COUNT(*) as cnt'))
             ->join('email_threads', 'emails.thread_id', '=', 'email_threads.id')
+            ->whereNull('email_threads.owner_user_id')
             ->whereBetween('emails.received_at', [$from, $to])
             ->groupBy('email_threads.assigned_user_id')
             ->pluck('cnt', 'uid');
@@ -190,13 +203,16 @@ class ReportService
      */
     protected function getStatsByDate(Carbon $from, Carbon $to): array
     {
+        // 日次グラフも共有メールのみで集計する.
         $emailsByDate = Email::query()
+            ->whereNull('owner_user_id')
             ->select(DB::raw('DATE(received_at) as d'), DB::raw('COUNT(*) as cnt'))
             ->whereBetween('received_at', [$from, $to])
             ->groupBy('d')
             ->pluck('cnt', 'd');
 
         $threadsByDate = EmailThread::query()
+            ->whereNull('owner_user_id')
             ->select(DB::raw('DATE(created_at) as d'), DB::raw('COUNT(*) as cnt'))
             ->whereBetween('created_at', [$from, $to])
             ->groupBy('d')

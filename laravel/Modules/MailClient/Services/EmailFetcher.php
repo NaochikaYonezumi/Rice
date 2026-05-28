@@ -1015,6 +1015,67 @@ class EmailFetcher
     }
 
     /**
+     * IMAP メッセージから「保存用件名」を抽出する共通ヘルパ.
+     *
+     * 個人 fetch (fetchForAccount) とスレッド検索 (findOrCreateThreadForOwner) で
+     * 同じロジックを使い回すために, システム fetch の長大な subject 抽出ブロックを
+     * このメソッドにまとめた最小版.
+     *
+     * 取得経路:
+     *   1) Webklex getSubject() (= 内部デコード済み. 失敗時 `?` substitute されることがある)
+     *   2) getHeader()->get('subject') (= 同 raw 寄り)
+     *   3) getHeader()->raw から Subject: 行を unfold で抽出 (= バイト生のまま得たい候補)
+     *
+     * 各候補に対して decodeMimeHeaderRobust + cleanUtf8 を通し,
+     * 「最後に encoded-word が残っていない」ものの中で scoreJapaneseQuality が最も
+     * 高いものを採用する. 全候補に encoded-word が残ったら強制再デコード.
+     */
+    protected function extractSubjectForStore($message): string
+    {
+        $libSubject = '';
+        try { $libSubject = (string) ($message->getSubject() ?: ''); } catch (\Throwable) {}
+        $rawSubject = '';
+        try { $rawSubject = (string) ($message->getHeader()->get('subject') ?? ''); } catch (\Throwable) {}
+        $trueRawSubject = '';
+        try {
+            $rawAll = (string) ($message->getHeader()->raw ?? '');
+            if ($rawAll !== '') {
+                $unfolded = preg_replace('/\r?\n[ \t]+/', ' ', $rawAll);
+                if ($unfolded !== null && preg_match('/^Subject:[ \t]*(.*)$/im', $unfolded, $m)) {
+                    $trueRawSubject = trim($m[1]);
+                }
+            }
+        } catch (\Throwable) {}
+
+        $candidates = array_filter(array_unique([$trueRawSubject, $rawSubject, $libSubject]));
+
+        $best = '';
+        $bestScore = PHP_INT_MIN;
+        foreach ($candidates as $src) {
+            // decode 後の候補
+            $decoded = $this->decodeMimeHeaderRobust($src);
+            if ($decoded === '') $decoded = $src;
+            $cand = $this->cleanUtf8($decoded, 255);
+            if ($cand === '') continue;
+            // encoded-word が残っているならスコア大幅減点 (ASCII で稼ぐのを潰す)
+            $hasEncodedWord = preg_match('/=\?[A-Za-z0-9_\-\.:]+\?[BbQq]\?[^?]*\?=/', $cand);
+            $sc = $this->scoreJapaneseQuality($cand);
+            if ($hasEncodedWord) $sc -= 1000;
+            if ($sc > $bestScore) { $bestScore = $sc; $best = $cand; }
+        }
+        if ($best === '') $best = '(件名なし)';
+
+        // 最終ガード: encoded-word が残っていたら強制再デコード.
+        if (preg_match('/=\?[A-Za-z0-9_\-\.:]+\?[BbQq]\?[^?]*\?=/', $best)) {
+            $forced = $this->decodeMimeHeaderRobust($best);
+            if ($forced !== '' && !preg_match('/=\?[A-Za-z0-9_\-\.:]+\?[BbQq]\?[^?]*\?=/', $forced)) {
+                $best = $this->cleanUtf8($forced, 255);
+            }
+        }
+        return $best;
+    }
+
+    /**
      * RFC 2047 の encoded-word を自前でパースして UTF-8 化する堅牢デコーダ.
      *
      * 標準の mb_decode_mimeheader が落ちる代表ケース:
@@ -1904,14 +1965,10 @@ class EmailFetcher
                 $cc = implode(', ', $ccParts);
                 $inReplyTo = (string) $message->getInReplyTo();
 
-                // 件名: Webklex の getSubject() は基本 MIME デコード済みだが,
-                // 連結 encoded-word を間に空白なしで連ねた変則的な件名 (xserver のメンテ通知等) では
-                // 生のまま返り, VARCHAR(255) の subject カラムに入らず SQL エラーになる.
-                // ロバストデコーダ + cleanUtf8(255) で必ず 255 文字以内に切り詰める.
-                $rawSubject = (string) ($message->getSubject() ?: '');
-                $decoded    = $this->decodeMimeHeaderRobust($rawSubject);
-                if ($decoded === '') $decoded = $rawSubject;
-                $subjectClean = $this->cleanUtf8($decoded !== '' ? $decoded : '(件名なし)', 255);
+                // 件名抽出: システム fetch と同じ堅牢経路を使う.
+                // ($message->getSubject() は Webklex が `?` で substitute した後を返すことが多く,
+                //  そこから先はバイトが無いので復元できない. 生の RFC822 ヘッダを優先的に見る.)
+                $subjectClean = $this->extractSubjectForStore($message);
 
                 $email = Email::create([
                     'thread_id'       => $thread->id,
@@ -1964,12 +2021,8 @@ class EmailFetcher
             }
         }
 
-        // 件名は MIME デコード + 255 文字以内に揃える (email_threads.subject は VARCHAR(1000) だが,
-        // 過剰に長い件名は LIKE クエリも遅くするため emails.subject と同じ 255 で統一する).
-        $rawSubject = (string) ($message->getSubject() ?: '');
-        $decoded    = $this->decodeMimeHeaderRobust($rawSubject);
-        if ($decoded === '') $decoded = $rawSubject;
-        $subject = $this->cleanUtf8($decoded !== '' ? $decoded : '(件名なし)', 255);
+        // システム fetch と同じ堅牢経路で件名を取り出す.
+        $subject = $this->extractSubjectForStore($message);
         $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject) ?? $subject;
         $thread = EmailThread::query()
             ->where('owner_user_id', $ownerUserId)

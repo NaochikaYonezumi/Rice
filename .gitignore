@@ -54,3 +54,6 @@ __pycache__/
 /\[rag-api
 /reading
 /transferring
+
+# TLS certs (acme.sh で発行 / 秘密鍵を含むためコミット禁止)
+/certs/

@@ -5,10 +5,12 @@ services:
       dockerfile: Dockerfile
     ports:
       - "80:80"
+      - "443:443"
     environment:
       - APP_ENV=local
       - APP_DEBUG=true
-      - APP_URL=http://localhost
+      # APP_URL は laravel/.env (LAN公開用 https://rice.cosy.co.jp) を優先するため、
+      # ここでは上書きしない (compose の値が常に勝つのを避ける)
       - DB_CONNECTION=mysql
       - DB_HOST=mysql
       - DB_PORT=3306
@@ -24,6 +26,8 @@ services:
         condition: service_started
     volumes:
       - ./laravel:/var/www/html
+      # TLS 証明書 (acme.sh で発行 → ./certs/ にコピー → コンテナへマウント)
+      - ./certs:/etc/nginx/certs:ro
     networks:
       - app-network
 

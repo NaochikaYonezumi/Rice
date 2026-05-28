@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\URL;
 use SocialiteProviders\Manager\SocialiteWasCalled;
 
 class AppServiceProvider extends ServiceProvider
@@ -23,6 +24,12 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // APP_URL が https の場合、route()/url() で生成される全URLを https に強制。
+        // 招待メール/パスワード再設定メール内のリンクが http で送られないようにするため。
+        if (str_starts_with((string) config('app.url'), 'https://')) {
+            URL::forceScheme('https');
+        }
+
         // Register Module Views & Migrations (Manual since ServiceProviders aren't loading due to cache permissions)
         // 存在しないディレクトリを loadViewsFrom すると view:cache が
         // Symfony Finder の DirectoryNotFoundException で落ちるためガード

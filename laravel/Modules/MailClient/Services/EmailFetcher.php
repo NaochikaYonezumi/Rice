@@ -661,6 +661,16 @@ class EmailFetcher
                         } catch (\Throwable) {}
                     }
                 }
+                // 最終ガード: bestSubject に encoded-word (=?...?=) が残っているなら強制再デコード.
+                // scoreJapaneseQuality は「ASCII 印字 +1」を加点するため, base64 中の英数字 ~125 文字を
+                // 持つ encoded-word 生形が, 短い日本語デコード済み候補を上回って best に選ばれることがある.
+                // ここで強制 decodeMimeHeaderRobust にかけて, 残留 encoded-word を必ず潰す.
+                if (preg_match('/=\?[A-Za-z0-9_\-\.:]+\?[BbQq]\?[^?]*\?=/', $bestSubject)) {
+                    $forced = $this->decodeMimeHeaderRobust($bestSubject);
+                    if ($forced !== '' && !preg_match('/=\?[A-Za-z0-9_\-\.:]+\?[BbQq]\?[^?]*\?=/', $forced)) {
+                        $bestSubject = $forced;
+                    }
+                }
                 $subjectClean = $this->cleanUtf8($bestSubject !== '' ? $bestSubject : '(件名なし)', 255);
 
                 // ===== 既存メールの backfill 経路 =====

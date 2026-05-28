@@ -574,10 +574,10 @@
                     </button>
                 </div>
 
-                {{-- 本体スクロール領域 --}}
-                <div class="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-4" style="min-height:0;">
-                    {{-- AI モデルピッカー --}}
-                    <div class="space-y-2">
+                {{-- 本体: 返信/転送 (thread 有り) は AI チャット, 新規 (thread 無し) は従来の 1 ショット UI --}}
+                <div class="flex-1 min-h-0 flex flex-col">
+                    {{-- AI モデルピッカー (共通) --}}
+                    <div class="shrink-0 p-4 border-b space-y-2" style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
                         <label class="text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1" style="color:#6b7280;">
                             <i class="fas fa-cog text-[9px]"></i>AIモデル
                             <span x-show="aiPickerLoading" class="ml-1" style="color:#9ca3af;">
@@ -615,6 +615,120 @@
                             <p class="text-[10px]" style="color:#d97706;">⚠ Gemini APIキー未設定</p>
                         </template>
                     </div>
+                    {{-- (モデルピッカー終わり) --}}
+
+                    {{-- ====== AI チャット (返信/転送モード, thread.id 有り) ====== --}}
+                    <template x-if="aiChatThreadId">
+                        <div class="flex-1 min-h-0 flex flex-col" style="background:#f8fafc;">
+                            {{-- ツールバー --}}
+                            <div class="shrink-0 px-3 py-1.5 flex items-center justify-between" style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
+                                <span class="text-[10px] font-bold" style="color:#6366f1;">
+                                    <i class="fas fa-comments text-[9px]"></i> 返信案チャット
+                                </span>
+                                <button type="button" @click="resetAiChat()"
+                                        :disabled="!aiChat.sessionId"
+                                        class="text-[10px] font-bold px-2 py-1 rounded-md disabled:opacity-30"
+                                        style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;"
+                                        title="この会話を全部消してやり直す">
+                                    <i class="fas fa-undo text-[9px]"></i> リセット
+                                </button>
+                            </div>
+                            {{-- メッセージリスト --}}
+                            <div id="compose-ai-chat-messages" class="flex-1 overflow-y-auto custom-scrollbar" style="padding:12px 10px;">
+                                <template x-if="aiChat.loading && aiChat.messages.length === 0">
+                                    <div class="flex items-center justify-center py-8" style="color:#6366f1;">
+                                        <i class="fas fa-circle-notch fa-spin mr-2"></i>
+                                        <span class="text-[11px]">読み込み中...</span>
+                                    </div>
+                                </template>
+                                <template x-if="!aiChat.loading && aiChat.messages.length === 0">
+                                    <div class="text-center py-8" style="color:#9ca3af;">
+                                        <i class="fas fa-comments fa-2x mb-2" style="color:#e0e7ff;"></i>
+                                        <p class="text-xs font-bold" style="color:#4b5563;">返信案を AI と相談しながら作ります</p>
+                                        <p class="text-[10px] mt-1.5" style="color:#9ca3af;">
+                                            「丁寧に返信して」<br>
+                                            「金額の話を入れて」<br>
+                                            「もう少しフランクに」<br>
+                                            のような指示を送ってください
+                                        </p>
+                                    </div>
+                                </template>
+                                <template x-for="m in aiChat.messages" :key="m.id">
+                                    <div class="mb-3 flex" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
+                                        <div :style="m.role === 'user'
+                                                ? 'max-width:84%;background:#4f46e5;color:#fff;padding:9px 11px;border-radius:14px 14px 4px 14px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;'
+                                                : 'max-width:94%;background:#ffffff;color:#111827;padding:10px 12px;border-radius:14px 14px 14px 4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;border:1px solid #e5e7eb;'">
+                                            <template x-if="m.role === 'assistant' && m.status === 'pending'">
+                                                <div class="flex items-center gap-2" style="color:#6b7280;font-size:11px;">
+                                                    <i class="fas fa-circle-notch fa-spin"></i>
+                                                    <span>考えています...</span>
+                                                </div>
+                                            </template>
+                                            <template x-if="m.role === 'assistant' && m.status === 'error'">
+                                                <div style="color:#b91c1c;font-size:11px;">
+                                                    <i class="fas fa-exclamation-triangle"></i>
+                                                    <span x-text="m.error_message || 'エラーが発生しました'"></span>
+                                                </div>
+                                            </template>
+                                            <template x-if="m.status === 'done' || m.role === 'user'">
+                                                <div>
+                                                    <div x-text="m.content"></div>
+                                                    <template x-if="m.role === 'assistant'">
+                                                        <div class="mt-2 pt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]" style="border-top:1px dashed #e5e7eb;color:#9ca3af;">
+                                                            <button type="button" @click="replaceBodyWithAiChatMessage(m)"
+                                                                    class="font-bold px-2 py-0.5 rounded transition-colors"
+                                                                    style="background:#4f46e5;color:#fff;"
+                                                                    title="本文をこの内容で置き換える">
+                                                                <i class="fas fa-arrow-down text-[9px]"></i> 本文に反映
+                                                            </button>
+                                                            <button type="button" @click="appendAiChatMessageToBody(m)"
+                                                                    class="font-bold px-2 py-0.5 rounded transition-colors"
+                                                                    style="background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe;"
+                                                                    title="本文の末尾に追記する">
+                                                                <i class="fas fa-plus text-[9px]"></i> 追記
+                                                            </button>
+                                                            <button type="button" @click="copyAiChatMessage(m)"
+                                                                    class="font-bold px-2 py-0.5 rounded transition-colors"
+                                                                    style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;"
+                                                                    title="この本文をクリップボードにコピー">
+                                                                <i class="fas fa-copy text-[9px]"></i> コピー
+                                                            </button>
+                                                            <span x-show="m.elapsed_ms" class="ml-auto" x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            {{-- 入力 --}}
+                            <div class="shrink-0 p-2.5" style="background:#ffffff;border-top:1px solid #e0e7ff;">
+                                <div class="flex items-end gap-2">
+                                    <textarea x-model="aiChat.input"
+                                              @keydown.ctrl.enter.prevent="sendAiChat()"
+                                              @keydown.meta.enter.prevent="sendAiChat()"
+                                              placeholder="返信案への指示 (Ctrl+Enter で送信)"
+                                              rows="2"
+                                              class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
+                                              style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
+                                    <button type="button" @click="sendAiChat()"
+                                            :disabled="aiChat.sending || !aiChat.input.trim()"
+                                            class="shrink-0 px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-40 disabled:cursor-not-allowed"
+                                            style="background:#4f46e5;color:#fff;">
+                                        <i class="fas" :class="aiChat.sending ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'"></i>
+                                    </button>
+                                </div>
+                                <p class="text-[9px] mt-1" style="color:#9ca3af;">
+                                    Ctrl+Enter で送信 / assistant の応答は「本文に反映」でドラフトに流し込めます
+                                </p>
+                            </div>
+                        </div>
+                    </template>
+
+                    {{-- ====== 1 ショット UI (新規メール compose, thread.id 無し) ====== --}}
+                    <template x-if="!aiChatThreadId">
+                    <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-5 space-y-4">
 
                     {{-- スキル選択 --}}
                     <div class="space-y-2">
@@ -728,6 +842,8 @@
                             </button>
                         </div>
                     </div>
+                    </div>{{-- 1ショット スクロール領域終わり --}}
+                    </template>{{-- !aiChatThreadId 終わり --}}
                 </div>
             </div>
         </div>
@@ -1125,6 +1241,19 @@ function composeWindowApp() {
         aiProvider: 'ollama', aiModel: '',
         aiOllamaModels: [], aiClaudeModels: [], aiGeminiModels: [],
         aiHasClaudeKey: false, aiHasGeminiKey: false,
+
+        // AI チャット (返信案を多ターン対話でブラッシュアップ)
+        //   - thread.id に紐づくセッション (kind='reply')
+        //   - サーバ側で永続化 → 同じスレッドを開き直したら続きから
+        //   - assistant の出力に「本文に反映」ボタンを置いてワンクリックでドラフトへ流し込む
+        aiChat: {
+            sessionId: null,
+            messages: [],
+            input: '',
+            sending: false,
+            loading: false,
+            pollTimer: null,
+        },
 
         // 左ペイン (スレッド) の幅。localStorage に保存。
         leftPaneWidth: (() => {
@@ -1642,7 +1771,15 @@ function composeWindowApp() {
 
         toggleAi() {
             this.aiPanelOpen = !this.aiPanelOpen;
-            if (this.aiPanelOpen) this.loadAiModels();
+            if (this.aiPanelOpen) {
+                this.loadAiModels();
+                // 返信/転送モードで thread.id がある場合は AI チャットも初期化
+                if (this.aiChatThreadId && this.aiChat.messages.length === 0) {
+                    this.loadAiChat();
+                }
+            } else {
+                this._stopAiChatPoll();
+            }
         },
         get aiCurrentModels() {
             if (this.aiProvider === 'claude') return this.aiClaudeModels;
@@ -1771,6 +1908,166 @@ function composeWindowApp() {
             const prefix = this.form.body ? '\n\n' : '';
             this.appendBodyText(prefix + this.aiAnalysis.answer);
             this.toast('本文に反映しました', 'success');
+        },
+
+        // ===== AI チャット (返信案を多ターン対話でブラッシュアップ) =====
+        get aiChatThreadId() {
+            return this.thread?.id || null;
+        },
+        async openAiChatPanel() {
+            // 既存の AI パネルトグルと統合する形で動かす. 開いた直後に履歴を取り直す.
+            this.aiPanelOpen = true;
+            await this.loadAiChat();
+        },
+        async loadAiChat() {
+            if (!this.aiChatThreadId) return;
+            this.aiChat.loading = true;
+            try {
+                const url = '/threads/' + this.aiChatThreadId + '/ai-chat?kind=reply';
+                const r = await fetch(url, { headers: { 'Accept':'application/json' } });
+                if (!r.ok) { this.toast('AI チャットの読み込みに失敗しました', 'error'); return; }
+                const d = await r.json();
+                this.aiChat.sessionId = d.session?.id || null;
+                this.aiChat.messages  = Array.isArray(d.messages) ? d.messages : [];
+                if (this.aiChat.messages.some(m => m.role === 'assistant' && m.status === 'pending')) {
+                    this._startAiChatPoll();
+                }
+                this.$nextTick(() => this._scrollAiChatToBottom());
+            } catch (e) {
+                this.toast('通信エラー: ' + e.message, 'error');
+            } finally {
+                this.aiChat.loading = false;
+            }
+        },
+        async sendAiChat() {
+            if (this.aiChat.sending) return;
+            if (!this.aiChatThreadId) {
+                this.toast('新規メール作成では AI チャットは利用できません (返信/転送のみ)', 'error');
+                return;
+            }
+            const text = (this.aiChat.input || '').trim();
+            if (text === '') return;
+            this.aiChat.sending = true;
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]').content;
+                let url, body;
+                if (this.aiChat.sessionId) {
+                    url  = '/ai-chat-sessions/' + this.aiChat.sessionId + '/messages';
+                    body = JSON.stringify({ message: text });
+                } else {
+                    url  = '/threads/' + this.aiChatThreadId + '/ai-chat';
+                    body = JSON.stringify({
+                        kind: 'reply',
+                        message: text,
+                        provider: this.aiProvider || null,
+                        model:    this.aiModel    || null,
+                    });
+                }
+                const r = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN': csrf },
+                    body,
+                });
+                if (!r.ok) {
+                    const j = await r.json().catch(() => ({}));
+                    this.toast(j.message || ('HTTP ' + r.status), 'error');
+                    return;
+                }
+                const d = await r.json();
+                if (d.session?.id) this.aiChat.sessionId = d.session.id;
+                if (d.user)      this.aiChat.messages.push(d.user);
+                if (d.assistant) this.aiChat.messages.push(d.assistant);
+                this.aiChat.input = '';
+                this.$nextTick(() => this._scrollAiChatToBottom());
+                this._startAiChatPoll();
+            } catch (e) {
+                this.toast('通信エラー: ' + e.message, 'error');
+            } finally {
+                this.aiChat.sending = false;
+            }
+        },
+        async resetAiChat() {
+            if (!this.aiChat.sessionId) {
+                this.aiChat.messages = [];
+                return;
+            }
+            if (!confirm('この会話履歴をすべて削除します. 取り消しはできません. よろしいですか?')) return;
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]').content;
+                const r = await fetch('/ai-chat-sessions/' + this.aiChat.sessionId, {
+                    method: 'DELETE',
+                    headers: { 'Accept':'application/json', 'X-CSRF-TOKEN': csrf },
+                });
+                if (!r.ok) { this.toast('削除に失敗しました', 'error'); return; }
+                this.aiChat.sessionId = null;
+                this.aiChat.messages  = [];
+                this._stopAiChatPoll();
+                this.toast('会話履歴を削除しました', 'success');
+            } catch (e) {
+                this.toast('通信エラー: ' + e.message, 'error');
+            }
+        },
+        applyAiChatMessageToBody(m) {
+            if (!m || !m.content) return;
+            const prefix = this.form.body ? '\n\n' : '';
+            this.appendBodyText(prefix + m.content);
+            this.toast('本文に反映しました', 'success');
+        },
+        appendAiChatMessageToBody(m) {
+            // 末尾に追加 (改行 1 つ挟む)
+            if (!m || !m.content) return;
+            const prefix = this.form.body ? '\n\n' : '';
+            this.appendBodyText(prefix + m.content);
+            this.toast('本文に追記しました', 'success');
+        },
+        replaceBodyWithAiChatMessage(m) {
+            if (!m || !m.content) return;
+            this.form.body = m.content;
+            this.toast('本文を置き換えました', 'success');
+            // 本文エリアにフォーカス
+            this.$nextTick(() => {
+                const el = this.$refs.bodyTextarea;
+                if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+            });
+        },
+        copyAiChatMessage(m) {
+            if (!m || !m.content) return;
+            try {
+                navigator.clipboard.writeText(m.content);
+                this.toast('コピーしました', 'success');
+            } catch (_) { this.toast('コピーに失敗しました', 'error'); }
+        },
+        _startAiChatPoll() {
+            this._stopAiChatPoll();
+            this.aiChat.pollTimer = setInterval(async () => {
+                if (!this.aiChatThreadId || !this.aiChat.sessionId) {
+                    this._stopAiChatPoll();
+                    return;
+                }
+                try {
+                    const url = '/threads/' + this.aiChatThreadId + '/ai-chat?kind=reply';
+                    const r = await fetch(url, { headers: { 'Accept':'application/json' } });
+                    if (!r.ok) return;
+                    const d = await r.json();
+                    const next = Array.isArray(d.messages) ? d.messages : [];
+                    this.aiChat.messages = next;
+                    const hasPending = next.some(m => m.role === 'assistant' && m.status === 'pending');
+                    if (!hasPending) {
+                        this._stopAiChatPoll();
+                        this.$nextTick(() => this._scrollAiChatToBottom());
+                    }
+                } catch (_) {}
+            }, 2000);
+        },
+        _stopAiChatPoll() {
+            if (this.aiChat.pollTimer) {
+                clearInterval(this.aiChat.pollTimer);
+                this.aiChat.pollTimer = null;
+            }
+        },
+        _scrollAiChatToBottom() {
+            const el = document.getElementById('compose-ai-chat-messages');
+            if (el) el.scrollTop = el.scrollHeight;
         },
 
         // FormDataを構築

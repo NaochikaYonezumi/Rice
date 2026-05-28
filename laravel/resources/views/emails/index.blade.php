@@ -2953,7 +2953,8 @@
                                 <h2 class="font-extrabold text-gray-800 min-w-0"
                                     style="font-size:26px;word-break:break-word;overflow-wrap:anywhere;line-height:1.3;"
                                     x-text="selectedThread?.subject"></h2>
-                                {{-- AI要約 / AI返信 (どちらも右側スライドインのチャット形式. 追加指示で何度でもブラッシュアップ可能) --}}
+                                {{-- AI要約 (右側スライドインのチャット形式. 追加指示で何度でもブラッシュアップ可能).
+                                     AI返信案は返信ウィンドウ側の AI アシスタントで行うのでここには出さない. --}}
                                 <button type="button"
                                         @click="openAiChat('summary')"
                                         :disabled="!threadEmails.length"
@@ -2961,15 +2962,6 @@
                                         title="このスレッドを AI で要約 (追加指示でブラッシュアップ可)">
                                     <i class="fas fa-magic text-[9px]"></i>
                                     AI要約
-                                </button>
-                                <button type="button"
-                                        @click="openAiChat('reply')"
-                                        :disabled="!threadEmails.length"
-                                        class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-                                        style="background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc;"
-                                        title="このスレッドへの返信案を AI に作らせる (追加指示でブラッシュアップ可)">
-                                    <i class="fas fa-robot text-[9px]"></i>
-                                    AI返信
                                 </button>
                             </div>
                             <div class="mt-0.5 flex flex-wrap items-center gap-2">

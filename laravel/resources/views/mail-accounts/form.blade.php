@@ -133,7 +133,11 @@
                     </div>
                     <div class="form-check">
                         <input type="hidden" name="is_active" value="0">
-                        <input type="checkbox" id="is_active" name="is_active" value="1" class="form-check-input" x-model="active">
+                        {{-- サーバ側で checked を出しておくのは Alpine が起動しないケース (壊れた x-data 等) で
+                             ネイティブ送信になった時に「実は ON だったのに OFF で保存される」事故を防ぐため. --}}
+                        <input type="checkbox" id="is_active" name="is_active" value="1" class="form-check-input"
+                               x-model="active"
+                               {{ old('is_active', $account->exists ? $account->is_active : true) ? 'checked' : '' }}>
                         <label for="is_active" class="form-check-label">このアカウントを有効にする (取得・送信を許可)</label>
                     </div>
 
@@ -267,7 +271,9 @@
                 <div class="card-body">
                     <div class="form-check mb-3">
                         <input type="hidden" name="smtp_enabled" value="0">
-                        <input type="checkbox" id="smtp_enabled" name="smtp_enabled" value="1" class="form-check-input" x-model="smtp">
+                        <input type="checkbox" id="smtp_enabled" name="smtp_enabled" value="1" class="form-check-input"
+                               x-model="smtp"
+                               {{ old('smtp_enabled', $account->smtp_enabled) ? 'checked' : '' }}>
                         <label for="smtp_enabled" class="form-check-label">このアカウントで送信を有効にする</label>
                     </div>
 

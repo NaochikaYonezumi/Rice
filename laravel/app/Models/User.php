@@ -96,7 +96,15 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_recovery_generated_at' => 'datetime',
+            'totp_secret'        => 'encrypted',
+            'totp_confirmed_at'  => 'datetime',
         ];
+    }
+
+    /** ユーザが TOTP (認証アプリ) 二段階認証を有効化済みか. */
+    public function hasTotpEnabled(): bool
+    {
+        return !empty($this->totp_secret) && $this->totp_confirmed_at !== null;
     }
 
     // ===== 二段階認証 =====

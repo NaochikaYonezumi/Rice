@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Mail\TwoFactorCodeMail;
 use App\Models\User;
+use App\Services\TotpService;
 use App\Services\TrustedDeviceService;
 use App\Services\TwoFactorService;
 use Illuminate\Http\RedirectResponse;
@@ -23,14 +24,19 @@ class TwoFactorChallengeController extends Controller
         if ($pending instanceof RedirectResponse) {
             return $pending;
         }
+        /** @var User $user */
+        $user = $pending['user'];
+        $usesTotp = $user->hasTotpEnabled();
         return view('auth.two-factor-challenge', [
-            'maskedEmail' => $this->maskEmail($pending['user']->email),
+            'maskedEmail' => $this->maskEmail($user->email),
+            'usesTotp'    => $usesTotp,
         ]);
     }
 
     public function verify(
         Request $request,
         TwoFactorService $twoFactor,
+        TotpService $totp,
         TrustedDeviceService $trustedDevices,
     ): RedirectResponse {
         $pending = $this->pendingOrRedirect($request);
@@ -48,7 +54,16 @@ class TwoFactorChallengeController extends Controller
         ]);
 
         $normalized = preg_replace('/\s+/', '', $data['code']);
-        if (!$twoFactor->verifyCode($user, $normalized)) {
+        // TOTP 有効ユーザはまず TOTP 検証, ダメならフォールバックでメールコードも試す
+        // (= 旧端末で TOTP アプリ未準備でメールが届いていたケースの救済).
+        $ok = false;
+        if ($user->hasTotpEnabled()) {
+            $ok = $totp->verifyUser($user, $normalized);
+        }
+        if (!$ok) {
+            $ok = $twoFactor->verifyCode($user, $normalized);
+        }
+        if (!$ok) {
             return back()->withErrors([
                 'code' => '認証コードが正しくないか、期限切れです。',
             ]);

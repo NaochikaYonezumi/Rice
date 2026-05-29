@@ -9,6 +9,8 @@
         "laravel/framework": "^11.0",
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.0",
+        "pragmarx/google2fa-qrcode": "^3.0",
+        "bacon/bacon-qr-code": "^3.0",
         "socialiteproviders/microsoft-azure": "^5.2",
         "webklex/laravel-imap": "*"
     },

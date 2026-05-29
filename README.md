@@ -336,7 +336,7 @@ docker compose restart laravel
 
 | キー | 例 | 説明 |
 |---|---|---|
-| `APP_NAME` | `RAG Web` | サイト名 (ブラウザタブ等に表示) |
+| `APP_NAME` | `Rice` | サイト名 (ブラウザタブ等に表示) |
 | `APP_ENV` | `local` / `production` | local だと詳細エラーが出る |
 | `APP_DEBUG` | `true` / `false` | 本番では必ず `false` |
 | `APP_KEY` | `base64:...` | `php artisan key:generate` で生成 |

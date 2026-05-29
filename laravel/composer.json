@@ -1,7 +1,7 @@
 {
-    "name": "rice/rag-web",
+    "name": "rice/rice",
     "type": "project",
-    "description": "RAG Web Application",
+    "description": "Rice Application",
     "require": {
         "php": "^8.2",
         "cloudstudio/ollama-laravel": "^1.0",

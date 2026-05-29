@@ -1999,7 +1999,30 @@ class EmailFetcher
                 && strcasecmp($folder->path, $folderName) !== 0) {
                 continue;
             }
-            $messages = $folder->messages()->all()->limit(50)->get();
+            // 新着 (UID 降順) で取得.
+            //   旧実装は ->all()->limit(50) で UID 昇順 = 一番古い 50 件を毎回見にいくため,
+            //   Inbox に 50 件以上溜まった瞬間「以降の新着は永遠に取らない」状態になっていた.
+            //   (= "メールを取りに行ってもない" 症状の真因)
+            //   共有メール側と同じく setFetchOrder('desc') を入れて新着 50 件をスキャンする.
+            try {
+                $query = $folder->messages()->all();
+                if (method_exists($query, 'setFetchOrder')) {
+                    $query = $query->setFetchOrder('desc');
+                }
+                $messages = $query->limit(50)->get();
+            } catch (\Throwable $e) {
+                \Log::warning('EmailFetcher: personal folder fetch failed', [
+                    'account_id' => $account->id,
+                    'folder'     => $folder->name ?? $folder->path ?? '?',
+                    'error'      => $e->getMessage(),
+                ]);
+                continue;
+            }
+            \Log::info('EmailFetcher: personal messages fetched', [
+                'account_id' => $account->id,
+                'folder'     => $folder->name ?? $folder->path ?? '?',
+                'count'      => is_countable($messages) ? count($messages) : 0,
+            ]);
             foreach ($messages as $message) {
                 $messageId = (string) $message->getMessageId();
                 if ($messageId !== '' && Email::query()

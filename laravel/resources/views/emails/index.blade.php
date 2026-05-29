@@ -3945,14 +3945,11 @@
 
                     <div class="flex items-end gap-2">
                         <div class="rice-ai-input-wrap">
-                            {{-- 入力テキストを <span class="rice-ai-tag"> で wrap した HTML を流し込むハイライト層 --}}
-                            <div id="rice-ai-chat-input-highlight" class="rice-ai-input-highlight"></div>
                             <textarea id="rice-ai-chat-input"
                                       rows="2"
                                       placeholder="指示を入力 / 「/」 でスキル + ナレッジコレクション選択 (Ctrl+Enter で送信)"
                                       oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
-                                      onkeydown="if (event.key === 'Escape') { document.getElementById('rice-ai-chat-skill-slash').style.display='none'; return; } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
-                                      onscroll="(function(t){const h=document.getElementById('rice-ai-chat-input-highlight'); if(h){h.scrollTop=t.scrollTop;h.scrollLeft=t.scrollLeft;}})(this)"></textarea>
+                                      onkeydown="if (event.key === 'Escape') { document.getElementById('rice-ai-chat-skill-slash').style.display='none'; return; } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"></textarea>
                         </div>
                         <button id="rice-ai-chat-send-btn"
                                 type="button"
@@ -9471,16 +9468,9 @@ function emailApp() {
             if (out.endsWith('\n')) out += ' ';
             return out;
         },
-        _riceAiChatRenderInputHighlight() {
-            const hi = document.getElementById('rice-ai-chat-input-highlight');
-            const ta = document.getElementById('rice-ai-chat-input');
-            if (!hi) return;
-            hi.innerHTML = this.renderAiChatTaggedHtml((ta && ta.value) || this.aiChat.input || '');
-            if (ta) {
-                hi.scrollTop  = ta.scrollTop;
-                hi.scrollLeft = ta.scrollLeft;
-            }
-        },
+        // textarea のオーバーレイハイライトは廃止 (環境依存で表示崩れ).
+        // 関数自体は残しておく (各所で呼ばれているので no-op として置く).
+        _riceAiChatRenderInputHighlight() { /* deprecated */ },
         // スキル選択時: テキストに '/skillkey ' を残す (= 自分でタイプしたのと同じ状態にする).
         //   ・ユーザは続けて「詳細指示」を書ける
         //   ・チャット履歴にも /skillkey が残ってどのスキルで投げたかが見える
@@ -10849,38 +10839,20 @@ function emailApp() {
     white-space: nowrap;
 }
 
-/* textarea にチップを重ねるためのオーバーレイ. textarea のテキストを透明にして
-   下のハイライト div だけ見せる. caret は textarea のものをそのまま表示. */
+/* AI チャット入力欄: 普通の textarea として表示. /tag の chip 化はチャット履歴側
+   (送信後の吹き出し) で行う. textarea 内の overlay は環境依存で崩れたため廃止. */
 .rice-ai-input-wrap { position: relative; flex: 1; min-width: 0; }
-.rice-ai-input-highlight,
 .rice-ai-input-wrap textarea {
+    width: 100%;
     font-family: inherit;
     font-size: 13px;
     line-height: 1.5;
     padding: 8px 12px;
-    letter-spacing: normal;
-    word-spacing: normal;
-    tab-size: 4;
-}
-.rice-ai-input-highlight {
-    position: absolute; inset: 0;
-    border: 1px solid transparent; border-radius: 8px;
-    pointer-events: none;
-    white-space: pre-wrap; word-wrap: break-word; overflow: hidden;
-    color: #111827; background: transparent;
-    z-index: 1;
-}
-.rice-ai-input-wrap textarea {
-    position: relative; z-index: 2;
-    width: 100%;
-    background: #f9fafb !important;
-    color: transparent !important;
-    -webkit-text-fill-color: transparent;
-    caret-color: #111827;
+    background: #f9fafb;
+    color: #111827;
     border: 1px solid #e5e7eb; border-radius: 8px;
     outline: none; resize: none;
 }
-.rice-ai-input-wrap textarea::selection { background-color: rgba(29, 78, 216, 0.18); color: transparent; }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }

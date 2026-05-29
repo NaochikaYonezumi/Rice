@@ -40,7 +40,10 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            // retry_after はワーカー --timeout より長くしないと「処理中なのに queue が
+            // また available 化 → 別ワーカーが拾って二重起動」を引く. 90 だと AI Job
+            // (qwen2.5:3b CPU で 数十秒〜数分) に対して短すぎる. 700 秒に引き上げ.
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 700),
             'after_commit' => false,
         ],
 

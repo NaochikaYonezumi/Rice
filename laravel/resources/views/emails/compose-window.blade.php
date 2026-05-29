@@ -189,6 +189,53 @@
         background-color: rgba(88,101,242,0.25) !important;
         color: #c7d2fe !important;
     }
+
+    /* ===== AI チャットパネル: メッセージふきだし (emails/index と共通仕様) =====
+       Tailwind の flex align-items:stretch で吹き出しが行高さまで引き伸ばされる事故を
+       素 CSS で固定する. */
+    .rice-ai-msg-row { display: flex; margin-bottom: 10px; align-items: flex-start; }
+    .rice-ai-msg-row-user      { justify-content: flex-end;   }
+    .rice-ai-msg-row-assistant { justify-content: flex-start; }
+    .rice-ai-msg-bubble {
+        max-width: 84%;
+        padding: 9px 12px;
+        font-size: 12.5px;
+        line-height: 1.55;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+        align-self: flex-start;
+        width: auto;
+        flex: 0 0 auto;
+    }
+    .rice-ai-msg-bubble-user {
+        background: #4f46e5; color: #ffffff;
+        border-radius: 14px 14px 4px 14px;
+    }
+    .rice-ai-msg-bubble-assistant {
+        background: #ffffff; color: #111827;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px 14px 14px 4px;
+    }
+    .rice-ai-msg-body { white-space: pre-wrap; }
+    .rice-ai-msg-pending,
+    .rice-ai-msg-error {
+        display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    }
+    .rice-ai-msg-pending { color: #6b7280; }
+    .rice-ai-msg-error   { color: #b91c1c; }
+    .rice-ai-msg-actions {
+        margin-top: 8px; padding-top: 6px;
+        border-top: 1px dashed #e5e7eb;
+        display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+        color: #9ca3af; font-size: 10px;
+    }
+    .rice-ai-msg-action-btn {
+        font-weight: 700; padding: 2px 8px; border-radius: 4px;
+        background: #f3f4f6; color: #374151;
+        border: 1px solid #e5e7eb; cursor: pointer;
+    }
+    .rice-ai-msg-action-btn:hover { opacity: 0.85; }
+    .rice-ai-msg-elapsed { margin-left: auto; }
 </style>
 @endsection
 
@@ -653,46 +700,45 @@
                                     </div>
                                 </template>
                                 <template x-for="m in aiChat.messages" :key="m.id">
-                                    <div class="mb-3 flex" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
-                                        <div :style="m.role === 'user'
-                                                ? 'max-width:84%;background:#4f46e5;color:#fff;padding:9px 11px;border-radius:14px 14px 4px 14px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;'
-                                                : 'max-width:94%;background:#ffffff;color:#111827;padding:10px 12px;border-radius:14px 14px 14px 4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;border:1px solid #e5e7eb;'">
+                                    <div class="rice-ai-msg-row"
+                                         :class="m.role === 'user' ? 'rice-ai-msg-row-user' : 'rice-ai-msg-row-assistant'">
+                                        <div :class="m.role === 'user' ? 'rice-ai-msg-bubble rice-ai-msg-bubble-user' : 'rice-ai-msg-bubble rice-ai-msg-bubble-assistant'">
                                             <template x-if="m.role === 'assistant' && m.status === 'pending'">
-                                                <div class="flex items-center gap-2" style="color:#6b7280;font-size:11px;">
+                                                <div class="rice-ai-msg-pending">
                                                     <i class="fas fa-circle-notch fa-spin"></i>
                                                     <span>考えています...</span>
                                                 </div>
                                             </template>
                                             <template x-if="m.role === 'assistant' && m.status === 'error'">
-                                                <div style="color:#b91c1c;font-size:11px;">
+                                                <div class="rice-ai-msg-error">
                                                     <i class="fas fa-exclamation-triangle"></i>
                                                     <span x-text="m.error_message || 'エラーが発生しました'"></span>
                                                 </div>
                                             </template>
                                             <template x-if="m.status === 'done' || m.role === 'user'">
                                                 <div>
-                                                    <div x-text="m.content"></div>
+                                                    <div x-text="m.content" class="rice-ai-msg-body"></div>
                                                     <template x-if="m.role === 'assistant'">
-                                                        <div class="mt-2 pt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]" style="border-top:1px dashed #e5e7eb;color:#9ca3af;">
+                                                        <div class="rice-ai-msg-actions">
                                                             <button type="button" @click="replaceBodyWithAiChatMessage(m)"
-                                                                    class="font-bold px-2 py-0.5 rounded transition-colors"
-                                                                    style="background:#4f46e5;color:#fff;"
+                                                                    class="rice-ai-msg-action-btn"
+                                                                    style="background:#4f46e5;color:#fff;border-color:#4338ca;"
                                                                     title="本文をこの内容で置き換える">
-                                                                <i class="fas fa-arrow-down text-[9px]"></i> 本文に反映
+                                                                <i class="fas fa-arrow-down"></i> 本文に反映
                                                             </button>
                                                             <button type="button" @click="appendAiChatMessageToBody(m)"
-                                                                    class="font-bold px-2 py-0.5 rounded transition-colors"
-                                                                    style="background:#e0e7ff;color:#4338ca;border:1px solid #c7d2fe;"
+                                                                    class="rice-ai-msg-action-btn"
+                                                                    style="background:#e0e7ff;color:#4338ca;border-color:#c7d2fe;"
                                                                     title="本文の末尾に追記する">
-                                                                <i class="fas fa-plus text-[9px]"></i> 追記
+                                                                <i class="fas fa-plus"></i> 追記
                                                             </button>
                                                             <button type="button" @click="copyAiChatMessage(m)"
-                                                                    class="font-bold px-2 py-0.5 rounded transition-colors"
-                                                                    style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;"
+                                                                    class="rice-ai-msg-action-btn"
                                                                     title="この本文をクリップボードにコピー">
-                                                                <i class="fas fa-copy text-[9px]"></i> コピー
+                                                                <i class="fas fa-copy"></i> コピー
                                                             </button>
-                                                            <span x-show="m.elapsed_ms" class="ml-auto" x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
+                                                            <span x-show="m.elapsed_ms" class="rice-ai-msg-elapsed"
+                                                                  x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
                                                         </div>
                                                     </template>
                                                 </div>
@@ -707,7 +753,7 @@
                                     <textarea x-model="aiChat.input"
                                               @keydown.ctrl.enter.prevent="sendAiChat()"
                                               @keydown.meta.enter.prevent="sendAiChat()"
-                                              placeholder="返信案への指示 (Ctrl+Enter で送信)"
+                                              placeholder="指示を入力 / /スキル名 や /コレクション名 で指定可 (Ctrl+Enter で送信)"
                                               rows="2"
                                               class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
                                               style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
@@ -1938,29 +1984,66 @@ function composeWindowApp() {
                 this.aiChat.loading = false;
             }
         },
+        // テキスト内の '/スキル名' を検出. aiSkills のキーまたは name で部分一致.
+        // 該当ありなら本文から除去 + skillKey を返す. コレクション参照は backend が
+        // expandCollectionReferences で処理するのでフロントでは触らない.
+        _extractSkillFromText(raw) {
+            const text = String(raw ?? '');
+            const skills = this.aiSkills || {};
+            const re = /(^|[\s\n\t])\/([\p{L}\p{N}_-]+)/u;
+            const m = text.match(re);
+            if (!m) return { text, skillKey: null };
+            const candidate = m[2].toLowerCase();
+            let hit = null;
+            for (const key of Object.keys(skills)) {
+                if (key.toLowerCase() === candidate) { hit = key; break; }
+            }
+            if (!hit) {
+                for (const key of Object.keys(skills)) {
+                    if (key.toLowerCase().includes(candidate)) { hit = key; break; }
+                }
+            }
+            if (!hit) {
+                for (const key of Object.keys(skills)) {
+                    const name = String(skills[key]?.name || '').toLowerCase();
+                    if (name.includes(candidate)) { hit = key; break; }
+                }
+            }
+            if (!hit) return { text, skillKey: null };
+            const stripped = text.replace(re, (matched, prefix) => prefix).trim();
+            return { text: stripped, skillKey: hit };
+        },
+
         async sendAiChat() {
             if (this.aiChat.sending) return;
             if (!this.aiChatThreadId) {
                 this.toast('新規メール作成では AI チャットは利用できません (返信/転送のみ)', 'error');
                 return;
             }
-            const text = (this.aiChat.input || '').trim();
+            // テキスト中の '/スキル名' / '/コレクション名' を検出してフロント側で処理
+            const raw = (this.aiChat.input || '').trim();
+            const ext = this._extractSkillFromText(raw);
+            const text = ext.text.trim();
             if (text === '') return;
             this.aiChat.sending = true;
             try {
                 const csrf = document.querySelector('meta[name="csrf-token"]').content;
-                let url, body;
+                let url;
+                // モデルピッカー / スキルの変更を 毎ターン サーバに反映させるため
+                // followUp でも provider / model / skill を送る.
+                const common = {
+                    message:  text,
+                    provider: this.aiProvider || null,
+                    model:    this.aiModel    || null,
+                };
+                if (ext.skillKey) common.skill = ext.skillKey;
+                let body;
                 if (this.aiChat.sessionId) {
                     url  = '/ai-chat-sessions/' + this.aiChat.sessionId + '/messages';
-                    body = JSON.stringify({ message: text });
+                    body = JSON.stringify(common);
                 } else {
                     url  = '/threads/' + this.aiChatThreadId + '/ai-chat';
-                    body = JSON.stringify({
-                        kind: 'reply',
-                        message: text,
-                        provider: this.aiProvider || null,
-                        model:    this.aiModel    || null,
-                    });
+                    body = JSON.stringify({ kind: 'reply', ...common });
                 }
                 const r = await fetch(url, {
                     method: 'POST',

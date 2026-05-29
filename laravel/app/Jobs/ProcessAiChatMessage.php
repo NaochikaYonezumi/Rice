@@ -31,8 +31,13 @@ class ProcessAiChatMessage implements ShouldQueue
     public int $timeout    = 300;
     public int $tries      = 2;       // 再起動などで in-flight が落ちた時の救済枠 1 回ぶん
     public int $backoff    = 5;       // 失敗後 5 秒待ってリトライ
-    /** ワーカー再起動などで attempts が timeout を超えた場合の保留時間. */
-    public int $retryUntil = 600;
+    //
+    // NOTE: 以前ここに `public int $retryUntil = 600;` を置いていたが、Laravel は
+    //       `$retryUntil` を「Unix タイムスタンプ」として解釈する仕様のため 600 は
+    //       1970-01-01 00:10:00 UTC を意味し、ジョブが pop された瞬間 retryUntil()
+    //       <= now と判定されて MaxAttemptsExceededException で即失敗していた。
+    //       時間ベースの上限を設けたい場合は retryUntil() メソッドで Carbon を返す。
+    //       今回は $tries=2 だけで十分なのでプロパティ自体を削除している。
 
     /** 履歴として含める user/assistant ペアの最大数 (各メッセージ単位ではなくペア数). */
     private const HISTORY_PAIR_LIMIT = 10;

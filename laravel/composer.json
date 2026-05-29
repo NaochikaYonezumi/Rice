@@ -4,13 +4,14 @@
     "description": "Rice Application",
     "require": {
         "php": "^8.2",
+        "bacon/bacon-qr-code": "^3.0",
         "cloudstudio/ollama-laravel": "^1.0",
         "laravel/breeze": "^2.0",
         "laravel/framework": "^11.0",
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.0",
+        "laravel/tinker": "^3.0",
         "pragmarx/google2fa-qrcode": "^3.0",
-        "bacon/bacon-qr-code": "^3.0",
         "socialiteproviders/microsoft-azure": "^5.2",
         "webklex/laravel-imap": "*"
     },
@@ -18,7 +19,6 @@
         "fakerphp/faker": "*",
         "laravel/pail": "*",
         "laravel/pint": "^1.0",
-        "laravel/tinker": "*",
         "mockery/mockery": "*",
         "nunomaduro/collision": "*",
         "phpunit/phpunit": "^11.0"

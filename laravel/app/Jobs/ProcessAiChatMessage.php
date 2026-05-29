@@ -28,8 +28,11 @@ class ProcessAiChatMessage implements ShouldQueue
 {
     use Queueable;
 
-    public int $timeout = 300;
-    public int $tries   = 1;
+    public int $timeout    = 300;
+    public int $tries      = 2;       // 再起動などで in-flight が落ちた時の救済枠 1 回ぶん
+    public int $backoff    = 5;       // 失敗後 5 秒待ってリトライ
+    /** ワーカー再起動などで attempts が timeout を超えた場合の保留時間. */
+    public int $retryUntil = 600;
 
     /** 履歴として含める user/assistant ペアの最大数 (各メッセージ単位ではなくペア数). */
     private const HISTORY_PAIR_LIMIT = 10;
@@ -88,6 +91,32 @@ class ProcessAiChatMessage implements ShouldQueue
             $assistant->error_code    = 'internal_error';
             $assistant->error_message = $e->getMessage();
             $assistant->save();
+        }
+    }
+
+    /**
+     * ワーカー再起動 / プロセスキル / max-attempts 超過などで Job が永久 fail と
+     * 判定された時に呼ばれる. assistant メッセージを 'pending' のまま放置すると
+     * UI が永遠に「考えています...」になるため, ここで明示的に error 状態へ落とす.
+     */
+    public function failed(?\Throwable $exception): void
+    {
+        try {
+            $assistant = AiChatMessage::find($this->assistantMessageId);
+            if (!$assistant) return;
+            if ($assistant->status === AiChatMessage::STATUS_DONE) return; // 既に成功済みなら触らない
+            $assistant->status        = AiChatMessage::STATUS_ERROR;
+            $assistant->error_code    = 'worker_failed';
+            $assistant->error_message = $exception
+                ? ('ワーカー側で処理が中断されました: ' . $exception->getMessage())
+                : 'ワーカー側で処理が中断されました (再起動 / タイムアウトなど)';
+            $assistant->save();
+            Log::warning('ProcessAiChatMessage worker-killed → assistant marked error', [
+                'assistant_id' => $assistant->id,
+                'exception'    => $exception?->getMessage(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('ProcessAiChatMessage::failed handler crashed: ' . $e->getMessage());
         }
     }
 

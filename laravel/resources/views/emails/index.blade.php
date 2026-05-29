@@ -3826,44 +3826,19 @@
         </div>
 
         <div class="flex-1 min-h-0 flex flex-col">
-            {{-- AI モデルピッカー --}}
-            <div class="shrink-0 p-4 space-y-2" style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
-                <label class="text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1" style="color:#6b7280;">
+            {{-- AI モデルピッカー (imperative DOM. Alpine x-for / :class が部分的に効かない事故対策) --}}
+            <div class="shrink-0 p-4" style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:0.1em;color:#6b7280;margin-bottom:8px;">
                     <i class="fas fa-cog text-[9px]"></i>AIモデル
-                    <span x-show="aiPickerLoading" class="ml-1" style="color:#9ca3af;">
+                    <span id="rice-ai-chat-model-loading" style="display:none;color:#9ca3af;">
                         <i class="fas fa-circle-notch fa-spin"></i>
                     </span>
                 </label>
-                <div class="flex items-center gap-1 flex-wrap">
-                    <div class="flex rounded-lg border border-gray-200 overflow-hidden text-[10px]" style="background-color:#ffffff;">
-                        <button type="button" @click="setAiProvider('ollama')"
-                                :class="aiProvider === 'ollama' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
-                                class="px-2 py-1 transition-colors">Ollama</button>
-                        <button type="button" @click="setAiProvider('claude')"
-                                :class="aiProvider === 'claude' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
-                                :title="!aiHasClaudeKey ? 'APIキー未設定' : ''"
-                                class="px-2 py-1 transition-colors border-l border-gray-200">Claude</button>
-                        <button type="button" @click="setAiProvider('gemini')"
-                                :class="aiProvider === 'gemini' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
-                                :title="!aiHasGeminiKey ? 'APIキー未設定' : ''"
-                                class="px-2 py-1 transition-colors border-l border-gray-200">Gemini</button>
-                    </div>
-                    <select x-model="aiModel"
-                            class="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white">
-                        <template x-if="aiCurrentModels.length === 0">
-                            <option value="">モデルなし</option>
-                        </template>
-                        <template x-for="m in aiCurrentModels" :key="m.id || m">
-                            <option :value="m.id || m" x-text="m.name || m"></option>
-                        </template>
-                    </select>
+                {{-- ピッカー本体: openAiChat 内で innerHTML 構築. プロバイダタブ + モデル select --}}
+                <div id="rice-ai-chat-model-picker" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                    <span style="font-size:11px;color:#9ca3af;">読み込み中…</span>
                 </div>
-                <template x-if="aiProvider === 'claude' && !aiHasClaudeKey">
-                    <p class="text-[10px]" style="color:#d97706;">⚠ Claude APIキー未設定</p>
-                </template>
-                <template x-if="aiProvider === 'gemini' && !aiHasGeminiKey">
-                    <p class="text-[10px]" style="color:#d97706;">⚠ Gemini APIキー未設定</p>
-                </template>
+                <p id="rice-ai-chat-model-warn" style="display:none;font-size:10px;color:#d97706;margin-top:4px;"></p>
             </div>
 
             {{-- チャットセクション --}}
@@ -5773,6 +5748,13 @@ function emailApp() {
                 };
                 window.riceAiChatPickCollection = function (name) {
                     self.pickAiChatCollection(name);
+                };
+                window.riceAiChatSetProvider = function (p) {
+                    self.setAiProvider(p);
+                    self._renderAiChatModelPicker();
+                };
+                window.riceAiChatSetModel = function (m) {
+                    self.aiModel = m;
                 };
             } catch (e) { console.warn('[ai-chat] window helper setup failed', e); }
 
@@ -9219,6 +9201,64 @@ function emailApp() {
             if (bd) bd.style.display = visible ? 'block' : 'none';
             if (pn) pn.style.display = visible ? 'flex'  : 'none';
         },
+        // AI モデルピッカーを imperative DOM で描画.
+        // Alpine x-for / :class が不安定なので素 HTML で再描画する.
+        _renderAiChatModelPicker() {
+            const host = document.getElementById('rice-ai-chat-model-picker');
+            if (!host) return;
+            const esc = s => this._escapeHtml(String(s ?? ''));
+            const provider = this.aiProvider || 'ollama';
+            const models   = (provider === 'claude') ? (this.aiClaudeModels || [])
+                            : (provider === 'gemini') ? (this.aiGeminiModels || [])
+                            : (this.aiOllamaModels || []);
+            const currentModel = this.aiModel || (models[0]?.id || models[0] || '');
+            // タブ
+            const tab = (key, label) => {
+                const active = provider === key;
+                return `<button type="button"
+                            onclick="window.riceAiChatSetProvider && window.riceAiChatSetProvider('${key}')"
+                            style="padding:4px 10px;font-size:11px;font-weight:700;border:1px solid #e5e7eb;cursor:pointer;${active
+                                ? 'background:#1f2937;color:#fff;border-color:#1f2937;'
+                                : 'background:#fff;color:#6b7280;'}">${esc(label)}</button>`;
+            };
+            // モデル select
+            let opts = '';
+            if (models.length === 0) {
+                opts = '<option value="">モデルなし</option>';
+            } else {
+                opts = models.map(m => {
+                    const id = m?.id || m;
+                    const nm = m?.name || m?.id || m;
+                    const sel = String(id) === String(currentModel) ? ' selected' : '';
+                    return `<option value="${esc(id)}"${sel}>${esc(nm)}</option>`;
+                }).join('');
+            }
+            host.innerHTML = `
+                <div style="display:inline-flex;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
+                    ${tab('ollama', 'Ollama')}${tab('claude', 'Claude')}${tab('gemini', 'Gemini')}
+                </div>
+                <select id="rice-ai-chat-model-select"
+                        onchange="window.riceAiChatSetModel && window.riceAiChatSetModel(this.value)"
+                        style="flex:1 1 140px;min-width:140px;border:1px solid #e5e7eb;border-radius:8px;padding:5px 8px;font-size:12px;background:#fff;outline:none;">
+                    ${opts}
+                </select>
+            `;
+            // 現在モデル state を select に合わせて更新
+            if (!this.aiModel && models.length > 0) {
+                this.aiModel = (models[0].id || models[0]);
+            }
+            // APIキー警告
+            const warn = document.getElementById('rice-ai-chat-model-warn');
+            if (warn) {
+                if (provider === 'claude' && !this.aiHasClaudeKey) {
+                    warn.style.display = 'block'; warn.textContent = '⚠ Claude APIキー未設定';
+                } else if (provider === 'gemini' && !this.aiHasGeminiKey) {
+                    warn.style.display = 'block'; warn.textContent = '⚠ Gemini APIキー未設定';
+                } else {
+                    warn.style.display = 'none'; warn.textContent = '';
+                }
+            }
+        },
         async openAiChat(kind) {
             console.info('[ai-chat] openAiChat called kind=', kind, 'selectedThreadId=', this.selectedThreadId);
             if (!this.selectedThreadId) {
@@ -9231,8 +9271,12 @@ function emailApp() {
             this.aiChat.open = true;
             this._setAiChatVisible(true);
             console.info('[ai-chat] panel open');
-            // モデル一覧を初回だけロード (キャッシュされる)
+            // モデル一覧を初回だけロード (キャッシュされる) + imperative にピッカー描画
+            const loadEl = document.getElementById('rice-ai-chat-model-loading');
+            if (loadEl) loadEl.style.display = 'inline-block';
             try { await this.loadAiModels(); } catch (_) {}
+            if (loadEl) loadEl.style.display = 'none';
+            this._renderAiChatModelPicker();
             await this.loadAiChat();
 
             // ★ AI要約モードはオープン時点で自動で初回要約を走らせる.

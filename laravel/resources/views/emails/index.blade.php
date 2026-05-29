@@ -3793,171 +3793,177 @@
         </div>
     </div>
 
-    {{-- AI チャットパネル (右側スライドイン. 要約/返信案を多ターンでブラッシュアップ)
-         既存の riceAiSummaryModal と同じ理由 (Alpine x-show が大型レイアウト下で不安定)
-         で id 指定 + 直接 style 操作する. 表示/非表示は openAiChat() / closeAiChat() 側で
-         display を直接書き換える. CSS は .rice-ai-chat-panel に置き, 初期は display:none. --}}
+    {{-- AI チャットパネル (右側スライドイン. compose-window の AIアシスタント と
+         同じデザイン. 表示/非表示は id 指定 + style 直接書き換えで確実に切替. --}}
     <div id="rice-ai-chat-backdrop"
-         class="rice-ai-chat-backdrop"
-         @click="closeAiChat()"
-         style="display:none;"></div>
+         onclick="window.riceAiChatClose && window.riceAiChatClose()"
+         style="display:none;position:fixed;inset:0;z-index:1990;background-color:rgba(15,23,42,0.35);"></div>
     <div id="rice-ai-chat-panel"
-         class="rice-ai-chat-panel"
-         style="display:none;">
-        {{-- ヘッダ --}}
-        <div style="flex-shrink:0;padding:12px 14px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);">
-            {{-- 1段目: タイトル + 件名 + × --}}
-            <div class="flex items-center gap-2">
-                <i class="fas" :class="aiChat.kind === 'reply' ? 'fa-robot' : 'fa-magic'"
-                   :style="aiChat.kind === 'reply' ? 'color:#0891b2;font-size:16px;' : 'color:#7c3aed;font-size:16px;'"></i>
-                <div class="min-w-0 flex-1">
-                    <h3 class="text-sm font-extrabold" style="color:#1e1b4b;line-height:1.2;"
-                        x-text="aiChat.kind === 'reply' ? 'AI返信案チャット' : 'AI要約チャット'"></h3>
-                    <p class="text-[11px] truncate" style="color:#6366f1;line-height:1.3;"
-                       x-text="selectedThread?.subject || ''"></p>
-                </div>
-                {{-- 閉じる × ボタン: Alpine @click だけだと環境によって発火しないことがあるため
-                     onclick で直接 DOM 操作も併用して必ず閉じる. --}}
-                <button type="button"
-                        @click="closeAiChat()"
-                        onclick="document.getElementById('rice-ai-chat-panel').style.display='none';document.getElementById('rice-ai-chat-backdrop').style.display='none';"
-                        title="閉じる"
-                        style="flex-shrink:0;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:#6b7280;cursor:pointer;"
-                        onmouseover="this.style.background='#fee2e2';this.style.color='#b91c1c';"
-                        onmouseout="this.style.background='transparent';this.style.color='#6b7280';">
-                    <i class="fas fa-times" style="font-size:18px;"></i>
-                </button>
-            </div>
+         style="display:none;position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100vw;z-index:2000;background-color:#eef2ff;border-left:1px solid #c7d2fe;box-shadow:-12px 0 30px rgba(15,23,42,0.15);flex-direction:column;">
 
-            {{-- 2段目: kind 切替タブ (大きく) + リセット (アイコンのみ小さく) --}}
-            <div class="mt-2.5 flex items-center gap-2">
-                <div class="flex rounded-lg overflow-hidden flex-1" style="border:1px solid #c7d2fe;font-size:13px;font-weight:700;">
-                    <button type="button" @click="switchAiChatKind('summary')"
-                            :style="aiChat.kind === 'summary' ? 'background:#4f46e5;color:#fff;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;' : 'background:#fff;color:#4f46e5;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;'">
-                        <i class="fas fa-magic text-[11px] mr-1"></i>要約
-                    </button>
-                    <button type="button" @click="switchAiChatKind('reply')"
-                            :style="aiChat.kind === 'reply' ? 'background:#0891b2;color:#fff;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;' : 'background:#fff;color:#0891b2;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;'">
-                        <i class="fas fa-robot text-[11px] mr-1"></i>返信案
-                    </button>
+        {{-- ヘッダー --}}
+        <div class="shrink-0 px-5 py-3 flex items-center justify-between"
+             style="background-color:#ffffff;border-bottom:1px solid #e0e7ff;">
+            <div class="flex items-center gap-2 min-w-0">
+                <div class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                     style="background-color:#4f46e5;color:#ffffff;">
+                    <i class="fas fa-magic"></i>
                 </div>
-                <button type="button" @click="resetAiChat()"
-                        :disabled="!aiChat.sessionId"
-                        style="flex-shrink:0;background:transparent;border:0;color:#9ca3af;cursor:pointer;font-size:14px;padding:6px 8px;border-radius:6px;"
-                        onmouseover="if(!this.disabled){this.style.color='#b91c1c';this.style.background='#fee2e2';}"
-                        onmouseout="this.style.color='#9ca3af';this.style.background='transparent';"
-                        title="この会話を全部消してやり直す">
-                    <i class="fas fa-undo"></i>
-                </button>
+                <div class="min-w-0">
+                    <h3 class="text-sm font-extrabold truncate" style="color:#3730a3;">AIアシスタント</h3>
+                    <p class="text-[10px]" style="color:#818cf8;">スレッドを基に対話で作成</p>
+                </div>
             </div>
-
-            {{-- 3段目: モデル選択 + 件数 --}}
-            <div class="mt-2 flex items-center gap-2">
-                <label class="text-[10px] font-extrabold uppercase tracking-wider" style="color:#6b7280;">モデル</label>
-                <select x-model="aiChat.modelPick"
-                        @change="updateAiChatModelFromPick()"
-                        style="flex:1;border:1px solid #c7d2fe;border-radius:6px;padding:4px 6px;font-size:11px;color:#374151;background:#fff;outline:none;">
-                    <option value="">(サーバ既定)</option>
-                    <template x-for="m in aiOllamaModels" :key="'ol-' + (m.id || m.name || m)">
-                        <option :value="'ollama:' + (m.id || m.name || m)" x-text="'Ollama / ' + (m.name || m.id || m)"></option>
-                    </template>
-                    <template x-for="m in aiClaudeModels" :key="'cl-' + (m.id || m.name || m)">
-                        <option :value="'claude:' + (m.id || m.name || m)" x-text="'Claude / ' + (m.name || m.id || m)"></option>
-                    </template>
-                    <template x-for="m in aiGeminiModels" :key="'gm-' + (m.id || m.name || m)">
-                        <option :value="'gemini:' + (m.id || m.name || m)" x-text="'Gemini / ' + (m.name || m.id || m)"></option>
-                    </template>
-                </select>
-                <span class="text-[10px] font-bold" style="color:#9ca3af;" x-show="aiChat.sessionId">
-                    <span x-text="aiChat.messages.length"></span>件
-                </span>
-            </div>
+            <button type="button"
+                    onclick="window.riceAiChatClose && window.riceAiChatClose()"
+                    class="w-8 h-8 inline-flex items-center justify-center rounded-lg transition-colors"
+                    style="color:#9ca3af;border:0;background:transparent;cursor:pointer;"
+                    onmouseover="this.style.backgroundColor='#f3f4f6';this.style.color='#4f46e5';"
+                    onmouseout="this.style.backgroundColor='';this.style.color='#9ca3af';"
+                    title="閉じる">
+                <i class="fas fa-times"></i>
+            </button>
         </div>
 
-        {{-- メッセージリスト --}}
-        <div id="rice-ai-chat-messages"
-             class="flex-1 overflow-y-auto custom-scrollbar"
-             style="padding:14px 12px;background:#f8fafc;">
-            <template x-if="aiChat.messages.length === 0">
-                <div class="text-center py-12" style="color:#9ca3af;">
-                    <i class="fas fa-comments fa-2x mb-3" style="color:#e0e7ff;"></i>
-                    <p class="text-xs font-bold" style="color:#4b5563;">
-                        <span x-show="aiChat.kind === 'summary'">スレッドを要約します</span>
-                        <span x-show="aiChat.kind === 'reply'">返信案を作成します</span>
-                    </p>
-                    <p class="text-[10px] mt-1.5" style="color:#9ca3af;">
-                        下の入力欄に指示を書いて Ctrl+Enter で送信.<br>
-                        例: 「3行で要約して」「もう少し丁寧に」「箇条書きで」
-                    </p>
+        <div class="flex-1 min-h-0 flex flex-col">
+            {{-- AI モデルピッカー --}}
+            <div class="shrink-0 p-4 space-y-2" style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
+                <label class="text-[10px] font-extrabold uppercase tracking-widest flex items-center gap-1" style="color:#6b7280;">
+                    <i class="fas fa-cog text-[9px]"></i>AIモデル
+                    <span x-show="aiPickerLoading" class="ml-1" style="color:#9ca3af;">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                    </span>
+                </label>
+                <div class="flex items-center gap-1 flex-wrap">
+                    <div class="flex rounded-lg border border-gray-200 overflow-hidden text-[10px]" style="background-color:#ffffff;">
+                        <button type="button" @click="setAiProvider('ollama')"
+                                :class="aiProvider === 'ollama' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
+                                class="px-2 py-1 transition-colors">Ollama</button>
+                        <button type="button" @click="setAiProvider('claude')"
+                                :class="aiProvider === 'claude' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
+                                :title="!aiHasClaudeKey ? 'APIキー未設定' : ''"
+                                class="px-2 py-1 transition-colors border-l border-gray-200">Claude</button>
+                        <button type="button" @click="setAiProvider('gemini')"
+                                :class="aiProvider === 'gemini' ? 'bg-gray-800 text-white' : 'text-gray-600 hover:bg-gray-50'"
+                                :title="!aiHasGeminiKey ? 'APIキー未設定' : ''"
+                                class="px-2 py-1 transition-colors border-l border-gray-200">Gemini</button>
+                    </div>
+                    <select x-model="aiModel"
+                            class="flex-1 min-w-0 border border-gray-200 rounded-lg px-2 py-1 text-[11px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200 bg-white">
+                        <template x-if="aiCurrentModels.length === 0">
+                            <option value="">モデルなし</option>
+                        </template>
+                        <template x-for="m in aiCurrentModels" :key="m.id || m">
+                            <option :value="m.id || m" x-text="m.name || m"></option>
+                        </template>
+                    </select>
                 </div>
-            </template>
+                <template x-if="aiProvider === 'claude' && !aiHasClaudeKey">
+                    <p class="text-[10px]" style="color:#d97706;">⚠ Claude APIキー未設定</p>
+                </template>
+                <template x-if="aiProvider === 'gemini' && !aiHasGeminiKey">
+                    <p class="text-[10px]" style="color:#d97706;">⚠ Gemini APIキー未設定</p>
+                </template>
+            </div>
 
-            <template x-for="m in aiChat.messages" :key="m.id">
-                <div class="mb-3 flex" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
-                    <div :style="m.role === 'user'
-                            ? 'max-width:84%;background:#4f46e5;color:#fff;padding:10px 12px;border-radius:14px 14px 4px 14px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;'
-                            : 'max-width:92%;background:#ffffff;color:#111827;padding:10px 12px;border-radius:14px 14px 14px 4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;border:1px solid #e5e7eb;'">
-                        {{-- pending な assistant: スピナー表示 --}}
-                        <template x-if="m.role === 'assistant' && m.status === 'pending'">
-                            <div class="flex items-center gap-2" style="color:#6b7280;font-size:11px;">
-                                <i class="fas fa-circle-notch fa-spin"></i>
-                                <span>考えています...</span>
-                            </div>
-                        </template>
-                        {{-- error な assistant: 赤字表示 --}}
-                        <template x-if="m.role === 'assistant' && m.status === 'error'">
-                            <div style="color:#b91c1c;font-size:11px;">
-                                <i class="fas fa-exclamation-triangle"></i>
-                                <span x-text="m.error_message || 'エラーが発生しました'"></span>
-                            </div>
-                        </template>
-                        {{-- 完了した assistant or user メッセージ本文 --}}
-                        <template x-if="m.status === 'done' || m.role === 'user'">
-                            <div>
-                                <div x-text="m.content"></div>
-                                <template x-if="m.role === 'assistant'">
-                                    <div class="mt-1 flex items-center gap-2 text-[9px]" style="color:#9ca3af;">
-                                        <button type="button" @click="copyAiChatMessage(m)"
-                                                class="hover:text-indigo-600 transition-colors" title="本文をコピー">
-                                            <i class="fas fa-copy"></i> コピー
-                                        </button>
-                                        <span x-show="m.elapsed_ms" x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
+            {{-- チャットセクション --}}
+            <div class="flex-1 min-h-0 flex flex-col" style="background:#f8fafc;">
+                {{-- ツールバー: タイトル + リセット --}}
+                <div class="shrink-0 px-3 py-1.5 flex items-center justify-between"
+                     style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
+                    <span class="text-[10px] font-bold" style="color:#6366f1;">
+                        <i class="fas fa-comments text-[9px]"></i>
+                        <span x-text="aiChat.kind === 'reply' ? '返信案チャット' : '要約チャット'"></span>
+                    </span>
+                    <button type="button" @click="resetAiChat()"
+                            :disabled="!aiChat.sessionId"
+                            class="text-[10px] font-bold px-2 py-1 rounded-md disabled:opacity-30"
+                            style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;"
+                            title="この会話を全部消してやり直す">
+                        <i class="fas fa-undo text-[9px]"></i> リセット
+                    </button>
+                </div>
+
+                {{-- メッセージリスト --}}
+                <div id="rice-ai-chat-messages" class="flex-1 overflow-y-auto custom-scrollbar" style="padding:12px 10px;">
+                    <template x-if="aiChat.messages.length === 0">
+                        <div class="text-center py-8" style="color:#9ca3af;">
+                            <i class="fas fa-comments fa-2x mb-2" style="color:#e0e7ff;"></i>
+                            <p class="text-xs font-bold" style="color:#4b5563;"
+                               x-text="aiChat.kind === 'reply' ? '返信案を AI と相談しながら作ります' : 'スレッドを AI と相談しながら要約します'"></p>
+                            <p class="text-[10px] mt-1.5" style="color:#9ca3af;">
+                                <template x-if="aiChat.kind === 'reply'">
+                                    <span>「丁寧に返信して」<br>「金額の話を入れて」<br>「もう少しフランクに」<br>のような指示を送ってください</span>
+                                </template>
+                                <template x-if="aiChat.kind !== 'reply'">
+                                    <span>「3行で要約して」<br>「経緯だけ詳しく」<br>「担当者ごとに分けて」<br>のような指示を送ってください</span>
+                                </template>
+                            </p>
+                        </div>
+                    </template>
+
+                    <template x-for="m in aiChat.messages" :key="m.id">
+                        <div class="mb-3 flex" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
+                            <div :style="m.role === 'user'
+                                    ? 'max-width:84%;background:#4f46e5;color:#fff;padding:9px 11px;border-radius:14px 14px 4px 14px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;'
+                                    : 'max-width:94%;background:#ffffff;color:#111827;padding:10px 12px;border-radius:14px 14px 14px 4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;border:1px solid #e5e7eb;'">
+                                <template x-if="m.role === 'assistant' && m.status === 'pending'">
+                                    <div class="flex items-center gap-2" style="color:#6b7280;font-size:11px;">
+                                        <i class="fas fa-circle-notch fa-spin"></i>
+                                        <span>考えています...</span>
+                                    </div>
+                                </template>
+                                <template x-if="m.role === 'assistant' && m.status === 'error'">
+                                    <div style="color:#b91c1c;font-size:11px;">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <span x-text="m.error_message || 'エラーが発生しました'"></span>
+                                    </div>
+                                </template>
+                                <template x-if="m.status === 'done' || m.role === 'user'">
+                                    <div>
+                                        <div x-text="m.content"></div>
+                                        <template x-if="m.role === 'assistant'">
+                                            <div class="mt-2 pt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]"
+                                                 style="border-top:1px dashed #e5e7eb;color:#9ca3af;">
+                                                <button type="button" @click="copyAiChatMessage(m)"
+                                                        class="font-bold px-2 py-0.5 rounded transition-colors"
+                                                        style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;cursor:pointer;"
+                                                        title="この本文をクリップボードにコピー">
+                                                    <i class="fas fa-copy text-[9px]"></i> コピー
+                                                </button>
+                                                <span x-show="m.elapsed_ms" class="ml-auto" x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
+                                            </div>
+                                        </template>
                                     </div>
                                 </template>
                             </div>
-                        </template>
-                    </div>
+                        </div>
+                    </template>
                 </div>
-            </template>
-        </div>
 
-        {{-- 入力欄.
-             x-model / :disabled の Alpine binding が壊れていると入力すらできない事故が
-             続いたため, 全部 id 指定の素 DOM 操作にする.
-             - textarea#rice-ai-chat-input は oninput で直接 state を書き換える
-             - 送信ボタンは onclick で window helper を呼ぶ (Alpine が死んでいても叩ける)
-             - placeholder / 有効/無効も openAiChat() / sendAiChat() 側で id 操作 --}}
-        <div style="flex-shrink:0;padding:10px 12px;border-top:1px solid #e5e7eb;background:#ffffff;">
-            <div class="flex items-end gap-2">
-                <textarea id="rice-ai-chat-input"
-                          rows="2"
-                          placeholder="指示を入力 (例: 3行で要約して / もう少し丁寧に)"
-                          oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
-                          onkeydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
-                          class="flex-1 px-3 py-2 rounded-lg outline-none resize-none"
-                          style="border:1px solid #e5e7eb;background:#f9fafb;font-size:13px;line-height:1.5;"></textarea>
-                <button id="rice-ai-chat-send-btn"
-                        type="button"
-                        onclick="window.riceAiChatSend && window.riceAiChatSend()"
-                        class="shrink-0 rounded-lg font-extrabold transition-colors"
-                        style="background:#4f46e5;color:#fff;padding:9px 14px;font-size:13px;border:0;cursor:pointer;">
-                    <i class="fas fa-paper-plane" id="rice-ai-chat-send-icon"></i>
-                    送信
-                </button>
+                {{-- 入力欄 (id 指定 + onclick で確実に発火) --}}
+                <div class="shrink-0 p-2.5" style="background:#ffffff;border-top:1px solid #e0e7ff;">
+                    <div class="flex items-end gap-2">
+                        <textarea id="rice-ai-chat-input"
+                                  rows="2"
+                                  placeholder="指示を入力 (Ctrl+Enter で送信)"
+                                  oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
+                                  onkeydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
+                                  class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
+                                  style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
+                        <button id="rice-ai-chat-send-btn"
+                                type="button"
+                                onclick="window.riceAiChatSend && window.riceAiChatSend()"
+                                class="shrink-0 px-3 py-2 rounded-lg text-xs font-extrabold transition-colors"
+                                style="background:#4f46e5;color:#fff;border:0;cursor:pointer;">
+                            <i class="fas fa-paper-plane" id="rice-ai-chat-send-icon"></i>
+                        </button>
+                    </div>
+                    <p class="text-[9px] mt-1" style="color:#9ca3af;">
+                        Ctrl+Enter で送信 / 履歴はスレッドごとに自動保存されます
+                    </p>
+                </div>
             </div>
-            <p class="mt-1" style="color:#9ca3af;font-size:10px;">
-                Ctrl+Enter で送信 / 履歴はスレッドごとに自動保存されます
-            </p>
         </div>
     </div>
 
@@ -9255,8 +9261,10 @@ function emailApp() {
                 } else {
                     url  = '/threads/' + this.selectedThreadId + '/ai-chat';
                     const payload = { kind: this.aiChat.kind, message: text };
-                    if (this.aiChat.provider) payload.provider = this.aiChat.provider;
-                    if (this.aiChat.model)    payload.model    = this.aiChat.model;
+                    // 既存 emailApp の aiProvider / aiModel をそのまま使う
+                    // (compose-window の AIアシスタント と完全に同じ UI/state).
+                    if (this.aiProvider) payload.provider = this.aiProvider;
+                    if (this.aiModel)    payload.model    = this.aiModel;
                     body = JSON.stringify(payload);
                 }
                 console.info('[ai-chat] POST', url);

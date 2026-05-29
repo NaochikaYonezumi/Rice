@@ -3903,35 +3903,33 @@
                     </template>
 
                     <template x-for="m in aiChat.messages" :key="m.id">
-                        <div class="mb-3 flex" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
-                            <div :style="m.role === 'user'
-                                    ? 'max-width:84%;background:#4f46e5;color:#fff;padding:9px 11px;border-radius:14px 14px 4px 14px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word;'
-                                    : 'max-width:94%;background:#ffffff;color:#111827;padding:10px 12px;border-radius:14px 14px 14px 4px;font-size:12px;line-height:1.6;white-space:pre-wrap;word-break:break-word;border:1px solid #e5e7eb;'">
+                        <div class="rice-ai-msg-row"
+                             :class="m.role === 'user' ? 'rice-ai-msg-row-user' : 'rice-ai-msg-row-assistant'">
+                            <div :class="m.role === 'user' ? 'rice-ai-msg-bubble rice-ai-msg-bubble-user' : 'rice-ai-msg-bubble rice-ai-msg-bubble-assistant'">
                                 <template x-if="m.role === 'assistant' && m.status === 'pending'">
-                                    <div class="flex items-center gap-2" style="color:#6b7280;font-size:11px;">
+                                    <div class="rice-ai-msg-pending">
                                         <i class="fas fa-circle-notch fa-spin"></i>
                                         <span>考えています...</span>
                                     </div>
                                 </template>
                                 <template x-if="m.role === 'assistant' && m.status === 'error'">
-                                    <div style="color:#b91c1c;font-size:11px;">
+                                    <div class="rice-ai-msg-error">
                                         <i class="fas fa-exclamation-triangle"></i>
                                         <span x-text="m.error_message || 'エラーが発生しました'"></span>
                                     </div>
                                 </template>
                                 <template x-if="m.status === 'done' || m.role === 'user'">
                                     <div>
-                                        <div x-text="m.content"></div>
+                                        <div x-text="m.content" class="rice-ai-msg-body"></div>
                                         <template x-if="m.role === 'assistant'">
-                                            <div class="mt-2 pt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]"
-                                                 style="border-top:1px dashed #e5e7eb;color:#9ca3af;">
+                                            <div class="rice-ai-msg-actions">
                                                 <button type="button" @click="copyAiChatMessage(m)"
-                                                        class="font-bold px-2 py-0.5 rounded transition-colors"
-                                                        style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb;cursor:pointer;"
+                                                        class="rice-ai-msg-action-btn"
                                                         title="この本文をクリップボードにコピー">
-                                                    <i class="fas fa-copy text-[9px]"></i> コピー
+                                                    <i class="fas fa-copy"></i> コピー
                                                 </button>
-                                                <span x-show="m.elapsed_ms" class="ml-auto" x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
+                                                <span x-show="m.elapsed_ms" class="rice-ai-msg-elapsed"
+                                                      x-text="(m.elapsed_ms / 1000).toFixed(1) + 's'"></span>
                                             </div>
                                         </template>
                                     </div>
@@ -10446,22 +10444,54 @@ function emailApp() {
 <style>
 [x-cloak] { display: none !important; }
 
-/* ===== AI チャットパネル (右側スライドイン) =====
-   Tailwind ユーティリティ + x-transition の組合せで効かない事故があったため,
-   素の CSS で position / 寸法 / display を完結させる. */
-.rice-ai-chat-backdrop {
-    position: fixed; inset: 0; z-index: 1990;
-    background-color: rgba(15, 23, 42, 0.25);
+/* ===== AI チャットパネル: メッセージふきだし =====
+   Tailwind の flex utility 経由だと align-items:stretch で吹き出しが行高さまで
+   引き伸ばされる事故が出るため, 全部素の CSS で content-sized に固定する. */
+.rice-ai-msg-row { display: flex; margin-bottom: 10px; align-items: flex-start; }
+.rice-ai-msg-row-user      { justify-content: flex-end;   }
+.rice-ai-msg-row-assistant { justify-content: flex-start; }
+.rice-ai-msg-bubble {
+    max-width: 84%;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    align-self: flex-start;  /* 行高さに引き伸ばされない */
+    width: auto;
+    flex: 0 0 auto;          /* flex で伸縮しない */
 }
-.rice-ai-chat-panel {
-    position: fixed; top: 0; right: 0; bottom: 0;
-    width: 560px; max-width: 96vw; z-index: 2000;
-    background: #ffffff;
-    box-shadow: -12px 0 32px rgba(15, 23, 42, 0.18);
-    display: flex; flex-direction: column;
+.rice-ai-msg-bubble-user {
+    background: #4f46e5; color: #ffffff;
+    border-radius: 14px 14px 4px 14px;
 }
-/* x-show=true 時に Alpine が style.display を強制的に '' (空) にセットして
-   CSS の display:flex を有効化させるため, !important は付けない. */
+.rice-ai-msg-bubble-assistant {
+    background: #ffffff; color: #111827;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px 14px 14px 4px;
+}
+.rice-ai-msg-body { white-space: pre-wrap; }
+.rice-ai-msg-pending {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: #6b7280; font-size: 12px;
+}
+.rice-ai-msg-error {
+    color: #b91c1c; font-size: 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+}
+.rice-ai-msg-actions {
+    margin-top: 8px; padding-top: 6px;
+    border-top: 1px dashed #e5e7eb;
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    color: #9ca3af; font-size: 10px;
+}
+.rice-ai-msg-action-btn {
+    font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    background: #f3f4f6; color: #374151;
+    border: 1px solid #e5e7eb; cursor: pointer;
+}
+.rice-ai-msg-action-btn:hover { background: #e0e7ff; color: #4338ca; }
+.rice-ai-msg-elapsed { margin-left: auto; }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }

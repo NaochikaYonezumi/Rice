@@ -9226,7 +9226,25 @@ function emailApp() {
             // モデル一覧を初回だけロード (キャッシュされる)
             try { await this.loadAiModels(); } catch (_) {}
             await this.loadAiChat();
+
+            // ★ AI要約モードはオープン時点で自動で初回要約を走らせる.
+            //   (AI返信モードは「呼び出されるまで書かない」仕様なので何もしない)
+            if (kind === 'summary' && this.aiChat.messages.length === 0 && !this.aiChat.sessionId) {
+                await this._autoSummarize();
+            }
+
             this.$nextTick(() => this._scrollAiChatToBottom());
+        },
+        // AI要約: 初回オープン時に自動で要約を生成する.
+        // 内部的に「このスレッドを要約してください」を user メッセージとして送る.
+        async _autoSummarize() {
+            if (!this.selectedThreadId || this.aiChat.sessionId) return;
+            const seed = 'このスレッドを日本語で要約してください.';
+            const ta = document.getElementById('rice-ai-chat-input');
+            // textarea 表示は空のままで, 直接 send 経路の引数として seed を渡す.
+            this.aiChat.input = seed;
+            if (ta) ta.value = ''; // 表示上は空 (履歴は user メッセージで残る)
+            await this.sendAiChat();
         },
         // ===== AI チャット: スキル選択 (/コマンド) =====
         // textarea に '/' を打つと, 残りのテキストをクエリにして候補リストを出す.

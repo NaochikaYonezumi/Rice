@@ -768,19 +768,31 @@ class EmailFetcher
                         $thread->update(['tags' => $newTags]);
                     }
 
-                    // ★ ステータスの自動変更は行わない (新仕様).
+                    // ★ ステータスの自動 reopen (限定的).
                     //
-                    //   旧仕様: 「新着が届いたら completed/hold/no_action を inbox に戻す」.
-                    //          意図は「対応漏れを防ぐためバッジに出す」だったが、
-                    //          ML やシステム通知のように毎日新着が来るスレッドだと
-                    //          「完了 → 翌日 inbox に戻る → 完了 → ...」の無限ループになり
-                    //          ユーザが手動で完了し続ける羽目になっていた.
-                    //
-                    //   新仕様: ユーザが付けたステータスは sticky にする. 新着メールは普通に
-                    //          スレッドに追加されるだけで、status は触らない.
-                    //          バッジに復活させたい場合はユーザが手動で inbox / hold に戻す.
-                    //          (新着到着は last_email_at の更新と email 行追加で表現される.
-                    //           未読件数で気付けるので、バッジ自体を切り替える必要は無い.)
+                    //   旧仕様 (全 reopen): 新着が来たら無条件で inbox に戻す.
+                    //     → ML/通知系で「完了→翌日 inbox→完了→…」の無限ループ.
+                    //   現行 (限定 reopen): 「明らかな返信」だけ inbox に戻す. 判定は
+                    //     In-Reply-To ヘッダがこのスレッド内の既存メールの message_id を
+                    //     指していること. これなら通常の ML 配信 (前メールへの返信では
+                    //     ない) は除外できる.
+                    //   除外 status: spam / trash / inbox / pending. それ以外
+                    //     (completed / no_action / hold) のみ inbox に戻す.
+                    if ($this->isHumanReplyToExistingThread($message, $thread)
+                        && in_array($thread->status, [
+                            EmailThread::STATUS_DONE,
+                            EmailThread::STATUS_NO_ACTION,
+                            EmailThread::STATUS_HOLD,
+                        ], true)) {
+                        $thread->update([
+                            'status'     => EmailThread::STATUS_INBOX,
+                            'trashed_at' => null,
+                            'spammed_at' => null,
+                        ]);
+                        \Log::info('EmailFetcher: thread reopened (相手からの返信を検知)', [
+                            'thread_id' => $thread->id, 'message_id' => $messageId,
+                        ]);
+                    }
                 });
 
                 $imported++;
@@ -1987,12 +1999,69 @@ class EmailFetcher
                 ]);
                 $this->handleAttachments($message, $email);
                 $thread->update(['last_email_at' => $receivedAt]);
+                // 「相手からの返信」と判定できた時のみ status を inbox に戻す.
+                // 単なる新着配信や ML 通知では status を維持して無限ループを避ける.
+                if ($this->isHumanReplyToExistingThread($message, $thread)
+                    && in_array($thread->status, [
+                        EmailThread::STATUS_DONE,
+                        EmailThread::STATUS_NO_ACTION,
+                        EmailThread::STATUS_HOLD,
+                    ], true)) {
+                    $thread->update([
+                        'status'     => EmailThread::STATUS_INBOX,
+                        'trashed_at' => null,
+                        'spammed_at' => null,
+                    ]);
+                    \Log::info('EmailFetcher: thread reopened (相手からの返信を検知 [personal])', [
+                        'thread_id' => $thread->id, 'message_id' => $messageId,
+                    ]);
+                }
                 $imported++;
             }
         }
 
         $account->forceFill(['last_fetched_at' => now()])->save();
         return $imported;
+    }
+
+    /**
+     * 受信した新着メールが「相手から このスレッド宛 への返信」かを判定する.
+     *
+     * 条件 (どれか満たせば true = 返信扱い):
+     *   1) In-Reply-To ヘッダがこのスレッド内の既存メール (message_id) を指している
+     *   2) References ヘッダの中にスレッド内のメール message_id が含まれる
+     *
+     * これにより, ML / 通知系の「単発配信メール」(In-Reply-To を持たない or 別チェーン)
+     * では reopen せず, ユーザ宛の本物の返信に限ってスレッドを inbox に戻せる.
+     */
+    protected function isHumanReplyToExistingThread($message, EmailThread $thread): bool
+    {
+        try {
+            $inReplyTo = trim((string) $message->getInReplyTo());
+        } catch (\Throwable) { $inReplyTo = ''; }
+
+        $refIds = [];
+        if ($inReplyTo !== '') {
+            $refIds[] = $inReplyTo;
+        }
+        try {
+            $refsHeader = (string) ($message->getHeader()->get('references') ?? '');
+            if ($refsHeader !== '') {
+                // <id1@host> <id2@host> 形式の space/CRLF 区切り
+                foreach (preg_split('/\s+/u', trim($refsHeader)) as $raw) {
+                    $raw = trim($raw, " \t\r\n<>");
+                    if ($raw !== '') $refIds[] = $raw;
+                }
+            }
+        } catch (\Throwable) {}
+
+        $refIds = array_values(array_unique(array_filter($refIds)));
+        if (empty($refIds)) return false;
+
+        // このスレッド配下の既存メール message_id と照合.
+        return Email::where('thread_id', $thread->id)
+            ->whereIn('message_id', $refIds)
+            ->exists();
     }
 
     protected function findOrCreateThreadForOwner($message, int $ownerUserId, int $accountId): EmailThread

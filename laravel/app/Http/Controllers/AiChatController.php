@@ -141,21 +141,32 @@ class AiChatController extends Controller
         }
 
         $data = $request->validate([
-            'message' => 'required|string|max:4000',
-            'skill'   => 'nullable|string|max:64',
+            'message'  => 'required|string|max:4000',
+            'skill'    => 'nullable|string|max:64',
+            'provider' => 'nullable|string|in:ollama,claude,gemini',
+            'model'    => 'nullable|string|max:128',
         ]);
 
+        // 途中で provider / model が変更されたらセッションに反映する.
+        // (フロントのモデルピッカー変更が即時に効くようにするため)
+        $updates = [];
+        if (!empty($data['provider']) && $data['provider'] !== $session->provider) {
+            $updates['provider'] = $data['provider'];
+        }
+        if (!empty($data['model']) && $data['model'] !== $session->model) {
+            $updates['model'] = $data['model'];
+        }
         // 途中でユーザがスキルを変えたら, セッションの system_prompt も差し替える.
-        // (新規 prompt = 選択スキルの system_prompt. これにより以降のターンに反映される.)
         if (!empty($data['skill']) && $data['skill'] !== $session->skill_key) {
             $skills = $this->skillService->getSkillsForUser($request->user(), $session->kind);
             $selected = $skills[$data['skill']] ?? null;
             if ($selected) {
-                $session->update([
-                    'skill_key'     => $data['skill'],
-                    'system_prompt' => (string) ($selected['system_prompt'] ?? $session->system_prompt),
-                ]);
+                $updates['skill_key']     = $data['skill'];
+                $updates['system_prompt'] = (string) ($selected['system_prompt'] ?? $session->system_prompt);
             }
+        }
+        if (!empty($updates)) {
+            $session->update($updates);
         }
 
         return $this->appendUserAndDispatch($session, $data['message']);

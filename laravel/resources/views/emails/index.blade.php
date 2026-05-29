@@ -6379,20 +6379,21 @@ function emailApp() {
                             this.toggleEmailExpand(targetEmailId);
                         }
                         if (willExpand) {
-                            // 展開時のみ: スクロール + 一時ハイライト
-                            this.$nextTick(() => {
+                            // 展開時のみ: スクロール + 一時ハイライト.
+                            //   旧実装は $nextTick 直後に pane.scrollTo({top:X}) を呼んでいたが,
+                            //   その時点では本文 DOM の追加が反映されておらず pane.scrollHeight が
+                            //   まだ「折りたたみ時の高さ」なので, scrollTo が max 値で
+                            //   クランプされて「一番下のメールを開いても画面が動かない」事故が起きていた.
+                            //   - 100ms 待って scrollHeight が更新されたあとに scrollIntoView する.
+                            //   - scrollIntoView{block:'start'} はブラウザが最新の scrollHeight を
+                            //     見て自動でクランプ調整するため, パネルの下までしっかりスクロールする.
+                            setTimeout(() => {
                                 const el = document.querySelector('[data-email-id="' + targetEmailId + '"]');
                                 if (!el) return;
-                                const pane = this.$refs.threadEmailsPane || el.closest('.overflow-y-auto');
-                                if (pane) {
-                                    const targetTop = pane.scrollTop + (el.getBoundingClientRect().top - pane.getBoundingClientRect().top);
-                                    pane.scrollTo({ top: Math.max(0, targetTop - 16), behavior: 'smooth' });
-                                } else {
-                                    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-                                }
+                                el.scrollIntoView({ block: 'start', behavior: 'smooth' });
                                 el.classList.add('ring-2', 'ring-blue-300');
                                 setTimeout(() => el.classList.remove('ring-2', 'ring-blue-300'), 1200);
-                            });
+                            }, 100);
                         }
                     }
                     break;

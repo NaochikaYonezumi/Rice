@@ -282,7 +282,18 @@ class PendingEmailController extends Controller
                 // (1) 先にスレッドを解決する (内部の chat / 添付 / バンドル機能のためチケット番号自体は維持)
                 $inReplyToId = $pending->inReplyToEmail?->message_id;
                 $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
-                $thread = $fetchService->resolveThread($pending->subject, $inReplyToId, $fromAddress);
+                // 個人メールアカウントから送る場合は owner スコープを引き継ぎ.
+                //   旧実装は resolveThread に owner を渡しておらず、共有スレッドや他人の個人スレッドへ
+                //   個人メールの「送信済み」 が混入していた.
+                $ownerUserId   = $pending->mail_account_id ? ($pending->mailAccount?->user_id) : null;
+                $mailAccountId = $pending->mail_account_id ?: null;
+                $thread = $fetchService->resolveThread(
+                    $pending->subject,
+                    $inReplyToId,
+                    $fromAddress,
+                    $ownerUserId,
+                    $mailAccountId
+                );
                 $thread->ensureTicketNumber();  // DB 上の管理用に番号は確保しておく
 
                 // (2) 送信件名はユーザが入力したものをそのまま使う (チケット番号タグは付与しない).
@@ -351,18 +362,21 @@ class PendingEmailController extends Controller
                 // body_html は送信時に組み立てた値 ($htmlBody) をそのまま記録する (sanitize 済み)。
                 // これでスレッド詳細パネルで「送信済みメールも HTML レンダリング」が効くようになる。
                 $email = Email::create([
-                    'thread_id'    => $thread->id,
-                    'message_id'   => 'SENT_' . time() . '_' . uniqid(),
-                    'in_reply_to'  => $inReplyToId,
-                    'subject'      => $sendSubject,
-                    'from_address' => $fromAddress,
-                    'from_name'    => $settings->smtp_from_name,
-                    'to_address'   => $pending->to_address,
-                    'cc'           => $pending->cc,
-                    'bcc'          => $pending->bcc,
-                    'body_text'    => $plainBody,
-                    'body_html'    => $htmlBody !== '' ? $htmlBody : null,
-                    'received_at'  => now(),
+                    'thread_id'       => $thread->id,
+                    'message_id'      => 'SENT_' . time() . '_' . uniqid(),
+                    'in_reply_to'     => $inReplyToId,
+                    'subject'         => $sendSubject,
+                    'from_address'    => $fromAddress,
+                    'from_name'       => $settings->smtp_from_name,
+                    'to_address'      => $pending->to_address,
+                    'cc'              => $pending->cc,
+                    'bcc'             => $pending->bcc,
+                    'body_text'       => $plainBody,
+                    'body_html'       => $htmlBody !== '' ? $htmlBody : null,
+                    'received_at'     => now(),
+                    // 送信元のオーナースコープを継承 (共有→NULL / 個人→user_id).
+                    'owner_user_id'   => $ownerUserId,
+                    'mail_account_id' => $mailAccountId,
                 ]);
 
                 $thread->update(['last_email_at' => now()]);
@@ -596,7 +610,16 @@ class PendingEmailController extends Controller
         DB::transaction(function () use ($pending, $settings, $fetchService, $approvedBy) {
             $inReplyToId = $pending->inReplyToEmail?->message_id;
             $fromAddress = $pending->from_address ?: $settings->smtp_from_address;
-            $thread      = $fetchService->resolveThread($pending->subject, $inReplyToId, $fromAddress);
+            // 個人メールアカウント送信の owner スコープ継承.
+            $ownerUserId   = $pending->mail_account_id ? ($pending->mailAccount?->user_id) : null;
+            $mailAccountId = $pending->mail_account_id ?: null;
+            $thread        = $fetchService->resolveThread(
+                $pending->subject,
+                $inReplyToId,
+                $fromAddress,
+                $ownerUserId,
+                $mailAccountId
+            );
             $thread->ensureTicketNumber();
 
             $sendSubject = $pending->subject;
@@ -636,18 +659,20 @@ class PendingEmailController extends Controller
             });
 
             $email = Email::create([
-                'thread_id'    => $thread->id,
-                'message_id'   => 'SENT_' . time() . '_' . uniqid(),
-                'in_reply_to'  => $inReplyToId,
-                'subject'      => $sendSubject,
-                'from_address' => $fromAddress,
-                'from_name'    => $settings->smtp_from_name,
-                'to_address'   => $pending->to_address,
-                'cc'           => $pending->cc,
-                'bcc'          => $pending->bcc,
-                'body_text'    => $plainBody,
-                'body_html'    => $htmlBody !== '' ? $htmlBody : null,
-                'received_at'  => now(),
+                'thread_id'       => $thread->id,
+                'message_id'      => 'SENT_' . time() . '_' . uniqid(),
+                'in_reply_to'     => $inReplyToId,
+                'subject'         => $sendSubject,
+                'from_address'    => $fromAddress,
+                'from_name'       => $settings->smtp_from_name,
+                'to_address'      => $pending->to_address,
+                'cc'              => $pending->cc,
+                'bcc'             => $pending->bcc,
+                'body_text'       => $plainBody,
+                'body_html'       => $htmlBody !== '' ? $htmlBody : null,
+                'received_at'     => now(),
+                'owner_user_id'   => $ownerUserId,
+                'mail_account_id' => $mailAccountId,
             ]);
             $thread->update(['last_email_at' => now()]);
 

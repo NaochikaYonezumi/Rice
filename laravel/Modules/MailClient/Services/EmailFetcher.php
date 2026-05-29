@@ -1665,35 +1665,57 @@ class EmailFetcher
         return $this->cleanUtf8(implode("\n", $lines));
     }
 
-    public function resolveThread(string $subject, ?string $inReplyTo, ?string $fromAddress = null): EmailThread
-    {
+    public function resolveThread(
+        string $subject,
+        ?string $inReplyTo,
+        ?string $fromAddress = null,
+        ?int $ownerUserId = null,
+        ?int $mailAccountId = null
+    ): EmailThread {
         $thread = null;
 
-        // (1) 件名のチケット番号で最優先マッチ (カラム未作成環境でも落ちないようガード)
+        // スコープ条件: 個人メール送信 (ownerUserId != null) なら同じ owner のスレッドだけ,
+        //               共有メール送信 (ownerUserId == null) なら owner_user_id IS NULL のスレッドだけを対象にする.
+        //   これをしないと、 個人メール (yonezumi@) からの送信がチケット番号 / In-Reply-To /
+        //   件名一致で他人 (or 共有) のスレッドに混入する.
+        $applyScope = function ($query) use ($ownerUserId) {
+            if ($ownerUserId === null) {
+                return $query->whereNull('owner_user_id');
+            }
+            return $query->where('owner_user_id', $ownerUserId);
+        };
+
+        // (1) 件名のチケット番号で最優先マッチ
         $ticket = EmailThread::extractTicketNumber($subject);
         if ($ticket) {
             try {
-                $thread = EmailThread::where('ticket_number', $ticket)->first();
+                $thread = $applyScope(EmailThread::where('ticket_number', $ticket))->first();
             } catch (\Throwable $e) {
                 $thread = null;
             }
         }
 
-        // (2) In-Reply-To のメッセージID から親スレッドを辿る
+        // (2) In-Reply-To のメッセージID から親スレッドを辿る (owner スコープ越えは禁止)
         if (!$thread && $inReplyTo) {
-            $parent = Email::where('message_id', $inReplyTo)->first();
+            $parentQuery = Email::where('message_id', $inReplyTo);
+            if ($ownerUserId === null) {
+                $parentQuery->whereNull('owner_user_id');
+            } else {
+                $parentQuery->where('owner_user_id', $ownerUserId);
+            }
+            $parent = $parentQuery->first();
             if ($parent?->thread_id) {
-                $thread = EmailThread::find($parent->thread_id);
+                $thread = $applyScope(EmailThread::where('id', $parent->thread_id))->first();
             }
         }
 
-        // (3) 件名 (Re:/Fwd: 除去 + チケットタグ除去) で部分一致検索
+        // (3) 件名 (Re:/Fwd: 除去 + チケットタグ除去) で部分一致検索 (owner スコープ内のみ)
         if (!$thread) {
             $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject);
             $normalized = preg_replace(EmailThread::TICKET_REGEX, '', $normalized);
             $normalized = trim($normalized);
             if ($normalized !== '') {
-                $thread = EmailThread::where('subject', 'like', "%{$normalized}%")
+                $thread = $applyScope(EmailThread::where('subject', 'like', "%{$normalized}%"))
                     ->orderByDesc('last_email_at')
                     ->first();
             }
@@ -1701,18 +1723,23 @@ class EmailFetcher
             if (!$thread) {
                 $customer = $fromAddress ? \App\Models\Customer::where('email', $fromAddress)->first() : null;
                 $thread = EmailThread::create([
-                    'subject'       => $normalized !== '' ? $normalized : $subject,
-                    'status'        => 'inbox',
-                    'last_email_at' => now(),
-                    'customer_id'   => $customer?->id,
+                    'subject'         => $normalized !== '' ? $normalized : $subject,
+                    'status'          => 'inbox',
+                    'last_email_at'   => now(),
+                    'customer_id'    => $customer?->id,
+                    'owner_user_id'   => $ownerUserId,
+                    'mail_account_id' => $mailAccountId,
                 ]);
-                // 顧客名 / 件名 / 送信履歴 のいずれかと一致する共有ルームへ自動振り分け
-                try {
-                    \App\Services\ChatRoomAutoBundler::bundleThread($thread, $fromAddress);
-                } catch (\Throwable $e) {
-                    \Illuminate\Support\Facades\Log::warning('auto-bundle (subject path) failed', [
-                        'thread_id' => $thread->id, 'error' => $e->getMessage(),
-                    ]);
+                // 顧客名 / 件名 / 送信履歴 のいずれかと一致する共有ルームへ自動振り分け.
+                // 個人メールスレッドはルームへの自動振り分けをしない (= 共有ルーム経由で他ユーザに見えてしまう).
+                if ($ownerUserId === null) {
+                    try {
+                        \App\Services\ChatRoomAutoBundler::bundleThread($thread, $fromAddress);
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('auto-bundle (subject path) failed', [
+                            'thread_id' => $thread->id, 'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
         }

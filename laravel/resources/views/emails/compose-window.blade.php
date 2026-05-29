@@ -620,15 +620,15 @@
              @keydown.escape.window="aiPanelOpen = false">
             <div class="ml-auto h-full flex flex-col relative"
                  x-ref="composeAiPanel"
-                 x-init="(function(){const w=parseInt(localStorage.getItem('riceComposeAiPanelWidth')||'420',10); if(w>=320 && w<=window.innerWidth-100) \$refs.composeAiPanel.style.width=w+'px';})()"
+                 x-init="(function(){const w=parseInt(localStorage.getItem('riceAiChatPanelWidth')||'420',10); if(w>=320 && w<=window.innerWidth-100) \$refs.composeAiPanel.style.width=w+'px';})()"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="translate-x-8 opacity-0"
                  x-transition:enter-end="translate-x-0 opacity-100"
                  style="width:420px;max-width:100vw;background-color:#eef2ff;border-left:1px solid #c7d2fe;box-shadow:-12px 0 30px rgba(15,23,42,0.15);">
 
                 {{-- 左端ドラッグハンドル. ダブルクリックで初期値 420px に戻す. --}}
-                <div @mousedown.prevent="(function(ev,panel){const minW=320,maxW=Math.max(minW,window.innerWidth-200); const onMove=(e)=>{panel.style.width=Math.max(minW,Math.min(maxW,window.innerWidth-e.clientX))+'px';}; const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);document.body.style.userSelect='';document.body.style.cursor=''; try{localStorage.setItem('riceComposeAiPanelWidth', parseInt(panel.style.width,10)||420);}catch(_){}}; document.body.style.userSelect='none';document.body.style.cursor='col-resize'; document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);})($event,$refs.composeAiPanel)"
-                     @dblclick="$refs.composeAiPanel.style.width='420px'; try{localStorage.setItem('riceComposeAiPanelWidth','420');}catch(_){}"
+                <div @mousedown.prevent="(function(ev,panel){const minW=320,maxW=Math.max(minW,window.innerWidth-200); const onMove=(e)=>{panel.style.width=Math.max(minW,Math.min(maxW,window.innerWidth-e.clientX))+'px';}; const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);document.body.style.userSelect='';document.body.style.cursor=''; try{localStorage.setItem('riceAiChatPanelWidth', parseInt(panel.style.width,10)||420);}catch(_){}}; document.body.style.userSelect='none';document.body.style.cursor='col-resize'; document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);})($event,$refs.composeAiPanel)"
+                     @dblclick="$refs.composeAiPanel.style.width='420px'; try{localStorage.setItem('riceAiChatPanelWidth','420');}catch(_){}"
                      title="ドラッグで幅変更 / ダブルクリックで初期値"
                      style="position:absolute;top:0;left:0;bottom:0;width:6px;cursor:col-resize;background:transparent;z-index:5;"
                      onmouseover="this.style.background='rgba(99,102,241,0.35)'"
@@ -746,9 +746,15 @@
                                                 </div>
                                             </template>
                                             <template x-if="m.role === 'assistant' && m.status === 'error'">
-                                                <div class="rice-ai-msg-error">
-                                                    <i class="fas fa-exclamation-triangle"></i>
-                                                    <span x-text="m.error_message || 'エラーが発生しました'"></span>
+                                                <div>
+                                                    <div class="rice-ai-msg-error">
+                                                        <i class="fas fa-exclamation-triangle"></i>
+                                                        <span x-text="m.error_message || 'エラーが発生しました'"></span>
+                                                    </div>
+                                                    <button type="button" @click="retryAiChatMessage(m)"
+                                                            style="margin-top:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:#4f46e5;color:#fff;border:0;cursor:pointer;">
+                                                        <i class="fas fa-redo text-[9px]"></i> 再送信
+                                                    </button>
                                                 </div>
                                             </template>
                                             <template x-if="m.status === 'done' || m.role === 'user'">
@@ -2244,6 +2250,21 @@ function composeWindowApp() {
             } finally {
                 this.aiChat.sending = false;
             }
+        },
+        async retryAiChatMessage(assistantMessage) {
+            if (!this.aiChat.sessionId) return;
+            const idx = this.aiChat.messages.findIndex(m => m.id === assistantMessage.id);
+            let lastUserContent = '';
+            for (let i = idx - 1; i >= 0; i--) {
+                if (this.aiChat.messages[i].role === 'user') {
+                    lastUserContent = this.aiChat.messages[i].content || '';
+                    break;
+                }
+            }
+            if (!lastUserContent) return;
+            this.aiChat.input = lastUserContent;
+            this.toast('もう一度送信しています…', 'info');
+            await this.sendAiChat();
         },
         async resetAiChat() {
             if (!this.aiChat.sessionId) {

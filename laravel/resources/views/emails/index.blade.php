@@ -9306,6 +9306,96 @@ function emailApp() {
                 }
             }
         },
+        // メッセージリストを imperative DOM で描画.
+        // 理由: パネルが Alpine スコープ外に位置することで <template x-for> が
+        //       展開されず空のままになる事故が出ているため. モデルピッカーと
+        //       同じく素 HTML 構築 + innerHTML 一括差し替えで確実に描く.
+        _renderAiChatMessages() {
+            const host = document.getElementById('rice-ai-chat-messages');
+            if (!host) return;
+            const esc = (s) => this._escapeHtml(String(s ?? ''));
+            const msgs = Array.isArray(this.aiChat.messages) ? this.aiChat.messages : [];
+
+            if (msgs.length === 0) {
+                const kindIsReply = this.aiChat.kind === 'reply';
+                const headline = kindIsReply ? '返信案を AI と相談しながら作ります' : 'スレッドを AI と相談しながら要約します';
+                const help = kindIsReply
+                    ? 'まずはスレッドについて相談してください.<br>例: 「論点を整理して」「返信のトーンを相談したい」<br>準備ができたら 「<b>返信を書いて</b>」 と指示してください'
+                    : '「3行で要約して」<br>「経緯だけ詳しく」<br>「担当者ごとに分けて」<br>のような指示を送ってください';
+                host.innerHTML = `
+                    <div class="text-center py-8" style="color:#9ca3af;">
+                        <i class="fas fa-comments fa-2x mb-2" style="color:#e0e7ff;"></i>
+                        <p class="text-xs font-bold" style="color:#4b5563;">${esc(headline)}</p>
+                        <p class="text-[10px] mt-1.5" style="color:#9ca3af;">${help}</p>
+                    </div>`;
+                return;
+            }
+
+            // user メッセージは /tag を青チップで表示, assistant 応答は改行のみ <br> に
+            const renderUserBody = (content) => {
+                if (typeof this.renderAiChatTaggedHtml === 'function') {
+                    try { return this.renderAiChatTaggedHtml(content); } catch (_) {}
+                }
+                return esc(content).replace(/\n/g, '<br>');
+            };
+            const renderAssistantBody = (content) => esc(content).replace(/\n/g, '<br>');
+
+            const html = msgs.map((m) => {
+                const rowCls    = m.role === 'user' ? 'rice-ai-msg-row rice-ai-msg-row-user' : 'rice-ai-msg-row rice-ai-msg-row-assistant';
+                const bubbleCls = m.role === 'user' ? 'rice-ai-msg-bubble rice-ai-msg-bubble-user' : 'rice-ai-msg-bubble rice-ai-msg-bubble-assistant';
+                let inner = '';
+                if (m.role === 'assistant' && m.status === 'pending') {
+                    inner = `<div class="rice-ai-msg-pending">
+                        <i class="fas fa-circle-notch fa-spin"></i>
+                        <span>考えています...</span>
+                    </div>`;
+                } else if (m.role === 'assistant' && m.status === 'error') {
+                    const errMsg = esc(m.error_message || 'エラーが発生しました');
+                    inner = `<div>
+                        <div class="rice-ai-msg-error">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <span>${errMsg}</span>
+                        </div>
+                        <button type="button" data-rice-retry-id="${esc(m.id)}"
+                                style="margin-top:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:#4f46e5;color:#fff;border:0;cursor:pointer;">
+                            <i class="fas fa-redo text-[9px]"></i> 再送信
+                        </button>
+                    </div>`;
+                } else if (m.status === 'done' || m.role === 'user') {
+                    const body = m.role === 'user' ? renderUserBody(m.content) : renderAssistantBody(m.content);
+                    let actions = '';
+                    if (m.role === 'assistant') {
+                        const elapsed = m.elapsed_ms ? `<span class="rice-ai-msg-elapsed">${(m.elapsed_ms / 1000).toFixed(1)}s</span>` : '';
+                        actions = `<div class="rice-ai-msg-actions">
+                            <button type="button" data-rice-copy-id="${esc(m.id)}" class="rice-ai-msg-action-btn" title="この本文をクリップボードにコピー">
+                                <i class="fas fa-copy"></i> コピー
+                            </button>
+                            ${elapsed}
+                        </div>`;
+                    }
+                    inner = `<div><div class="rice-ai-msg-body">${body}</div>${actions}</div>`;
+                }
+                return `<div class="${rowCls}"><div class="${bubbleCls}">${inner}</div></div>`;
+            }).join('');
+
+            host.innerHTML = html;
+
+            // 再送信 / コピー ボタンのイベントを imperative に拾う
+            host.querySelectorAll('[data-rice-retry-id]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = parseInt(btn.getAttribute('data-rice-retry-id'), 10);
+                    const m = this.aiChat.messages.find((x) => x.id === id);
+                    if (m && typeof this.retryAiChatMessage === 'function') this.retryAiChatMessage(m);
+                });
+            });
+            host.querySelectorAll('[data-rice-copy-id]').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const id = parseInt(btn.getAttribute('data-rice-copy-id'), 10);
+                    const m = this.aiChat.messages.find((x) => x.id === id);
+                    if (m && typeof this.copyAiChatMessage === 'function') this.copyAiChatMessage(m);
+                });
+            });
+        },
         async openAiChat(kind) {
             console.info('[ai-chat] openAiChat called kind=', kind, 'selectedThreadId=', this.selectedThreadId);
             if (!this.selectedThreadId) {
@@ -9591,6 +9681,7 @@ function emailApp() {
                 const d = await r.json();
                 this.aiChat.sessionId = d.session?.id || null;
                 this.aiChat.messages  = Array.isArray(d.messages) ? d.messages : [];
+                this._renderAiChatMessages();
                 // 未完了 assistant が残っているなら再開ポーリング.
                 if (this.aiChat.messages.some(m => m.role === 'assistant' && m.status === 'pending')) {
                     this._startAiChatPoll();
@@ -9660,6 +9751,7 @@ function emailApp() {
                 this.aiChat.input = '';
                 if (ta) ta.value = '';
                 this._riceAiChatRenderInputHighlight();
+                this._renderAiChatMessages();
                 this.$nextTick(() => this._scrollAiChatToBottom());
                 this._startAiChatPoll();
             } catch (e) {
@@ -9695,6 +9787,7 @@ function emailApp() {
         async resetAiChat() {
             if (!this.aiChat.sessionId) {
                 this.aiChat.messages = [];
+                this._renderAiChatMessages();
                 return;
             }
             if (!confirm('この会話履歴をすべて削除します. 取り消しはできません. よろしいですか?')) return;
@@ -9707,6 +9800,7 @@ function emailApp() {
                 if (!r.ok) { this.toast('削除に失敗しました', 'error'); return; }
                 this.aiChat.sessionId = null;
                 this.aiChat.messages  = [];
+                this._renderAiChatMessages();
                 this._stopAiChatPoll();
                 this.toast('会話履歴を削除しました', 'success');
             } catch (e) {
@@ -9736,6 +9830,7 @@ function emailApp() {
                     const next = Array.isArray(d.messages) ? d.messages : [];
                     // 既存と差し替え (status の遷移を反映)
                     this.aiChat.messages = next;
+                    this._renderAiChatMessages();
                     const hasPending = next.some(m => m.role === 'assistant' && m.status === 'pending');
                     if (!hasPending) {
                         this._stopAiChatPoll();

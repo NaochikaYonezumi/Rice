@@ -131,7 +131,21 @@ class AiChatController extends Controller
 
         $data = $request->validate([
             'message' => 'required|string|max:4000',
+            'skill'   => 'nullable|string|max:64',
         ]);
+
+        // 途中でユーザがスキルを変えたら, セッションの system_prompt も差し替える.
+        // (新規 prompt = 選択スキルの system_prompt. これにより以降のターンに反映される.)
+        if (!empty($data['skill']) && $data['skill'] !== $session->skill_key) {
+            $skills = $this->skillService->getSkillsForUser($request->user(), $session->kind);
+            $selected = $skills[$data['skill']] ?? null;
+            if ($selected) {
+                $session->update([
+                    'skill_key'     => $data['skill'],
+                    'system_prompt' => (string) ($selected['system_prompt'] ?? $session->system_prompt),
+                ]);
+            }
+        }
 
         return $this->appendUserAndDispatch($session, $data['message']);
     }

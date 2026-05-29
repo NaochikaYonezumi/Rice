@@ -3940,13 +3940,32 @@
                 </div>
 
                 {{-- 入力欄 (id 指定 + onclick で確実に発火) --}}
-                <div class="shrink-0 p-2.5" style="background:#ffffff;border-top:1px solid #e0e7ff;">
+                <div class="shrink-0 p-2.5" style="position:relative;background:#ffffff;border-top:1px solid #e0e7ff;">
+                    {{-- スキル選択チップ (現在 active なスキルがあれば表示) --}}
+                    <div x-show="aiChat.skillKey" x-cloak
+                         style="display:none;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+                        <span style="display:inline-flex;align-items:center;gap:4px;background:#eef2ff;color:#4338ca;padding:3px 8px;border-radius:9999px;font-size:10px;font-weight:700;border:1px solid #c7d2fe;">
+                            <i class="fas fa-bolt text-[9px]"></i>
+                            スキル: <span x-text="(aiSkills && aiSkills[aiChat.skillKey] && aiSkills[aiChat.skillKey].name) || aiChat.skillKey"></span>
+                            <button type="button"
+                                    onclick="window.riceAiChatClearSkill && window.riceAiChatClearSkill()"
+                                    style="margin-left:4px;background:transparent;border:0;color:#4338ca;cursor:pointer;font-size:10px;"
+                                    title="スキルをクリア (既定に戻す)">×</button>
+                        </span>
+                        <span style="font-size:9px;color:#9ca3af;">/ で別のスキルに切り替え</span>
+                    </div>
+
+                    {{-- '/' スラッシュコマンドのスキル候補ポップアップ.
+                         _riceAiChatRenderSkillSlash() が中身を直接 innerHTML で書き換える. --}}
+                    <div id="rice-ai-chat-skill-slash"
+                         style="display:none;position:absolute;left:10px;right:10px;bottom:100%;margin-bottom:6px;background:#fff;border:1px solid #c7d2fe;border-radius:8px;box-shadow:0 -8px 24px rgba(15,23,42,0.10);max-height:240px;overflow-y:auto;z-index:10;"></div>
+
                     <div class="flex items-end gap-2">
                         <textarea id="rice-ai-chat-input"
                                   rows="2"
-                                  placeholder="指示を入力 (Ctrl+Enter で送信)"
+                                  placeholder="指示を入力 / 「/」 でスキル選択 (Ctrl+Enter で送信)"
                                   oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
-                                  onkeydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
+                                  onkeydown="if (event.key === 'Escape') { document.getElementById('rice-ai-chat-skill-slash').style.display='none'; return; } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
                                   class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
                                   style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
                         <button id="rice-ai-chat-send-btn"
@@ -3958,7 +3977,7 @@
                         </button>
                     </div>
                     <p class="text-[9px] mt-1" style="color:#9ca3af;">
-                        Ctrl+Enter で送信 / 履歴はスレッドごとに自動保存されます
+                        Ctrl+Enter で送信 / 「/」 でスキル指定 / 履歴はスレッドごとに自動保存
                     </p>
                 </div>
             </div>
@@ -5149,12 +5168,18 @@ function emailApp() {
             input: '',
             sending: false,             // 送信直後 (assistant pending 中) の連打防止
             pollTimer: null,
-            // モデル選択 (ヘッダのプルダウン用).
-            // modelPick は "provider:model" の連結文字列 ("" = サーバ既定).
-            // パース結果を provider / model に反映する.
             modelPick: '',
             provider: null,
             model:    null,
+            // スキル選択 (送信時に skill: <key> として渡し, サーバが system_prompt を切り替える)
+            skillKey: null,
+            // '/' スラッシュコマンドポップアップ
+            skillSlash: {
+                open: false,
+                query: '',      // '/' の後ろのフィルタ文字列
+                activeIdx: 0,
+                tokenStart: -1, // 入力テキスト内の '/' の位置 (削除用)
+            },
         },
         // AI モデルピッカー (要約共通)
         aiPickerLoading: false, aiPickerLoaded: false,
@@ -5718,6 +5743,7 @@ function emailApp() {
                 const self = this;
                 window.riceAiChatOnInput = function (value) {
                     self.aiChat.input = String(value ?? '');
+                    self._riceAiChatHandleSlash();
                 };
                 window.riceAiChatSend = function () {
                     try { self.sendAiChat(); }
@@ -5729,6 +5755,12 @@ function emailApp() {
                     const b = document.getElementById('rice-ai-chat-backdrop');
                     if (p) p.style.display = 'none';
                     if (b) b.style.display = 'none';
+                };
+                window.riceAiChatPickSkill = function (key) {
+                    self.pickAiChatSkill(key);
+                };
+                window.riceAiChatClearSkill = function () {
+                    self.aiChat.skillKey = null;
                 };
             } catch (e) { console.warn('[ai-chat] window helper setup failed', e); }
 
@@ -9192,6 +9224,101 @@ function emailApp() {
             await this.loadAiChat();
             this.$nextTick(() => this._scrollAiChatToBottom());
         },
+        // ===== AI チャット: スキル選択 (/コマンド) =====
+        // textarea に '/' を打つと, 残りのテキストをクエリにして候補リストを出す.
+        // 候補クリックで aiChat.skillKey が確定し, 入力テキストから '/...' は除去される.
+        _riceAiChatHandleSlash() {
+            const ta = document.getElementById('rice-ai-chat-input');
+            const value = (ta && ta.value) || this.aiChat.input || '';
+            const pos = ta ? (ta.selectionStart ?? value.length) : value.length;
+            // カーソル前で最後の '/' を探す. ただし直前が空白 / 行頭 / 全文先頭 でないと無視.
+            let slashIdx = -1;
+            for (let i = pos - 1; i >= 0; i--) {
+                const ch = value[i];
+                if (ch === ' ' || ch === '\n' || ch === '\t') break;
+                if (ch === '/') {
+                    const prev = i === 0 ? '' : value[i - 1];
+                    if (i === 0 || prev === ' ' || prev === '\n' || prev === '\t') {
+                        slashIdx = i;
+                    }
+                    break;
+                }
+            }
+            if (slashIdx < 0) {
+                this.aiChat.skillSlash.open = false;
+                this._riceAiChatRenderSkillSlash();
+                return;
+            }
+            this.aiChat.skillSlash.open      = true;
+            this.aiChat.skillSlash.query     = value.slice(slashIdx + 1, pos);
+            this.aiChat.skillSlash.tokenStart = slashIdx;
+            this.aiChat.skillSlash.activeIdx  = 0;
+            this._riceAiChatRenderSkillSlash();
+        },
+        // スキル候補をフィルタ (キーまたは name に query が部分一致).
+        _filteredAiChatSkills() {
+            const q = (this.aiChat.skillSlash.query || '').toLowerCase();
+            const items = [];
+            const map = this.aiSkills || {};
+            for (const key of Object.keys(map)) {
+                const s = map[key] || {};
+                const name = String(s.name || key);
+                if (!q || key.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
+                    items.push({ key, name, description: s.description || '' });
+                }
+            }
+            return items;
+        },
+        // スキル候補ポップアップを直接 DOM で描画 (Alpine x-for の reactivity に依存しない).
+        _riceAiChatRenderSkillSlash() {
+            const wrap = document.getElementById('rice-ai-chat-skill-slash');
+            if (!wrap) return;
+            if (!this.aiChat.skillSlash.open) {
+                wrap.style.display = 'none';
+                wrap.innerHTML = '';
+                return;
+            }
+            const items = this._filteredAiChatSkills();
+            if (items.length === 0) {
+                wrap.style.display = 'block';
+                wrap.innerHTML = '<p style="padding:8px;font-size:11px;color:#9ca3af;text-align:center;">該当するスキルがありません</p>';
+                return;
+            }
+            const parts = ['<p style="padding:6px 10px;font-size:10px;color:#6b7280;font-weight:700;background:#f9fafb;border-bottom:1px solid #e5e7eb;">スキルを選択 (Esc でキャンセル)</p>'];
+            for (const it of items) {
+                parts.push(`
+                    <button type="button"
+                            onclick="window.riceAiChatPickSkill('${String(it.key).replace(/'/g, "\\'")}')"
+                            style="display:block;width:100%;text-align:left;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #f3f4f6;cursor:pointer;">
+                        <div style="font-size:12px;font-weight:700;color:#1e1b4b;">${this._escapeHtml(it.name)}</div>
+                        <div style="font-size:10px;color:#6b7280;">${this._escapeHtml(it.description || it.key)}</div>
+                    </button>
+                `);
+            }
+            wrap.style.display = 'block';
+            wrap.innerHTML = parts.join('');
+        },
+        _escapeHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        },
+        // スキル選択時: '/...' トークンを除去, skillKey を確定, ポップアップを閉じる.
+        pickAiChatSkill(key) {
+            const ta = document.getElementById('rice-ai-chat-input');
+            const slot = this.aiChat.skillSlash;
+            if (ta && slot.tokenStart >= 0) {
+                const value = ta.value || '';
+                const pos = ta.selectionStart ?? value.length;
+                const next = value.slice(0, slot.tokenStart) + value.slice(pos);
+                ta.value = next;
+                this.aiChat.input = next;
+                const newPos = slot.tokenStart;
+                try { ta.setSelectionRange(newPos, newPos); ta.focus(); } catch (_) {}
+            }
+            this.aiChat.skillKey = key;
+            this.aiChat.skillSlash.open = false;
+            this._riceAiChatRenderSkillSlash();
+            this.toast('スキル: ' + (this.aiSkills?.[key]?.name || key) + ' を選択しました', 'info');
+        },
         // モデルプルダウンの値 ("provider:model") を aiChat.provider / aiChat.model にバラす.
         updateAiChatModelFromPick() {
             const v = (this.aiChat.modelPick || '').trim();
@@ -9255,12 +9382,13 @@ function emailApp() {
                 let url, body;
                 if (this.aiChat.sessionId) {
                     url  = '/ai-chat-sessions/' + this.aiChat.sessionId + '/messages';
-                    body = JSON.stringify({ message: text });
+                    const payload = { message: text };
+                    if (this.aiChat.skillKey) payload.skill = this.aiChat.skillKey;
+                    body = JSON.stringify(payload);
                 } else {
                     url  = '/threads/' + this.selectedThreadId + '/ai-chat';
                     const payload = { kind: this.aiChat.kind, message: text };
-                    // 既存 emailApp の aiProvider / aiModel をそのまま使う
-                    // (compose-window の AIアシスタント と完全に同じ UI/state).
+                    if (this.aiChat.skillKey) payload.skill = this.aiChat.skillKey;
                     if (this.aiProvider) payload.provider = this.aiProvider;
                     if (this.aiModel)    payload.model    = this.aiModel;
                     body = JSON.stringify(payload);

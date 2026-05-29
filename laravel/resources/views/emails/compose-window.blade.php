@@ -646,10 +646,9 @@
                                         <i class="fas fa-comments fa-2x mb-2" style="color:#e0e7ff;"></i>
                                         <p class="text-xs font-bold" style="color:#4b5563;">返信案を AI と相談しながら作ります</p>
                                         <p class="text-[10px] mt-1.5" style="color:#9ca3af;">
-                                            「丁寧に返信して」<br>
-                                            「金額の話を入れて」<br>
-                                            「もう少しフランクに」<br>
-                                            のような指示を送ってください
+                                            まずはスレッドについて相談してください.<br>
+                                            例: 「論点を整理して」「返信のトーンを相談したい」<br>
+                                            準備ができたら 「<b>返信を書いて</b>」 と指示すると返信文を出します
                                         </p>
                                     </div>
                                 </template>

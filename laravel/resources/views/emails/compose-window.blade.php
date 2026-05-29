@@ -236,6 +236,47 @@
     }
     .rice-ai-msg-action-btn:hover { opacity: 0.85; }
     .rice-ai-msg-elapsed { margin-left: auto; }
+
+    /* /スキル / /コレクション の青チップ (emails/index と同じ仕様) */
+    .rice-ai-tag {
+        background-color: #dbeafe;
+        color: #1d4ed8;
+        border-radius: 4px;
+        padding: 1px 6px;
+        margin: 0 1px;
+        font-weight: 700;
+        font-size: 0.95em;
+        box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.18);
+        white-space: nowrap;
+    }
+    .rice-ai-input-wrap { position: relative; flex: 1; min-width: 0; }
+    .rice-ai-input-highlight,
+    .rice-ai-input-wrap textarea {
+        font-family: inherit;
+        font-size: 12px;
+        line-height: 1.55;
+        padding: 8px 12px;
+        letter-spacing: normal; word-spacing: normal; tab-size: 4;
+    }
+    .rice-ai-input-highlight {
+        position: absolute; inset: 0;
+        border: 1px solid transparent; border-radius: 8px;
+        pointer-events: none;
+        white-space: pre-wrap; word-wrap: break-word; overflow: hidden;
+        color: #111827; background: transparent;
+        z-index: 1;
+    }
+    .rice-ai-input-wrap textarea {
+        position: relative; z-index: 2;
+        width: 100%;
+        background: #f9fafb !important;
+        color: transparent !important;
+        -webkit-text-fill-color: transparent;
+        caret-color: #111827;
+        border: 1px solid #e5e7eb; border-radius: 8px;
+        outline: none; resize: none;
+    }
+    .rice-ai-input-wrap textarea::selection { background-color: rgba(29, 78, 216, 0.18); color: transparent; }
 </style>
 @endsection
 
@@ -717,7 +758,8 @@
                                             </template>
                                             <template x-if="m.status === 'done' || m.role === 'user'">
                                                 <div>
-                                                    <div x-text="m.content" class="rice-ai-msg-body"></div>
+                                                    <div class="rice-ai-msg-body"
+                                                         x-html="m.role === 'user' ? renderAiChatTaggedHtml(m.content) : _escapeChatHtml(m.content).replace(/\n/g, '<br>')"></div>
                                                     <template x-if="m.role === 'assistant'">
                                                         <div class="rice-ai-msg-actions">
                                                             <button type="button" @click="replaceBodyWithAiChatMessage(m)"
@@ -750,13 +792,16 @@
                             {{-- 入力 --}}
                             <div class="shrink-0 p-2.5" style="background:#ffffff;border-top:1px solid #e0e7ff;">
                                 <div class="flex items-end gap-2">
-                                    <textarea x-model="aiChat.input"
-                                              @keydown.ctrl.enter.prevent="sendAiChat()"
-                                              @keydown.meta.enter.prevent="sendAiChat()"
-                                              placeholder="指示を入力 / /スキル名 や /コレクション名 で指定可 (Ctrl+Enter で送信)"
-                                              rows="2"
-                                              class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
-                                              style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
+                                    <div class="rice-ai-input-wrap">
+                                        <div class="rice-ai-input-highlight" x-html="renderAiChatTaggedHtml(aiChat.input)"></div>
+                                        <textarea x-model="aiChat.input"
+                                                  x-ref="aiChatInputTa"
+                                                  @keydown.ctrl.enter.prevent="sendAiChat()"
+                                                  @keydown.meta.enter.prevent="sendAiChat()"
+                                                  @scroll="(function(t){const h=t.previousElementSibling; if(h){h.scrollTop=t.scrollTop;h.scrollLeft=t.scrollLeft;}})($event.target)"
+                                                  placeholder="指示を入力 / /スキル名 や /コレクション名 で指定可 (Ctrl+Enter で送信)"
+                                                  rows="2"></textarea>
+                                    </div>
                                     <button type="button" @click="sendAiChat()"
                                             :disabled="aiChat.sending || !aiChat.input.trim()"
                                             class="shrink-0 px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-40 disabled:cursor-not-allowed"
@@ -1984,6 +2029,28 @@ function composeWindowApp() {
                 this.aiChat.loading = false;
             }
         },
+        // HTML エスケープ (チャット bubble + textarea overlay 共用)
+        _escapeChatHtml(s) {
+            return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        },
+        // '/word' を青チップで wrap した HTML を返す (emails/index と同じ仕様).
+        renderAiChatTaggedHtml(text) {
+            const esc = (s) => this._escapeChatHtml(s);
+            const src = String(text ?? '');
+            const re = /(^|[\s\n\t])\/([\p{L}\p{N}_\-.]+)/gu;
+            let out = '', last = 0;
+            for (const m of src.matchAll(re)) {
+                const startName = m.index + m[1].length;
+                out += esc(src.slice(last, startName));
+                const name = m[2];
+                out += '<span class="rice-ai-tag">/' + esc(name) + '</span>';
+                last = startName + 1 + name.length;
+            }
+            out += esc(src.slice(last));
+            if (out.endsWith('\n')) out += ' ';
+            return out;
+        },
+
         // テキスト内の '/スキル名' を検出. 本文は そのまま 残し, skillKey だけ別途返す.
         // (チャット履歴に何のスキルで投げたかが見えるようにするため. emails/index と同じ仕様)
         _extractSkillFromText(raw) {

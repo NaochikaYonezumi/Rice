@@ -2024,7 +2024,13 @@ class EmailFetcher
                 'count'      => is_countable($messages) ? count($messages) : 0,
             ]);
             foreach ($messages as $message) {
-                $messageId = (string) $message->getMessageId();
+                // message_id を正規化 (NUL/C0 制御文字を除去 + 255 文字に切り詰め).
+                //   旧実装は生 ($message->getMessageId()) のまま dedup → insert していたため
+                //   1) NUL バイト等を含む ID で「DB には正規化後の値が入っているのに where 不一致」
+                //   2) unique index 長 (環境次第で 64〜191 char) を超える長い Gmail ID で insert 時クランプ
+                //   というケースが SQLSTATE 23000 を引いていた. 共有メール側と同じ正規化を適用する.
+                $rawMessageId = (string) $message->getMessageId();
+                $messageId    = $this->cleanUtf8($rawMessageId, 255);
                 if ($messageId !== '' && Email::query()
                     ->where('message_id', $messageId)
                     ->where('owner_user_id', $account->user_id)
@@ -2057,21 +2063,35 @@ class EmailFetcher
                 //  そこから先はバイトが無いので復元できない. 生の RFC822 ヘッダを優先的に見る.)
                 $subjectClean = $this->extractSubjectForStore($message);
 
-                $email = Email::create([
-                    'thread_id'       => $thread->id,
-                    'message_id'      => $messageId ?: null,
-                    'in_reply_to'     => $inReplyTo ?: null,
-                    'subject'         => $subjectClean,
-                    'from_address'    => $message->getFrom()[0]->mail ?? 'unknown@example.com',
-                    'from_name'       => $message->getFrom()[0]->personal ?? null,
-                    'to_address'      => $message->getTo()[0]->mail ?? '',
-                    'cc'              => $cc ?: null,
-                    'body_text'       => $message->getTextBody() ?: '',
-                    'body_html'       => $message->getHTMLBody() ?: '',
-                    'received_at'     => $receivedAt,
-                    'owner_user_id'   => $account->user_id,
-                    'mail_account_id' => $account->id,
-                ]);
+                try {
+                    $email = Email::create([
+                        'thread_id'       => $thread->id,
+                        'message_id'      => $messageId ?: null,
+                        'in_reply_to'     => $inReplyTo ?: null,
+                        'subject'         => $subjectClean,
+                        'from_address'    => $message->getFrom()[0]->mail ?? 'unknown@example.com',
+                        'from_name'       => $message->getFrom()[0]->personal ?? null,
+                        'to_address'      => $message->getTo()[0]->mail ?? '',
+                        'cc'              => $cc ?: null,
+                        'body_text'       => $message->getTextBody() ?: '',
+                        'body_html'       => $message->getHTMLBody() ?: '',
+                        'received_at'     => $receivedAt,
+                        'owner_user_id'   => $account->user_id,
+                        'mail_account_id' => $account->id,
+                    ]);
+                } catch (\Illuminate\Database\QueryException $e) {
+                    // unique 制約違反 (SQLSTATE 23000) は「並走 fetch で既に同じ message_id が入った」
+                    // か、「先頭 N 文字が他の ID と被った長い ID」のどちらか.
+                    // どちらも 1 通スキップして次に進めば良い (取得全体は壊さない).
+                    if ($e->getCode() === '23000' || str_contains($e->getMessage(), 'Duplicate entry')) {
+                        \Log::info('EmailFetcher: personal duplicate skipped', [
+                            'account_id' => $account->id,
+                            'message_id' => $messageId,
+                        ]);
+                        continue;
+                    }
+                    throw $e;
+                }
                 $this->handleAttachments($message, $email);
                 $thread->update(['last_email_at' => $receivedAt]);
                 // 「相手からの返信」と判定できた時のみ status を inbox に戻す.

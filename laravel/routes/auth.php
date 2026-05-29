@@ -39,9 +39,6 @@ Route::middleware('guest')->group(function () {
     Route::post('two-factor/verify', [TwoFactorChallengeController::class, 'verify'])
                 ->middleware('throttle:6,1')
                 ->name('two-factor.verify');
-    Route::post('two-factor/resend', [TwoFactorChallengeController::class, 'resend'])
-                ->middleware('throttle:3,1')
-                ->name('two-factor.resend');
     Route::post('two-factor/recovery', [TwoFactorChallengeController::class, 'recovery'])
                 ->middleware('throttle:6,1')
                 ->name('two-factor.recovery');

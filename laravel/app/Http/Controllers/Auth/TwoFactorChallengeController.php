@@ -3,19 +3,18 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Mail\TwoFactorCodeMail;
 use App\Models\User;
 use App\Services\TotpService;
 use App\Services\TrustedDeviceService;
-use App\Services\TwoFactorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 
+/**
+ * 2FA チャレンジ画面 (TOTP のみ).
+ * メール認証コード方式は廃止. リカバリーコード救済は引き続き利用可能.
+ */
 class TwoFactorChallengeController extends Controller
 {
     public function show(Request $request): View|RedirectResponse
@@ -26,16 +25,18 @@ class TwoFactorChallengeController extends Controller
         }
         /** @var User $user */
         $user = $pending['user'];
-        $usesTotp = $user->hasTotpEnabled();
-        return view('auth.two-factor-challenge', [
-            'maskedEmail' => $this->maskEmail($user->email),
-            'usesTotp'    => $usesTotp,
-        ]);
+        // TOTP 未設定でこの画面に来てしまったら自動で setup へ.
+        if (!$user->hasTotpEnabled()) {
+            Auth::login($user, (bool) ($pending['remember'] ?? false));
+            $request->session()->regenerate();
+            $request->session()->forget('pending_2fa');
+            return redirect()->route('totp.setup');
+        }
+        return view('auth.two-factor-challenge');
     }
 
     public function verify(
         Request $request,
-        TwoFactorService $twoFactor,
         TotpService $totp,
         TrustedDeviceService $trustedDevices,
     ): RedirectResponse {
@@ -54,18 +55,9 @@ class TwoFactorChallengeController extends Controller
         ]);
 
         $normalized = preg_replace('/\s+/', '', $data['code']);
-        // TOTP 有効ユーザはまず TOTP 検証, ダメならフォールバックでメールコードも試す
-        // (= 旧端末で TOTP アプリ未準備でメールが届いていたケースの救済).
-        $ok = false;
-        if ($user->hasTotpEnabled()) {
-            $ok = $totp->verifyUser($user, $normalized);
-        }
-        if (!$ok) {
-            $ok = $twoFactor->verifyCode($user, $normalized);
-        }
-        if (!$ok) {
+        if (!$user->hasTotpEnabled() || !$totp->verifyUser($user, $normalized)) {
             return back()->withErrors([
-                'code' => '認証コードが正しくないか、期限切れです。',
+                'code' => '認証コードが正しくありません。',
             ]);
         }
 
@@ -77,39 +69,6 @@ class TwoFactorChallengeController extends Controller
             trustDevice: (bool) ($data['trust_device'] ?? false),
             trustedDevices: $trustedDevices,
         );
-    }
-
-    public function resend(
-        Request $request,
-        TwoFactorService $twoFactor,
-    ): RedirectResponse {
-        $pending = $this->pendingOrRedirect($request);
-        if ($pending instanceof RedirectResponse) {
-            return $pending;
-        }
-        /** @var User $user */
-        $user = $pending['user'];
-
-        $cooldown = (int) config('two_factor.resend_cooldown_seconds', 60);
-        $cacheKey = 'two_factor_resend:' . $user->id;
-        if (Cache::has($cacheKey)) {
-            return back()->with('error', '少し待ってから再送してください。');
-        }
-        Cache::put($cacheKey, true, $cooldown);
-
-        $code = $twoFactor->issueCode($user);
-        try {
-            Mail::to($user->email)->send(new TwoFactorCodeMail(
-                user: $user,
-                code: $code,
-                lifetimeMinutes: (int) config('two_factor.code_lifetime_minutes', 10),
-            ));
-        } catch (\Throwable $e) {
-            Log::error('2FAコード再送失敗', ['user_id' => $user->id, 'error' => $e->getMessage()]);
-            return back()->with('error', 'コード送信に失敗しました。時間をおいて再度お試しください。');
-        }
-
-        return back()->with('status', '新しい認証コードを送信しました。');
     }
 
     public function recovery(
@@ -199,19 +158,5 @@ class TwoFactorChallengeController extends Controller
         }
 
         return $response;
-    }
-
-    protected function maskEmail(string $email): string
-    {
-        if (!str_contains($email, '@')) {
-            return $email;
-        }
-        [$local, $domain] = explode('@', $email, 2);
-        if (mb_strlen($local) <= 2) {
-            $masked = mb_substr($local, 0, 1) . '*';
-        } else {
-            $masked = mb_substr($local, 0, 2) . str_repeat('*', max(1, mb_strlen($local) - 2));
-        }
-        return $masked . '@' . $domain;
     }
 }

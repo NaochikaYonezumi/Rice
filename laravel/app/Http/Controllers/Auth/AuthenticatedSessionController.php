@@ -3,16 +3,11 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Auth\LoginRequest;
-use App\Mail\TwoFactorCodeMail;
 use App\Models\User;
 use App\Services\TrustedDeviceService;
-use App\Services\TwoFactorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
@@ -27,10 +22,13 @@ class AuthenticatedSessionController extends Controller
 
     /**
      * Handle an incoming authentication request.
+     *
+     * 2FA は TOTP (認証アプリ) のみ. 旧メール 2FA は廃止.
+     *   - TOTP 設定済みユーザ           → /two-factor/challenge (TOTP 入力)
+     *   - TOTP 未設定 (新規 / 移行中)   → そのままログイン → ミドルウェアで /two-factor/totp/setup へ誘導
      */
     public function store(
         Request $request,
-        TwoFactorService $twoFactor,
         TrustedDeviceService $trustedDevices,
     ): RedirectResponse {
         $credentials = $request->validate([
@@ -62,29 +60,21 @@ class AuthenticatedSessionController extends Controller
             return redirect()->intended(route('emails.index', absolute: false));
         }
 
-        // pending 2FA セッションを作成
+        // TOTP 未設定ユーザは 2FA チャレンジ無しでログイン → EncourageTotpSetup
+        // ミドルウェアが /two-factor/totp/setup に誘導する.
+        if (!$user->hasTotpEnabled()) {
+            Auth::login($user, $remember);
+            $request->session()->regenerate();
+            return redirect()->intended(route('emails.index', absolute: false));
+        }
+
+        // TOTP 設定済みユーザは TOTP コード入力チャレンジへ.
         $request->session()->put('pending_2fa', [
             'user_id' => $user->id,
             'remember' => $remember,
             'intended_url' => $request->session()->get('url.intended'),
             'expires_at' => now()->addMinutes((int) config('two_factor.pending_session_lifetime_minutes', 15))->timestamp,
         ]);
-
-        // TOTP (認証アプリ) 有効なユーザはメール送信をスキップ.
-        // メールが届かない事故 / SMTP 詰まり時の救済として「メール再送」ボタンは
-        // チャレンジ画面側に残し, そこから手動で発行できる.
-        if (!$user->hasTotpEnabled()) {
-            $code = $twoFactor->issueCode($user);
-            try {
-                Mail::to($user->email)->send(new TwoFactorCodeMail(
-                    user: $user,
-                    code: $code,
-                    lifetimeMinutes: (int) config('two_factor.code_lifetime_minutes', 10),
-                ));
-            } catch (\Throwable $e) {
-                Log::error('2FAコード送信失敗', ['user_id' => $user->id, 'error' => $e->getMessage()]);
-            }
-        }
 
         return redirect()->route('two-factor.challenge');
     }

@@ -38,20 +38,11 @@
                 </div>
             @endif
 
-            @if(!empty($usesTotp))
-                <p class="text-sm text-muted mb-3">
-                    <i class="fas fa-mobile-alt"></i>
-                    <strong>認証アプリ</strong>に表示された 6 桁コードを入力してください。<br>
-                    <span style="font-size:11px;color:#9ca3af;">
-                        アプリが使えない場合は「メールでの再送」ボタンを押してメール経由で受け取ることもできます.
-                    </span>
-                </p>
-            @else
-                <p class="text-sm text-muted mb-3">
-                    <strong>{{ $maskedEmail }}</strong> 宛に認証コードを送信しました。<br>
-                    メールに記載された6桁のコードを入力してください。
-                </p>
-            @endif
+            <p class="text-sm text-muted mb-3">
+                <i class="fas fa-mobile-alt"></i>
+                <strong>認証アプリ</strong> (Google Authenticator など) に表示された
+                <strong>6 桁のコード</strong> を入力してください。
+            </p>
 
             {{-- コード入力モード --}}
             <div x-show="mode === 'code'">
@@ -72,13 +63,6 @@
                     </div>
                     <button type="submit" class="btn btn-primary btn-block">
                         <i class="fas fa-sign-in-alt mr-1"></i> ログイン
-                    </button>
-                </form>
-
-                <form action="{{ route('two-factor.resend') }}" method="post" class="mt-3">
-                    @csrf
-                    <button type="submit" class="btn btn-link btn-block text-sm">
-                        <i class="fas fa-redo mr-1"></i> コードを再送する
                     </button>
                 </form>
 

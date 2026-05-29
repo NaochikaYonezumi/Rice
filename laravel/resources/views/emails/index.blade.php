@@ -9345,18 +9345,17 @@ function emailApp() {
             if (!q) return all;
             return all.filter(c => String(c.name || '').toLowerCase().includes(q));
         },
-        // 送信前にテキストから '/スキル名' トークンを抽出する.
-        // 戻り値: { text: スキル指定を除いた本文, skillKey: 検出したスキル (なければ null) }
+        // 送信前にテキストから '/スキル名' トークンを検出する.
+        // 仕様変更: '/スキル名' は本文に残したまま skillKey だけ別途返す.
+        //   理由: チャット履歴に何で指示したかを残す + LLM 側でユーザ意図が明示できる.
+        // 戻り値: { text: そのままの本文, skillKey: 検出したスキル (なければ null) }
         _riceAiChatExtractSkillFromText(raw) {
             const text = String(raw ?? '');
             const skills = this.aiSkills || {};
-            // 「空白/行頭の直後に '/' 」 のパターンで最初の 1 個だけ拾う.
-            // popup 経由でなくても /要約 や /summarize で動くようにする.
             const re = /(^|[\s\n\t])\/([\p{L}\p{N}_-]+)/u;
             const m = text.match(re);
             if (!m) return { text, skillKey: null };
             const candidate = m[2].toLowerCase();
-            // skills のキーで完全一致 → 部分一致 → name 部分一致 の順で照合.
             let hit = null;
             for (const key of Object.keys(skills)) {
                 if (key.toLowerCase() === candidate) { hit = key; break; }
@@ -9372,10 +9371,8 @@ function emailApp() {
                     if (name.includes(candidate)) { hit = key; break; }
                 }
             }
-            if (!hit) return { text, skillKey: null };
-            // 該当部分をテキストから除去 (前後の空白は 1 個ぶん残す).
-            const stripped = text.replace(re, (matched, prefix) => prefix).trim();
-            return { text: stripped, skillKey: hit };
+            // hit してもしなくてもテキストはそのまま返す (本文に /skillname を残す).
+            return { text, skillKey: hit };
         },
         // スキル候補をフィルタ (キーまたは name に query が部分一致).
         _filteredAiChatSkills() {
@@ -9447,23 +9444,28 @@ function emailApp() {
         _escapeHtml(s) {
             return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         },
-        // スキル選択時: '/...' トークンを除去, skillKey を確定, ポップアップを閉じる.
+        // スキル選択時: テキストに '/skillkey ' を残す (= 自分でタイプしたのと同じ状態にする).
+        //   ・ユーザは続けて「詳細指示」を書ける
+        //   ・チャット履歴にも /skillkey が残ってどのスキルで投げたかが見える
+        //   ・送信時は サーバ側に skill = key を別途送る + 本文に /skillkey が含まれていても
+        //     LLM プロンプトは「スキルの system_prompt + 本文 (詳細指示)」で構築
         pickAiChatSkill(key) {
             const ta = document.getElementById('rice-ai-chat-input');
             const slot = this.aiChat.skillSlash;
             if (ta && slot.tokenStart >= 0) {
                 const value = ta.value || '';
                 const pos = ta.selectionStart ?? value.length;
-                const next = value.slice(0, slot.tokenStart) + value.slice(pos);
+                const inserted = '/' + key + ' ';
+                const next = value.slice(0, slot.tokenStart) + inserted + value.slice(pos);
                 ta.value = next;
                 this.aiChat.input = next;
-                const newPos = slot.tokenStart;
+                const newPos = slot.tokenStart + inserted.length;
                 try { ta.setSelectionRange(newPos, newPos); ta.focus(); } catch (_) {}
             }
             this.aiChat.skillKey = key;
             this.aiChat.skillSlash.open = false;
             this._riceAiChatRenderSkillSlash();
-            this.toast('スキル: ' + (this.aiSkills?.[key]?.name || key) + ' を選択しました', 'info');
+            this.toast('スキル: ' + (this.aiSkills?.[key]?.name || key) + ' を選択. 続けて詳細指示を書けます.', 'info');
         },
         // コレクション選択時: '/...' トークンを '/<name>' に置換 (本文に残す).
         // バックエンド側で '/コレクション名' を検出してナレッジを展開する.

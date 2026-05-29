@@ -2178,6 +2178,13 @@ class EmailController extends Controller
                     'last_email_at' => $email->received_at ?? $now,
                     'is_pinned'     => 0,
                     'is_manual_upload' => 0,
+                    // 所有スコープをメールから引き継ぐ.
+                    //   - email.owner_user_id   = NULL → 共有メールのまま
+                    //   - email.owner_user_id   = X    → 個人メール (ユーザ X 所有) として独立
+                    //   旧実装はこれを設定しておらず、 個人メールから分離するとスレッドが
+                    //   owner_user_id=NULL の共有メール扱いになってしまっていた.
+                    'owner_user_id'   => $email->owner_user_id,
+                    'mail_account_id' => $email->mail_account_id,
                     'created_at'    => $now,
                     'updated_at'    => $now,
                 ]);

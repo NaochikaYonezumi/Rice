@@ -3800,6 +3800,12 @@
          style="display:none;position:fixed;inset:0;z-index:1990;background-color:rgba(15,23,42,0.35);"></div>
     <div id="rice-ai-chat-panel"
          style="display:none;position:fixed;top:0;right:0;bottom:0;width:420px;max-width:100vw;z-index:2000;background-color:#eef2ff;border-left:1px solid #c7d2fe;box-shadow:-12px 0 30px rgba(15,23,42,0.15);flex-direction:column;">
+        {{-- 左端のリサイズハンドル. mousedown → 横幅をマウスに追従 → mouseup で localStorage 保存 --}}
+        <div id="rice-ai-chat-resize"
+             onmousedown="window.riceAiChatStartResize && window.riceAiChatStartResize(event)"
+             title="ドラッグで幅変更 / ダブルクリックで初期値に戻す"
+             ondblclick="document.getElementById('rice-ai-chat-panel').style.width='420px'; try{localStorage.setItem('riceAiChatPanelWidth','420');}catch(_){}"
+             style="position:absolute;top:0;left:0;bottom:0;width:6px;cursor:col-resize;background:transparent;z-index:5;"></div>
 
         {{-- ヘッダー --}}
         <div class="shrink-0 px-5 py-3 flex items-center justify-between"
@@ -5758,6 +5764,29 @@ function emailApp() {
                 };
                 window.riceAiChatSetModel = function (m) {
                     self.aiModel = m;
+                };
+                // ===== AI チャットパネル: 左端ドラッグによるリサイズ =====
+                window.riceAiChatStartResize = function (ev) {
+                    ev.preventDefault();
+                    const panel = document.getElementById('rice-ai-chat-panel');
+                    if (!panel) return;
+                    const minW = 320;
+                    const maxW = Math.max(minW, window.innerWidth - 200);  // 左端まで詰めない
+                    const onMove = (e) => {
+                        const next = Math.max(minW, Math.min(maxW, window.innerWidth - e.clientX));
+                        panel.style.width = next + 'px';
+                    };
+                    const onUp = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup',   onUp);
+                        document.body.style.userSelect = '';
+                        document.body.style.cursor     = '';
+                        try { localStorage.setItem('riceAiChatPanelWidth', parseInt(panel.style.width, 10) || 420); } catch (_) {}
+                    };
+                    document.body.style.userSelect = 'none';
+                    document.body.style.cursor     = 'col-resize';
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup',   onUp);
                 };
             } catch (e) { console.warn('[ai-chat] window helper setup failed', e); }
 
@@ -9202,7 +9231,16 @@ function emailApp() {
             const bd = document.getElementById('rice-ai-chat-backdrop');
             const pn = document.getElementById('rice-ai-chat-panel');
             if (bd) bd.style.display = visible ? 'block' : 'none';
-            if (pn) pn.style.display = visible ? 'flex'  : 'none';
+            if (pn) {
+                pn.style.display = visible ? 'flex' : 'none';
+                if (visible) {
+                    // 保存された幅を復元
+                    try {
+                        const w = parseInt(localStorage.getItem('riceAiChatPanelWidth') || '420', 10);
+                        if (w >= 320 && w <= window.innerWidth - 100) pn.style.width = w + 'px';
+                    } catch (_) {}
+                }
+            }
         },
         // AI モデルピッカーを imperative DOM で描画.
         // Alpine x-for / :class が不安定なので素 HTML で再描画する.
@@ -10838,6 +10876,10 @@ function emailApp() {
     box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.18);
     white-space: nowrap;
 }
+
+/* AI チャットパネル: 左端ドラッグハンドル. hover でガイド色を出す. */
+#rice-ai-chat-resize:hover,
+#rice-ai-chat-resize:active { background: rgba(99, 102, 241, 0.35); }
 
 /* AI チャット入力欄: 普通の textarea として表示. /tag の chip 化はチャット履歴側
    (送信後の吹き出し) で行う. textarea 内の overlay は環境依存で崩れたため廃止. */

@@ -618,11 +618,21 @@
              x-bind:style="aiPanelOpen ? 'display:flex;position:fixed;top:0;left:0;right:0;bottom:0;z-index:1500;background-color:rgba(15,23,42,0.35);' : 'display:none;'"
              @click.self="aiPanelOpen = false"
              @keydown.escape.window="aiPanelOpen = false">
-            <div class="ml-auto h-full flex flex-col"
+            <div class="ml-auto h-full flex flex-col relative"
+                 x-ref="composeAiPanel"
+                 x-init="(function(){const w=parseInt(localStorage.getItem('riceComposeAiPanelWidth')||'420',10); if(w>=320 && w<=window.innerWidth-100) \$refs.composeAiPanel.style.width=w+'px';})()"
                  x-transition:enter="transition ease-out duration-200"
                  x-transition:enter-start="translate-x-8 opacity-0"
                  x-transition:enter-end="translate-x-0 opacity-100"
                  style="width:420px;max-width:100vw;background-color:#eef2ff;border-left:1px solid #c7d2fe;box-shadow:-12px 0 30px rgba(15,23,42,0.15);">
+
+                {{-- 左端ドラッグハンドル. ダブルクリックで初期値 420px に戻す. --}}
+                <div @mousedown.prevent="(function(ev,panel){const minW=320,maxW=Math.max(minW,window.innerWidth-200); const onMove=(e)=>{panel.style.width=Math.max(minW,Math.min(maxW,window.innerWidth-e.clientX))+'px';}; const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);document.body.style.userSelect='';document.body.style.cursor=''; try{localStorage.setItem('riceComposeAiPanelWidth', parseInt(panel.style.width,10)||420);}catch(_){}}; document.body.style.userSelect='none';document.body.style.cursor='col-resize'; document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);})($event,$refs.composeAiPanel)"
+                     @dblclick="$refs.composeAiPanel.style.width='420px'; try{localStorage.setItem('riceComposeAiPanelWidth','420');}catch(_){}"
+                     title="ドラッグで幅変更 / ダブルクリックで初期値"
+                     style="position:absolute;top:0;left:0;bottom:0;width:6px;cursor:col-resize;background:transparent;z-index:5;"
+                     onmouseover="this.style.background='rgba(99,102,241,0.35)'"
+                     onmouseout="this.style.background='transparent'"></div>
 
                 {{-- ヘッダー --}}
                 <div class="shrink-0 px-5 py-3 flex items-center justify-between"

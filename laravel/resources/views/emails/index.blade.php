@@ -3877,10 +3877,12 @@
                     </span>
                     <button type="button" @click="resetAiChat()"
                             :disabled="!aiChat.sessionId"
-                            class="text-[10px] font-bold px-2 py-1 rounded-md disabled:opacity-30"
-                            style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;cursor:pointer;"
+                            class="disabled:opacity-30"
+                            style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;background:transparent;color:#9ca3af;border:0;border-radius:4px;cursor:pointer;font-size:10px;"
+                            onmouseover="if(!this.disabled){this.style.color='#b91c1c';this.style.background='#fee2e2';}"
+                            onmouseout="this.style.color='#9ca3af';this.style.background='transparent';"
                             title="この会話を全部消してやり直す">
-                        <i class="fas fa-undo text-[9px]"></i> リセット
+                        <i class="fas fa-undo"></i>
                     </button>
                 </div>
 

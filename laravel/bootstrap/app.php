@@ -18,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // 認証済みユーザに対してリカバリーコードのセットアップを強制
         $middleware->appendToGroup('web', \App\Http\Middleware\EnsureRecoveryCodesAcknowledged::class);
+
+        // 認証アプリ (TOTP) 未設定ユーザを setup ページに自動誘導 (「あとで」でスキップ可能)
+        $middleware->appendToGroup('web', \App\Http\Middleware\EncourageTotpSetup::class);
     })
     ->withSchedule(function (Schedule $schedule): void {
         // 5 分おきに POP3/IMAP メールを取得 (重複起動を抑制)

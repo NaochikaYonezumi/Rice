@@ -4373,8 +4373,18 @@
                         </ul>
                     </div>
 
-                    {{-- 複数選択 (フル幅) --}}
-                    <div style="grid-column:span 2;">
+                    {{-- スレッド内メール操作 --}}
+                    <div>
+                        <h3 style="margin:0 0 8px;font-size:10px;font-weight:900;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">スレッド内メール操作</h3>
+                        <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#374151;">
+                            <li style="display:flex;align-items:center;justify-content:space-between;"><span>次のメール (= 新しい)</span><kbd class="rice-kbd">]</kbd></li>
+                            <li style="display:flex;align-items:center;justify-content:space-between;"><span>前のメール (= 古い)</span><kbd class="rice-kbd">[</kbd></li>
+                            <li style="display:flex;align-items:center;justify-content:space-between;"><span>選択中メールを展開/折りたたみ</span><kbd class="rice-kbd">Enter</kbd></li>
+                        </ul>
+                    </div>
+
+                    {{-- 複数選択 --}}
+                    <div>
                         <h3 style="margin:0 0 8px;font-size:10px;font-weight:900;color:#9ca3af;text-transform:uppercase;letter-spacing:0.1em;">複数選択モード</h3>
                         <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#374151;">
                             <li style="display:flex;align-items:center;justify-content:space-between;"><span>選択モード on/off</span><kbd class="rice-kbd">V</kbd></li>
@@ -6348,6 +6358,41 @@ function emailApp() {
                         this._navIntraThreadEmail(-1);
                     }
                     break;
+                // Enter: [ / ] で選択したメールカードを展開/折りたたみ.
+                //   - 本文 + ヘッダ + 添付一覧が見える (= "ヂラ見" 詳細表示).
+                //   - _focusedEmailId 未設定 (まだ [ / ] を押してない) なら最新メール
+                //     (threadEmails[0]) を対象にする.
+                //   - 展開後はそのカードがビューポート上部に来るようスクロールも調整.
+                //   - ボタン / リンクにフォーカスがある時はブラウザ既定 (= クリック) に任せる.
+                case 'Enter': {
+                    const focusedTag = (e.target?.tagName || '').toUpperCase();
+                    if (focusedTag === 'BUTTON' || focusedTag === 'A') break;
+                    if (this.selectedThreadId && (this.threadEmails || []).length > 0) {
+                        const targetEmailId = this._focusedEmailId
+                            ?? this.threadEmails[0].id;
+                        this._focusedEmailId = targetEmailId;
+                        e.preventDefault();
+                        if (typeof this.toggleEmailExpand === 'function') {
+                            this.toggleEmailExpand(targetEmailId);
+                        }
+                        // 展開後に対象カードがビューポート上部に来るようスクロール.
+                        this.$nextTick(() => {
+                            const el = document.querySelector('[data-email-id="' + targetEmailId + '"]');
+                            if (!el) return;
+                            const pane = this.$refs.threadEmailsPane || el.closest('.overflow-y-auto');
+                            if (pane) {
+                                const targetTop = pane.scrollTop + (el.getBoundingClientRect().top - pane.getBoundingClientRect().top);
+                                pane.scrollTo({ top: Math.max(0, targetTop - 16), behavior: 'smooth' });
+                            } else {
+                                el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                            }
+                            // 一時的にハイライト (CSS ring) を付ける
+                            el.classList.add('ring-2', 'ring-blue-300');
+                            setTimeout(() => el.classList.remove('ring-2', 'ring-blue-300'), 1200);
+                        });
+                    }
+                    break;
+                }
             }
         },
 

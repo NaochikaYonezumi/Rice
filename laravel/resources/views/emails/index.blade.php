@@ -9249,35 +9249,63 @@ function emailApp() {
             await this.sendAiChat();
         },
         // ===== AI チャット: スキル選択 (/コマンド) =====
-        // textarea に '/' を打つと, 残りのテキストをクエリにして候補リストを出す.
+        // 文中どこでも '/' を打つと, その後ろのテキストをクエリにして候補リストを出す.
         // 候補クリックで aiChat.skillKey が確定し, 入力テキストから '/...' は除去される.
+        // 送信時にもテキスト内の '/スキル名' を自動検出してスキルに反映する (popup 非経由でも OK).
         _riceAiChatHandleSlash() {
             const ta = document.getElementById('rice-ai-chat-input');
             const value = (ta && ta.value) || this.aiChat.input || '';
             const pos = ta ? (ta.selectionStart ?? value.length) : value.length;
-            // カーソル前で最後の '/' を探す. ただし直前が空白 / 行頭 / 全文先頭 でないと無視.
+            // カーソル前で最後の '/' を文中どこからでも探す.
+            // '/' 〜 カーソル の間に空白/改行があれば popup は閉じる (= 区切り).
             let slashIdx = -1;
             for (let i = pos - 1; i >= 0; i--) {
                 const ch = value[i];
                 if (ch === ' ' || ch === '\n' || ch === '\t') break;
-                if (ch === '/') {
-                    const prev = i === 0 ? '' : value[i - 1];
-                    if (i === 0 || prev === ' ' || prev === '\n' || prev === '\t') {
-                        slashIdx = i;
-                    }
-                    break;
-                }
+                if (ch === '/') { slashIdx = i; break; }
             }
             if (slashIdx < 0) {
                 this.aiChat.skillSlash.open = false;
                 this._riceAiChatRenderSkillSlash();
                 return;
             }
-            this.aiChat.skillSlash.open      = true;
-            this.aiChat.skillSlash.query     = value.slice(slashIdx + 1, pos);
+            this.aiChat.skillSlash.open       = true;
+            this.aiChat.skillSlash.query      = value.slice(slashIdx + 1, pos);
             this.aiChat.skillSlash.tokenStart = slashIdx;
             this.aiChat.skillSlash.activeIdx  = 0;
             this._riceAiChatRenderSkillSlash();
+        },
+        // 送信前にテキストから '/スキル名' トークンを抽出する.
+        // 戻り値: { text: スキル指定を除いた本文, skillKey: 検出したスキル (なければ null) }
+        _riceAiChatExtractSkillFromText(raw) {
+            const text = String(raw ?? '');
+            const skills = this.aiSkills || {};
+            // 「空白/行頭の直後に '/' 」 のパターンで最初の 1 個だけ拾う.
+            // popup 経由でなくても /要約 や /summarize で動くようにする.
+            const re = /(^|[\s\n\t])\/([\p{L}\p{N}_-]+)/u;
+            const m = text.match(re);
+            if (!m) return { text, skillKey: null };
+            const candidate = m[2].toLowerCase();
+            // skills のキーで完全一致 → 部分一致 → name 部分一致 の順で照合.
+            let hit = null;
+            for (const key of Object.keys(skills)) {
+                if (key.toLowerCase() === candidate) { hit = key; break; }
+            }
+            if (!hit) {
+                for (const key of Object.keys(skills)) {
+                    if (key.toLowerCase().includes(candidate)) { hit = key; break; }
+                }
+            }
+            if (!hit) {
+                for (const key of Object.keys(skills)) {
+                    const name = String(skills[key]?.name || '').toLowerCase();
+                    if (name.includes(candidate)) { hit = key; break; }
+                }
+            }
+            if (!hit) return { text, skillKey: null };
+            // 該当部分をテキストから除去 (前後の空白は 1 個ぶん残す).
+            const stripped = text.replace(re, (matched, prefix) => prefix).trim();
+            return { text: stripped, skillKey: hit };
         },
         // スキル候補をフィルタ (キーまたは name に query が部分一致).
         _filteredAiChatSkills() {
@@ -9385,9 +9413,17 @@ function emailApp() {
         },
         async sendAiChat() {
             // 入力テキスト: Alpine state にあっても無くても textarea の生 value を信頼する.
-            const ta   = document.getElementById('rice-ai-chat-input');
-            const text = ((ta && ta.value) || this.aiChat.input || '').trim();
-            console.info('[ai-chat] sendAiChat text=', text.slice(0, 40), 'sending=', this.aiChat.sending, 'thread=', this.selectedThreadId);
+            const ta      = document.getElementById('rice-ai-chat-input');
+            const rawText = ((ta && ta.value) || this.aiChat.input || '').trim();
+            // 文中の '/スキル名' を検出 → スキルに反映 + 本文から除去
+            const ext = this._riceAiChatExtractSkillFromText(rawText);
+            const text = ext.text.trim();
+            if (ext.skillKey && ext.skillKey !== this.aiChat.skillKey) {
+                this.aiChat.skillKey = ext.skillKey;
+                const skName = (this.aiSkills?.[ext.skillKey]?.name) || ext.skillKey;
+                this.toast('スキル: ' + skName + ' を適用しました', 'info');
+            }
+            console.info('[ai-chat] sendAiChat text=', text.slice(0, 40), 'skill=', this.aiChat.skillKey, 'sending=', this.aiChat.sending, 'thread=', this.selectedThreadId);
             if (this.aiChat.sending) { console.warn('[ai-chat] already sending'); return; }
             if (text === '')        { console.warn('[ai-chat] empty input'); this.toast('入力が空です', 'info'); return; }
             if (!this.selectedThreadId) {

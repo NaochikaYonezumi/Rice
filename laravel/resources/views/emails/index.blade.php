@@ -6483,6 +6483,10 @@ function emailApp() {
             if (this.inboxScope === scope) return;
             this.inboxScope = scope;
             localStorage.setItem('inboxScope', scope);
+            // 検索キーワードは scope 横断で意味を持たないので必ずクリア.
+            if (this.searchQuery) {
+                this.searchQuery = '';
+            }
             // 開いていたスレッドが新しい scope では見えなくなる (or 権限的に NG な)
             // 可能性が高いので、必ずワークスペースを閉じてリセットする。
             // closeWorkspace は selectedThread / selectedThreadId / 返信ドラフト等もクリアする。
@@ -6506,6 +6510,12 @@ function emailApp() {
             // 同じルームを再度クリックしたら "すべて" に切り替えるトグル動作
             if (id !== 'all' && String(this.emailRoomFilterId) === String(id)) {
                 id = 'all';
+            }
+            // ルーム切替時は「ルーム内で検索」を必ずクリアする.
+            // 検索文字列が残ったまま別ルームに移動すると, 何で絞り込まれてるか
+            // 分かりにくいバグ動作になるため.
+            if (this.searchQuery) {
+                this.searchQuery = '';
             }
             this.emailRoomFilterId = id;
             try { localStorage.setItem('emailRoomFilterId', String(id)); } catch (_) {}

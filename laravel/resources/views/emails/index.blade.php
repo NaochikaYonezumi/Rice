@@ -3969,7 +3969,7 @@
                     <div class="flex items-end gap-2">
                         <textarea id="rice-ai-chat-input"
                                   rows="2"
-                                  placeholder="指示を入力 / 「/」 でスキル選択 (Ctrl+Enter で送信)"
+                                  placeholder="指示を入力 / 「/」 でスキル + ナレッジコレクション選択 (Ctrl+Enter で送信)"
                                   oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
                                   onkeydown="if (event.key === 'Escape') { document.getElementById('rice-ai-chat-skill-slash').style.display='none'; return; } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
                                   class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
@@ -3983,7 +3983,7 @@
                         </button>
                     </div>
                     <p class="text-[9px] mt-1" style="color:#9ca3af;">
-                        Ctrl+Enter で送信 / 「/」 でスキル指定 / 履歴はスレッドごとに自動保存
+                        Ctrl+Enter で送信 / 「/」 でスキル + ナレッジコレクション指定 / 履歴はスレッドごとに自動保存
                     </p>
                 </div>
             </div>
@@ -5179,6 +5179,9 @@ function emailApp() {
             model:    null,
             // スキル選択 (送信時に skill: <key> として渡し, サーバが system_prompt を切り替える)
             skillKey: null,
+            // ナレッジ コレクション一覧 (/api/knowledge/collections のキャッシュ)
+            collections: [],
+            collectionsLoaded: false,
             // '/' スラッシュコマンドポップアップ
             skillSlash: {
                 open: false,
@@ -5767,6 +5770,9 @@ function emailApp() {
                 };
                 window.riceAiChatClearSkill = function () {
                     self.aiChat.skillKey = null;
+                };
+                window.riceAiChatPickCollection = function (name) {
+                    self.pickAiChatCollection(name);
                 };
             } catch (e) { console.warn('[ai-chat] window helper setup failed', e); }
 
@@ -9273,7 +9279,27 @@ function emailApp() {
             this.aiChat.skillSlash.query      = value.slice(slashIdx + 1, pos);
             this.aiChat.skillSlash.tokenStart = slashIdx;
             this.aiChat.skillSlash.activeIdx  = 0;
+            // popup を開くタイミングで collections も一度だけロード
+            this._loadAiChatCollections();
             this._riceAiChatRenderSkillSlash();
+        },
+        async _loadAiChatCollections() {
+            if (this.aiChat.collectionsLoaded) return;
+            this.aiChat.collectionsLoaded = true;
+            try {
+                const r = await fetch('/api/knowledge/collections', { headers: { Accept: 'application/json' } });
+                if (!r.ok) return;
+                const d = await r.json();
+                this.aiChat.collections = Array.isArray(d.collections) ? d.collections : [];
+                // ロード完了したら再描画 (popup 開きっぱなしなら反映)
+                if (this.aiChat.skillSlash.open) this._riceAiChatRenderSkillSlash();
+            } catch (_) {}
+        },
+        _filteredAiChatCollections() {
+            const q = (this.aiChat.skillSlash.query || '').toLowerCase();
+            const all = this.aiChat.collections || [];
+            if (!q) return all;
+            return all.filter(c => String(c.name || '').toLowerCase().includes(q));
         },
         // 送信前にテキストから '/スキル名' トークンを抽出する.
         // 戻り値: { text: スキル指定を除いた本文, skillKey: 検出したスキル (なければ null) }
@@ -9321,7 +9347,7 @@ function emailApp() {
             }
             return items;
         },
-        // スキル候補ポップアップを直接 DOM で描画 (Alpine x-for の reactivity に依存しない).
+        // スキル候補 + コレクション候補ポップアップを直接 DOM で描画.
         _riceAiChatRenderSkillSlash() {
             const wrap = document.getElementById('rice-ai-chat-skill-slash');
             if (!wrap) return;
@@ -9330,23 +9356,47 @@ function emailApp() {
                 wrap.innerHTML = '';
                 return;
             }
-            const items = this._filteredAiChatSkills();
-            if (items.length === 0) {
+            const skills = this._filteredAiChatSkills();
+            const cols   = this._filteredAiChatCollections();
+            const parts  = [];
+
+            // 1) スキルセクション (skillKey に反映 / system_prompt 切替用)
+            if (skills.length > 0) {
+                parts.push('<p style="padding:6px 10px;font-size:10px;color:#6b7280;font-weight:700;background:#f9fafb;border-bottom:1px solid #e5e7eb;"><i class="fas fa-bolt text-[9px]" style="color:#4f46e5;"></i> スキル</p>');
+                for (const it of skills) {
+                    const safeKey = String(it.key).replace(/'/g, "\\'");
+                    parts.push(`
+                        <button type="button" onclick="window.riceAiChatPickSkill('${safeKey}')"
+                                style="display:block;width:100%;text-align:left;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #f3f4f6;cursor:pointer;">
+                            <div style="font-size:12px;font-weight:700;color:#1e1b4b;">${this._escapeHtml(it.name)}</div>
+                            <div style="font-size:10px;color:#6b7280;">${this._escapeHtml(it.description || it.key)}</div>
+                        </button>
+                    `);
+                }
+            }
+
+            // 2) コレクションセクション (本文に /(name) を挿入し, バックエンドで KB 展開される)
+            if (cols.length > 0) {
+                parts.push('<p style="padding:6px 10px;font-size:10px;color:#6b7280;font-weight:700;background:#f0fdf4;border-bottom:1px solid #e5e7eb;border-top:1px solid #e5e7eb;"><i class="fas fa-folder text-[9px]" style="color:#16a34a;"></i> ナレッジ コレクション</p>');
+                for (const c of cols) {
+                    const safeName = String(c.name).replace(/'/g, "\\'");
+                    const count = (c.documents || c.url_count || c.count) ?? '';
+                    parts.push(`
+                        <button type="button" onclick="window.riceAiChatPickCollection('${safeName}')"
+                                style="display:block;width:100%;text-align:left;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #f3f4f6;cursor:pointer;">
+                            <div style="font-size:12px;font-weight:700;color:#14532d;">/${this._escapeHtml(c.name)}</div>
+                            <div style="font-size:10px;color:#6b7280;">ナレッジを参照${count !== '' ? ' (' + this._escapeHtml(String(count)) + ' 件)' : ''}</div>
+                        </button>
+                    `);
+                }
+            }
+
+            if (parts.length === 0) {
                 wrap.style.display = 'block';
-                wrap.innerHTML = '<p style="padding:8px;font-size:11px;color:#9ca3af;text-align:center;">該当するスキルがありません</p>';
+                wrap.innerHTML = '<p style="padding:8px;font-size:11px;color:#9ca3af;text-align:center;">該当するスキル / コレクションがありません</p>';
                 return;
             }
-            const parts = ['<p style="padding:6px 10px;font-size:10px;color:#6b7280;font-weight:700;background:#f9fafb;border-bottom:1px solid #e5e7eb;">スキルを選択 (Esc でキャンセル)</p>'];
-            for (const it of items) {
-                parts.push(`
-                    <button type="button"
-                            onclick="window.riceAiChatPickSkill('${String(it.key).replace(/'/g, "\\'")}')"
-                            style="display:block;width:100%;text-align:left;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #f3f4f6;cursor:pointer;">
-                        <div style="font-size:12px;font-weight:700;color:#1e1b4b;">${this._escapeHtml(it.name)}</div>
-                        <div style="font-size:10px;color:#6b7280;">${this._escapeHtml(it.description || it.key)}</div>
-                    </button>
-                `);
-            }
+
             wrap.style.display = 'block';
             wrap.innerHTML = parts.join('');
         },
@@ -9370,6 +9420,25 @@ function emailApp() {
             this.aiChat.skillSlash.open = false;
             this._riceAiChatRenderSkillSlash();
             this.toast('スキル: ' + (this.aiSkills?.[key]?.name || key) + ' を選択しました', 'info');
+        },
+        // コレクション選択時: '/...' トークンを '/<name>' に置換 (本文に残す).
+        // バックエンド側で '/コレクション名' を検出してナレッジを展開する.
+        pickAiChatCollection(name) {
+            const ta = document.getElementById('rice-ai-chat-input');
+            const slot = this.aiChat.skillSlash;
+            if (ta && slot.tokenStart >= 0) {
+                const value = ta.value || '';
+                const pos = ta.selectionStart ?? value.length;
+                const inserted = '/' + name + ' ';
+                const next = value.slice(0, slot.tokenStart) + inserted + value.slice(pos);
+                ta.value = next;
+                this.aiChat.input = next;
+                const newPos = slot.tokenStart + inserted.length;
+                try { ta.setSelectionRange(newPos, newPos); ta.focus(); } catch (_) {}
+            }
+            this.aiChat.skillSlash.open = false;
+            this._riceAiChatRenderSkillSlash();
+            this.toast('ナレッジ: /' + name + ' を本文に挿入しました', 'info');
         },
         // モデルプルダウンの値 ("provider:model") を aiChat.provider / aiChat.model にバラす.
         updateAiChatModelFromPick() {

@@ -92,6 +92,51 @@ class ProcessAiChatMessage implements ShouldQueue
     }
 
     /**
+     * 「(行頭|空白)/コレクション名」 トークンを検出し, scraped_urls から該当ソースを引いて
+     * 【参照すべきコレクション】 ブロックを構築する. EmailController::expandCollectionReferences()
+     * と同じロジックの簡易版.
+     *
+     * @return array{collections: array, references_block: string}
+     */
+    protected function expandCollectionReferences(string $combined): array
+    {
+        preg_match_all('/(^|\s)\/([^\s\/\\\\#?&]+)/u', $combined, $matches);
+        $tokens = collect($matches[2] ?? [])->filter()->unique()->values();
+        if ($tokens->isEmpty()) {
+            return ['collections' => [], 'references_block' => ''];
+        }
+        $refs = [];
+        foreach ($tokens as $token) {
+            try {
+                $sources = \App\Models\ScrapedUrl::where('collection', $token)
+                    ->where('status', 'ok')
+                    ->orderByDesc('chunks_indexed')
+                    ->limit(20)
+                    ->get();
+            } catch (\Throwable) { continue; }
+            if ($sources->isEmpty()) continue;
+            $refs[$token] = $sources;
+        }
+        if (empty($refs)) {
+            return ['collections' => $tokens->all(), 'references_block' => ''];
+        }
+        $block  = "【参照すべきコレクション】\n";
+        $block .= "ユーザはこれらのコレクションを参照するよう指示しています. 回答時はこれらのソースに含まれる情報を優先的に使ってください.\n";
+        foreach ($refs as $colName => $sources) {
+            $block .= "\n■ コレクション: {$colName}\n";
+            foreach ($sources as $s) {
+                $title = $s->title ?: $s->url;
+                $type  = $s->source_type ?: 'url';
+                $typeLabel = ['url' => 'URL', 'file' => 'ファイル', 'email' => 'メール'][$type] ?? $type;
+                $line = "  - [{$typeLabel}] " . \Illuminate\Support\Str::limit($title, 100);
+                if ($type === 'url') $line .= " ({$s->url})";
+                $block .= $line . "\n";
+            }
+        }
+        return ['collections' => array_keys($refs), 'references_block' => $block];
+    }
+
+    /**
      * セッション + 履歴 + スレッド本文を結合した 1 つの prompt 文字列を組み立てる.
      * RagApiService::query() は string ベースなので, ここで chat 風に整形する.
      */
@@ -191,7 +236,16 @@ class ProcessAiChatMessage implements ShouldQueue
 
         $kindLabel = $session->kind === AiChatSession::KIND_REPLY ? '返信案ブラッシュアップ' : '要約ブラッシュアップ';
 
+        // 「(行頭|空白)/コレクション名」 を検出して, scraped_urls からソース一覧を取り出し
+        // プロンプトに 【参照すべきコレクション】 ブロックとして注入する.
+        // ユーザの今回メッセージ + 履歴全体を対象に走査.
+        $colSources = $this->expandCollectionReferences($latestUserContent . "\n" . $historyBlock);
+        $referencesBlock = $colSources['references_block'] ?? '';
+
         $prompt  = "【システム指示】\n" . (string) $session->system_prompt . "\n\n";
+        if ($referencesBlock !== '') {
+            $prompt .= $referencesBlock . "\n";
+        }
         $prompt .= "【モード】" . $kindLabel . "\n";
         $prompt .= "【スレッド件名】" . $threadSubject . "\n";
         if ($thread?->ticket_number) {

@@ -6358,11 +6358,12 @@ function emailApp() {
                         this._navIntraThreadEmail(-1);
                     }
                     break;
-                // Enter: [ / ] で選択したメールカードを展開/折りたたみ.
+                // Enter: [ / ] で選択したメールカードを展開/折りたたみ (トグル).
                 //   - 本文 + ヘッダ + 添付一覧が見える (= "ヂラ見" 詳細表示).
                 //   - _focusedEmailId 未設定 (まだ [ / ] を押してない) なら最新メール
                 //     (threadEmails[0]) を対象にする.
-                //   - 展開後はそのカードがビューポート上部に来るようスクロールも調整.
+                //   - 展開時のみカードを画面上部にスクロール + 一時ハイライト.
+                //   - 折りたたみ時は今いる場所にとどまる (= 「閉じた」感を残す).
                 //   - ボタン / リンクにフォーカスがある時はブラウザ既定 (= クリック) に任せる.
                 case 'Enter': {
                     const focusedTag = (e.target?.tagName || '').toUpperCase();
@@ -6372,24 +6373,27 @@ function emailApp() {
                             ?? this.threadEmails[0].id;
                         this._focusedEmailId = targetEmailId;
                         e.preventDefault();
+                        // toggle 前の状態を見て、これから「展開する」のか「閉じる」のかを判定.
+                        const willExpand = !(this.expandedEmailIds || []).includes(targetEmailId);
                         if (typeof this.toggleEmailExpand === 'function') {
                             this.toggleEmailExpand(targetEmailId);
                         }
-                        // 展開後に対象カードがビューポート上部に来るようスクロール.
-                        this.$nextTick(() => {
-                            const el = document.querySelector('[data-email-id="' + targetEmailId + '"]');
-                            if (!el) return;
-                            const pane = this.$refs.threadEmailsPane || el.closest('.overflow-y-auto');
-                            if (pane) {
-                                const targetTop = pane.scrollTop + (el.getBoundingClientRect().top - pane.getBoundingClientRect().top);
-                                pane.scrollTo({ top: Math.max(0, targetTop - 16), behavior: 'smooth' });
-                            } else {
-                                el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-                            }
-                            // 一時的にハイライト (CSS ring) を付ける
-                            el.classList.add('ring-2', 'ring-blue-300');
-                            setTimeout(() => el.classList.remove('ring-2', 'ring-blue-300'), 1200);
-                        });
+                        if (willExpand) {
+                            // 展開時のみ: スクロール + 一時ハイライト
+                            this.$nextTick(() => {
+                                const el = document.querySelector('[data-email-id="' + targetEmailId + '"]');
+                                if (!el) return;
+                                const pane = this.$refs.threadEmailsPane || el.closest('.overflow-y-auto');
+                                if (pane) {
+                                    const targetTop = pane.scrollTop + (el.getBoundingClientRect().top - pane.getBoundingClientRect().top);
+                                    pane.scrollTo({ top: Math.max(0, targetTop - 16), behavior: 'smooth' });
+                                } else {
+                                    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                                }
+                                el.classList.add('ring-2', 'ring-blue-300');
+                                setTimeout(() => el.classList.remove('ring-2', 'ring-blue-300'), 1200);
+                            });
+                        }
                     }
                     break;
                 }

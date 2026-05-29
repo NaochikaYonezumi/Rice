@@ -5892,6 +5892,20 @@ function emailApp() {
                 setInterval(() => { try { this.refreshFetchStatus(); } catch (_) {} }, 60 * 1000);
             } catch (e) { console.error('[emails] refreshFetchStatus setup failed:', e); }
 
+            // 共有メール / 個人メール タブ横のバッジを 15 秒おきに自動更新.
+            // タブが非表示 (= 別ウィンドウ閲覧中) の間は無駄打ちしない (visibilitychange).
+            // ユーザがタブに戻ってきた瞬間も即更新する.
+            try {
+                const tickInboxBadges = () => {
+                    if (document.hidden) return;
+                    try { this.loadInboxScopeBadges(); } catch (_) {}
+                };
+                setInterval(tickInboxBadges, 15 * 1000);
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden) tickInboxBadges();
+                });
+            } catch (e) { console.error('[emails] inbox badge polling setup failed:', e); }
+
             // 別ウィンドウ (compose-window) で走った AI タスクの完了をバックグラウンドポーリング
             try { this.startAiBackgroundPoll(); } catch (e) { console.error('[emails] startAiBackgroundPoll failed:', e); }
 

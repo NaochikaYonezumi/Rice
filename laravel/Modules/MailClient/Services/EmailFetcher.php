@@ -1107,26 +1107,78 @@ class EmailFetcher
     {
         if ($raw === '') return '';
         // RFC 2047: 隣接する encoded-word の間の空白は無視する.
-        // ステップ 1: encoded-word を空白を介して連続させているケースを先に潰す.
         $raw = preg_replace('/\?=[\r\n\s]+=\?/u', '?==?', $raw) ?? $raw;
 
-        // ステップ 2: 各 encoded-word をパースして UTF-8 へ.
-        $out = preg_replace_callback(
-            '/=\?([A-Za-z0-9_\-\.:]+)\?([BbQq])\?([^?]*)\?=/',
-            function (array $m): string {
-                $charset = $this->normalizeMimeCharset($m[1]);
-                $enc     = strtoupper($m[2]);
-                $payload = $m[3];
-                $decoded = ($enc === 'B')
+        // ヘッダ全体を「encoded-word ブロック」と「リテラル」に分解する.
+        //   バグった MUA (旧 Outlook 等) はマルチバイト文字を encoded-word 境界で
+        //   割って送ることがある (RFC 2047 §5 違反). その場合, 各 base64 を個別に
+        //   decode すると ISO-2022-JP の ESC ステートが壊れて末尾が 0xFFFD/? 化けする.
+        //   そのため隣接する「同 charset / 同 encoding の encoded-word」については
+        //   payload をデコードした **bytes レベル** で連結してから 1 度だけ UTF-8
+        //   変換にかける.
+        $tokens = [];
+        $offset = 0;
+        $rawLen = strlen($raw);
+        $pattern = '/=\?([A-Za-z0-9_\-\.:]+)\?([BbQq])\?([^?]*)\?=/';
+        if (preg_match_all($pattern, $raw, $matches, PREG_OFFSET_CAPTURE | PREG_SET_ORDER)) {
+            foreach ($matches as $m) {
+                $pos = $m[0][1];
+                if ($pos > $offset) {
+                    $tokens[] = ['type' => 'literal', 'text' => substr($raw, $offset, $pos - $offset)];
+                }
+                $charset = $m[1][0];
+                $enc     = strtoupper($m[2][0]);
+                $payload = $m[3][0];
+                $bytes   = ($enc === 'B')
                     ? (base64_decode($payload, false) ?: '')
-                    : quoted_printable_decode(strtr($payload, ['_' => ' '])); // Q encoding は _ = space
+                    : quoted_printable_decode(strtr($payload, ['_' => ' ']));
+                $tokens[] = [
+                    'type'    => 'ew',
+                    'charset' => $charset,
+                    'enc'     => $enc,
+                    'bytes'   => $bytes,
+                ];
+                $offset = $pos + strlen($m[0][0]);
+            }
+            if ($offset < $rawLen) {
+                $tokens[] = ['type' => 'literal', 'text' => substr($raw, $offset)];
+            }
+        } else {
+            // encoded-word なし → 元の文字列を素通し.
+            return $raw;
+        }
 
-                if ($decoded === '') return '';
-                return $this->bestUtf8Decode($decoded, $charset);
-            },
-            $raw
-        );
-        return is_string($out) ? $out : $raw;
+        // 隣接する同 charset/encoding の encoded-word をマージ.
+        // literal が間に挟まる場合は、その literal が空白だけなら吸収し、それ以外は
+        // 区切りとして扱う (空白だけのリテラル吸収はステップ 1 で潰しているはず).
+        $merged = [];
+        foreach ($tokens as $t) {
+            $last = $merged ? $merged[count($merged) - 1] : null;
+            if (
+                $t['type'] === 'ew'
+                && $last
+                && $last['type'] === 'ew'
+                && strcasecmp($last['charset'], $t['charset']) === 0
+                && $last['enc'] === $t['enc']
+            ) {
+                $merged[count($merged) - 1]['bytes'] .= $t['bytes'];
+            } else {
+                $merged[] = $t;
+            }
+        }
+
+        // bytes ごとに 1 度だけ UTF-8 変換 → 連結.
+        $out = '';
+        foreach ($merged as $t) {
+            if ($t['type'] === 'literal') {
+                $out .= $t['text'];
+            } else {
+                if ($t['bytes'] === '') continue;
+                $charset = $this->normalizeMimeCharset($t['charset']);
+                $out .= $this->bestUtf8Decode($t['bytes'], $charset);
+            }
+        }
+        return $out;
     }
 
     /**

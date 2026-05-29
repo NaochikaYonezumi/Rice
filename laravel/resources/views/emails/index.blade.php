@@ -3900,9 +3900,15 @@
                                     </div>
                                 </template>
                                 <template x-if="m.role === 'assistant' && m.status === 'error'">
-                                    <div class="rice-ai-msg-error">
-                                        <i class="fas fa-exclamation-triangle"></i>
-                                        <span x-text="m.error_message || 'エラーが発生しました'"></span>
+                                    <div>
+                                        <div class="rice-ai-msg-error">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            <span x-text="m.error_message || 'エラーが発生しました'"></span>
+                                        </div>
+                                        <button type="button" @click="retryAiChatMessage(m)"
+                                                style="margin-top:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:6px;background:#4f46e5;color:#fff;border:0;cursor:pointer;">
+                                            <i class="fas fa-redo text-[9px]"></i> 再送信
+                                        </button>
                                     </div>
                                 </template>
                                 <template x-if="m.status === 'done' || m.role === 'user'">
@@ -9664,6 +9670,27 @@ function emailApp() {
                 if (sendIcon) sendIcon.className = 'fas fa-paper-plane';
                 if (sendBtn)  sendBtn.disabled   = false;
             }
+        },
+        // エラーで返ってきた assistant メッセージの「再送信」ボタン.
+        // 直前の user メッセージを探して同じ内容を再送する.
+        async retryAiChatMessage(assistantMessage) {
+            if (!this.aiChat.sessionId) return;
+            // assistant の直前 user メッセージを履歴から探す
+            const idx = this.aiChat.messages.findIndex(m => m.id === assistantMessage.id);
+            let lastUserContent = '';
+            for (let i = idx - 1; i >= 0; i--) {
+                if (this.aiChat.messages[i].role === 'user') {
+                    lastUserContent = this.aiChat.messages[i].content || '';
+                    break;
+                }
+            }
+            if (!lastUserContent) return;
+            // 既存の error / 関連 user を残したまま新しいターンとして送る
+            this.aiChat.input = lastUserContent;
+            const ta = document.getElementById('rice-ai-chat-input');
+            if (ta) ta.value = '';
+            this.toast('もう一度送信しています…', 'info');
+            await this.sendAiChat();
         },
         async resetAiChat() {
             if (!this.aiChat.sessionId) {

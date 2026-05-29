@@ -64,6 +64,18 @@ class EmailController extends Controller
     }
 
     /**
+     * 指定のスレッドが今のユーザに操作可能か検証.
+     *   共有スレッド (owner_user_id IS NULL) → 全員 OK
+     *   個人スレッド → owner_user_id = 自分 のときのみ OK
+     */
+    protected function authorizeThreadAccess(EmailThread $thread): void
+    {
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== auth()->id()) {
+            abort(403, 'このスレッドへのアクセス権がありません。');
+        }
+    }
+
+    /**
      * mail_account_id がリクエスト時、自分が所有する有効な口座であることを確認。
      * 無効 / 他人の口座 → null を返す(呼び出し側で null チェック)。
      * 数値以外 / 未指定 → null。
@@ -1738,6 +1750,7 @@ class EmailController extends Controller
 
     public function updateAssignee(Request $request, EmailThread $thread): JsonResponse
     {
+        $this->authorizeThreadAccess($thread);
         $thread->update(['assigned_user_id' => $request->input('assigned_user_id')]);
         return response()->json(['status' => 'ok']);
     }
@@ -1875,6 +1888,7 @@ class EmailController extends Controller
 
     public function updateStatus(Request $request, EmailThread $thread): JsonResponse
     {
+        $this->authorizeThreadAccess($thread);
         $validated = $request->validate([
             'status' => 'required|string|in:inbox,hold,completed,no_action,pending,spam',
         ]);
@@ -1964,6 +1978,7 @@ class EmailController extends Controller
      */
     public function deleteThread(\Illuminate\Http\Request $request, EmailThread $thread): JsonResponse
     {
+        $this->authorizeThreadAccess($thread);
         if ($request->boolean('hard')) {
             // ゴミ箱からの即時完全削除 (cascade ハード DELETE).
             $thread->delete();
@@ -1983,6 +1998,7 @@ class EmailController extends Controller
      */
     public function restoreThread(\Illuminate\Http\Request $request, EmailThread $thread): JsonResponse
     {
+        $this->authorizeThreadAccess($thread);
         $validated = $request->validate([
             'status' => 'nullable|string|in:inbox,hold,completed,no_action,pending',
         ]);
@@ -2006,6 +2022,7 @@ class EmailController extends Controller
      */
     public function destroyEmail(\Illuminate\Http\Request $request, \App\Models\Email $email): JsonResponse
     {
+        $this->authorizeEmailAccess($email);
         if ($request->boolean('hard')) {
             $threadId = $email->thread_id;
             $email->delete();
@@ -2064,6 +2081,7 @@ class EmailController extends Controller
      */
     public function restoreEmail(\App\Models\Email $email): JsonResponse
     {
+        $this->authorizeEmailAccess($email);
         $email->forceFill(['trashed_at' => null])->save();
         if ($email->thread_id) {
             $thread = \App\Models\EmailThread::find($email->thread_id);
@@ -2089,12 +2107,19 @@ class EmailController extends Controller
     public function trashIndex(\Illuminate\Http\Request $request): JsonResponse
     {
         $kind = $request->string('kind')->toString() ?: 'thread';
+        $authId = auth()->id();
         // 管理者設定 (mail_settings.trash_retention_days) を尊重する.
         // mail_settings 行が無い / カラム未存在の環境では 30 日にフォールバック.
         $retentionDays = EmailThread::trashRetentionDays();
 
         if ($kind === 'email') {
+            // 個別メール: visibleTo 経由で「他人の個人メール」を除外.
             $emails = \App\Models\Email::whereNotNull('trashed_at')
+                ->where(function ($q) use ($authId) {
+                    // 共有メール (owner_user_id IS NULL) または 自分の個人メール.
+                    $q->whereNull('owner_user_id');
+                    if ($authId) $q->orWhere('owner_user_id', $authId);
+                })
                 ->with('thread')
                 ->orderByDesc('trashed_at')
                 ->limit(500)
@@ -2116,7 +2141,9 @@ class EmailController extends Controller
             return response()->json(['kind' => 'email', 'items' => $emails, 'retention_days' => $retentionDays]);
         }
 
-        $threads = EmailThread::where('status', EmailThread::STATUS_TRASH)
+        // スレッド: visibleTo (= 共有 + 自分の個人スレッド) で絞り込み.
+        $threads = EmailThread::visibleTo($authId)
+            ->where('status', EmailThread::STATUS_TRASH)
             ->whereNotNull('trashed_at')
             ->with('latestEmail', 'customer')
             ->orderByDesc('trashed_at')
@@ -2161,6 +2188,8 @@ class EmailController extends Controller
         if (!$originalThreadId) {
             return response()->json(['status' => 'error', 'message' => 'このメールはスレッドに属していません'], 422);
         }
+        // 他人の個人メールを分離できないようガード.
+        $this->authorizeEmailAccess($email);
 
         $rawSubject = (string) ($email->subject ?: '(件名なし)');
         // Re: / Fwd: / Fw: の先頭プレフィックスは除去 (新規取り込み時と同じ正規化).
@@ -2243,7 +2272,10 @@ class EmailController extends Controller
 
         $customerId = $request->customer_id === 'none' ? null : $request->customer_id;
 
-        EmailThread::whereIn('id', $request->thread_ids)->update(['customer_id' => $customerId]);
+        // 他人の個人スレッドを巻き込まないよう visibleTo で必ず絞り込み.
+        EmailThread::visibleTo(auth()->id())
+            ->whereIn('id', $request->thread_ids)
+            ->update(['customer_id' => $customerId]);
 
         // 顧客割り当て後に、その顧客名と一致する共有ルームへ自動振り分け。
         // (customer_id を立てた全スレッドが対象。bundleByCustomer は冪等)

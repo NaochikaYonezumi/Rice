@@ -3854,12 +3854,14 @@
                      style="background:#ffffff;border-bottom:1px solid #e0e7ff;">
                     <span class="text-[10px] font-bold" style="color:#6366f1;">
                         <i class="fas fa-comments text-[9px]"></i>
-                        <span x-text="aiChat.kind === 'reply' ? '返信案チャット' : '要約チャット'"></span>
+                        {{-- パネルが Alpine スコープ外で x-text が効かないため imperative で書き換え --}}
+                        <span id="rice-ai-chat-title">要約チャット</span>
                     </span>
-                    <button type="button" @click="resetAiChat()"
-                            :disabled="!aiChat.sessionId"
-                            class="disabled:opacity-30"
-                            style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;background:transparent;color:#9ca3af;border:0;border-radius:4px;cursor:pointer;font-size:10px;"
+                    {{-- @click / :disabled は Alpine スコープ外で効かないので onclick + window 関数 --}}
+                    <button type="button"
+                            id="rice-ai-chat-reset-btn"
+                            onclick="window.riceAiChatReset && window.riceAiChatReset()"
+                            style="width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;background:transparent;color:#9ca3af;border:0;border-radius:4px;cursor:pointer;font-size:10px;opacity:0.3;"
                             onmouseover="if(!this.disabled){this.style.color='#b91c1c';this.style.background='#fee2e2';}"
                             onmouseout="this.style.color='#9ca3af';this.style.background='transparent';"
                             title="この会話を全部消してやり直す">
@@ -5770,6 +5772,12 @@ function emailApp() {
                 };
                 window.riceAiChatSetModel = function (m) {
                     self.aiModel = m;
+                };
+                // パネル ヘッダの「会話リセット」(undo アイコン).
+                // Alpine @click は AI チャットパネルでは動かないため imperative.
+                window.riceAiChatReset = function () {
+                    try { self.resetAiChat(); }
+                    catch (e) { console.error('[ai-chat] reset failed', e); }
                 };
                 // ===== AI チャットパネル: 左端ドラッグによるリサイズ =====
                 window.riceAiChatStartResize = function (ev) {
@@ -9306,11 +9314,26 @@ function emailApp() {
                 }
             }
         },
+        // パネルヘッダ (タイトル + リセットボタン enabled 状態) を imperative で同期.
+        // Alpine の x-text / :disabled がスコープ外で効かないため.
+        _syncAiChatHeader() {
+            const title = document.getElementById('rice-ai-chat-title');
+            if (title) title.textContent = this.aiChat.kind === 'reply' ? '返信案チャット' : '要約チャット';
+            const resetBtn = document.getElementById('rice-ai-chat-reset-btn');
+            if (resetBtn) {
+                const enabled = !!this.aiChat.sessionId;
+                resetBtn.disabled = !enabled;
+                resetBtn.style.opacity = enabled ? '1' : '0.3';
+                resetBtn.style.cursor  = enabled ? 'pointer' : 'not-allowed';
+            }
+        },
         // メッセージリストを imperative DOM で描画.
         // 理由: パネルが Alpine スコープ外に位置することで <template x-for> が
         //       展開されず空のままになる事故が出ているため. モデルピッカーと
         //       同じく素 HTML 構築 + innerHTML 一括差し替えで確実に描く.
         _renderAiChatMessages() {
+            // ヘッダ (タイトル + リセットボタン) を同期 (Alpine binding がスコープ外で死んでいるため)
+            this._syncAiChatHeader();
             const host = document.getElementById('rice-ai-chat-messages');
             if (!host) return;
             const esc = (s) => this._escapeHtml(String(s ?? ''));
@@ -9407,6 +9430,8 @@ function emailApp() {
             this.aiChat.kind = kind;
             this.aiChat.open = true;
             this._setAiChatVisible(true);
+            // ヘッダ (タイトル + リセット enabled) を即同期
+            this._syncAiChatHeader();
             console.info('[ai-chat] panel open');
             // モデル一覧を初回だけロード (キャッシュされる) + imperative にピッカー描画
             const loadEl = document.getElementById('rice-ai-chat-model-loading');

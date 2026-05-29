@@ -4,6 +4,7 @@ namespace Modules\MailClient\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use Modules\MailClient\Console\Commands\FetchEmailsCommand;
+use Modules\MailClient\Console\Commands\RedecodeBrokenSubjectsCommand;
 
 class MailClientServiceProvider extends ServiceProvider
 {
@@ -12,6 +13,7 @@ class MailClientServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 FetchEmailsCommand::class,
+                RedecodeBrokenSubjectsCommand::class,
             ]);
         }
         

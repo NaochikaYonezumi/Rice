@@ -1103,7 +1103,7 @@ class EmailFetcher
      *      失敗したら CP932 / SJIS / EUC-JP / ISO-2022-JP の順で再試行し、スコア最良を採用
      *   5. encoded-word でない部分はそのまま (ASCII 想定だが UTF-8 でも素通し)
      */
-    protected function decodeMimeHeaderRobust(string $raw): string
+    public function decodeMimeHeaderRobust(string $raw): string
     {
         if ($raw === '') return '';
         // RFC 2047: 隣接する encoded-word の間の空白は無視する.

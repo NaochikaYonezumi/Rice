@@ -3931,27 +3931,31 @@
             </template>
         </div>
 
-        {{-- 入力欄 --}}
+        {{-- 入力欄.
+             x-model / :disabled の Alpine binding が壊れていると入力すらできない事故が
+             続いたため, 全部 id 指定の素 DOM 操作にする.
+             - textarea#rice-ai-chat-input は oninput で直接 state を書き換える
+             - 送信ボタンは onclick で window helper を呼ぶ (Alpine が死んでいても叩ける)
+             - placeholder / 有効/無効も openAiChat() / sendAiChat() 側で id 操作 --}}
         <div style="flex-shrink:0;padding:10px 12px;border-top:1px solid #e5e7eb;background:#ffffff;">
             <div class="flex items-end gap-2">
-                <textarea x-model="aiChat.input"
-                          @keydown.ctrl.enter.prevent="sendAiChat()"
-                          @keydown.meta.enter.prevent="sendAiChat()"
-                          :placeholder="aiChat.kind === 'reply'
-                              ? '返信案への指示 (例: もう少しフランクに / 金額の話を1段落足して)'
-                              : '要約への指示 (例: 3行で / 経緯だけ詳しく / 担当者ごとに分けて)'"
+                <textarea id="rice-ai-chat-input"
                           rows="2"
-                          class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
-                          style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
-                <button type="button" @click="sendAiChat()"
-                        :disabled="aiChat.sending || !aiChat.input.trim()"
-                        class="shrink-0 px-3 py-2 rounded-lg text-xs font-extrabold disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        style="background:#4f46e5;color:#fff;">
-                    <i class="fas" :class="aiChat.sending ? 'fa-circle-notch fa-spin' : 'fa-paper-plane'"></i>
+                          placeholder="指示を入力 (例: 3行で要約して / もう少し丁寧に)"
+                          oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
+                          onkeydown="if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
+                          class="flex-1 px-3 py-2 rounded-lg outline-none resize-none"
+                          style="border:1px solid #e5e7eb;background:#f9fafb;font-size:13px;line-height:1.5;"></textarea>
+                <button id="rice-ai-chat-send-btn"
+                        type="button"
+                        onclick="window.riceAiChatSend && window.riceAiChatSend()"
+                        class="shrink-0 rounded-lg font-extrabold transition-colors"
+                        style="background:#4f46e5;color:#fff;padding:9px 14px;font-size:13px;border:0;cursor:pointer;">
+                    <i class="fas fa-paper-plane" id="rice-ai-chat-send-icon"></i>
                     送信
                 </button>
             </div>
-            <p class="text-[9px] mt-1" style="color:#9ca3af;">
+            <p class="mt-1" style="color:#9ca3af;font-size:10px;">
                 Ctrl+Enter で送信 / 履歴はスレッドごとに自動保存されます
             </p>
         </div>
@@ -5704,6 +5708,26 @@ function emailApp() {
         },
 
         async init() {
+            // AI チャットパネル用の window helper を設置 (Alpine が部分的に死んでいても
+            // 送信できるようにする最終防衛線). 内側は emailApp() の状態を直接いじる.
+            try {
+                const self = this;
+                window.riceAiChatOnInput = function (value) {
+                    self.aiChat.input = String(value ?? '');
+                };
+                window.riceAiChatSend = function () {
+                    try { self.sendAiChat(); }
+                    catch (e) { console.error('[ai-chat] send failed', e); }
+                };
+                window.riceAiChatClose = function () {
+                    try { self.closeAiChat(); } catch (_) {}
+                    const p = document.getElementById('rice-ai-chat-panel');
+                    const b = document.getElementById('rice-ai-chat-backdrop');
+                    if (p) p.style.display = 'none';
+                    if (b) b.style.display = 'none';
+                };
+            } catch (e) { console.warn('[ai-chat] window helper setup failed', e); }
+
             // ===== 真っ白問題対策 =====
             // init() のどこかで例外が出ると後続が全部止まり、画面が「データ取得中で空」の状態で凍結する.
             // (リダイレクト直後にネットワークや認証の一瞬の揺らぎでこの状態に陥ると報告あり.)
@@ -9205,29 +9229,37 @@ function emailApp() {
             }
         },
         async sendAiChat() {
-            if (this.aiChat.sending) return;
-            const text = (this.aiChat.input || '').trim();
-            if (text === '') return;
+            // 入力テキスト: Alpine state にあっても無くても textarea の生 value を信頼する.
+            const ta   = document.getElementById('rice-ai-chat-input');
+            const text = ((ta && ta.value) || this.aiChat.input || '').trim();
+            console.info('[ai-chat] sendAiChat text=', text.slice(0, 40), 'sending=', this.aiChat.sending, 'thread=', this.selectedThreadId);
+            if (this.aiChat.sending) { console.warn('[ai-chat] already sending'); return; }
+            if (text === '')        { console.warn('[ai-chat] empty input'); this.toast('入力が空です', 'info'); return; }
             if (!this.selectedThreadId) {
                 this.toast('スレッドを選択してください', 'error');
                 return;
             }
             this.aiChat.sending = true;
+            // ボタン視覚: アイコンをスピナーに切替 (Alpine binding に依存しない)
+            const sendIcon = document.getElementById('rice-ai-chat-send-icon');
+            const sendBtn  = document.getElementById('rice-ai-chat-send-btn');
+            if (sendIcon) sendIcon.className = 'fas fa-circle-notch fa-spin';
+            if (sendBtn)  sendBtn.disabled   = true;
             try {
-                const csrf = document.querySelector('meta[name="csrf-token"]').content;
+                const csrfEl = document.querySelector('meta[name="csrf-token"]');
+                const csrf   = csrfEl ? csrfEl.content : '';
                 let url, body;
                 if (this.aiChat.sessionId) {
-                    // フォローアップ (provider/model はセッション作成時に固定済み)
                     url  = '/ai-chat-sessions/' + this.aiChat.sessionId + '/messages';
                     body = JSON.stringify({ message: text });
                 } else {
-                    // 初回 (セッション無し). モデル選択があれば渡す.
                     url  = '/threads/' + this.selectedThreadId + '/ai-chat';
                     const payload = { kind: this.aiChat.kind, message: text };
                     if (this.aiChat.provider) payload.provider = this.aiChat.provider;
                     if (this.aiChat.model)    payload.model    = this.aiChat.model;
                     body = JSON.stringify(payload);
                 }
+                console.info('[ai-chat] POST', url);
                 const r = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type':'application/json', 'Accept':'application/json', 'X-CSRF-TOKEN': csrf },
@@ -9235,6 +9267,7 @@ function emailApp() {
                 });
                 if (!r.ok) {
                     const j = await r.json().catch(() => ({}));
+                    console.error('[ai-chat] send error', r.status, j);
                     this.toast(j.message || ('HTTP ' + r.status), 'error');
                     return;
                 }
@@ -9243,12 +9276,16 @@ function emailApp() {
                 if (d.user)      this.aiChat.messages.push(d.user);
                 if (d.assistant) this.aiChat.messages.push(d.assistant);
                 this.aiChat.input = '';
+                if (ta) ta.value = '';
                 this.$nextTick(() => this._scrollAiChatToBottom());
                 this._startAiChatPoll();
             } catch (e) {
+                console.error('[ai-chat] send exception', e);
                 this.toast('通信エラー: ' + e.message, 'error');
             } finally {
                 this.aiChat.sending = false;
+                if (sendIcon) sendIcon.className = 'fas fa-paper-plane';
+                if (sendBtn)  sendBtn.disabled   = false;
             }
         },
         async resetAiChat() {

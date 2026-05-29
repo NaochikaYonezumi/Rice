@@ -29,6 +29,16 @@
                         <a href="{{ route('profile.edit') }}" class="btn btn-link">プロフィールへ戻る</a>
                     </form>
                 @else
+                    @if(!empty($isReminder))
+                        <div class="alert alert-info" style="border-left:4px solid #4f46e5;">
+                            <p class="mb-1"><strong><i class="fas fa-shield-alt mr-1"></i>セキュリティ強化のお願い</strong></p>
+                            <p class="mb-0" style="font-size:13px;">
+                                認証アプリでの二段階認証を設定すると、ログインがメール待ち無しで完了します.
+                                数分で済むのでこの機会にぜひご設定ください.
+                            </p>
+                        </div>
+                    @endif
+
                     <ol class="mb-4" style="font-size:13px;line-height:1.8;">
                         <li>スマートフォンに <strong>Google Authenticator</strong> / <strong>Microsoft Authenticator</strong> / <strong>Authy</strong> のいずれかをインストール</li>
                         <li>アプリを開き、「アカウントを追加」 → 「QR コードをスキャン」</li>
@@ -66,12 +76,27 @@
                                    style="font-size:24px;letter-spacing:0.4em;font-weight:bold;">
                         </div>
                         <div class="d-flex align-items-center">
-                            <a href="{{ route('profile.edit') }}" class="btn btn-link">キャンセル</a>
+                            @if(!empty($isReminder))
+                                <button type="button"
+                                        class="btn btn-link"
+                                        onclick="document.getElementById('totp-skip-form').submit();">
+                                    あとで設定する
+                                </button>
+                            @else
+                                <a href="{{ route('profile.edit') }}" class="btn btn-link">キャンセル</a>
+                            @endif
                             <button type="submit" class="btn btn-primary ml-auto">
                                 <i class="fas fa-check"></i> 有効化する
                             </button>
                         </div>
                     </form>
+
+                    @if(!empty($isReminder))
+                        {{-- 「あとで」フォームを別途用意 (confirm フォームに混ぜないため) --}}
+                        <form id="totp-skip-form" method="POST" action="{{ route('totp.skip') }}" style="display:none;">
+                            @csrf
+                        </form>
+                    @endif
                 @endif
 
             </div>

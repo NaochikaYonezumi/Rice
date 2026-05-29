@@ -39,6 +39,8 @@ class TotpController extends Controller
             'qrDataUrl' => $this->totp->getQrCodeDataUrl($user, $secret),
             'manualUri' => $this->totp->getOtpAuthUrl($user, $secret),
             'alreadyEnabled' => $user->hasTotpEnabled(),
+            // ?reminder=1 で来た時だけバナー + 「あとで」 ボタンを出す
+            'isReminder' => $request->boolean('reminder'),
         ]);
     }
 
@@ -66,13 +68,14 @@ class TotpController extends Controller
 
         $user = $request->user();
         $user->forceFill([
-            'totp_secret'       => $secret,      // model casts で encrypted で保存される
-            'totp_confirmed_at' => now(),
+            'totp_secret'           => $secret,      // model casts で encrypted で保存される
+            'totp_confirmed_at'     => now(),
+            'totp_setup_skipped_at' => null,         // 確定したのでスキップフラグはクリア
         ])->save();
 
         $request->session()->forget('totp.setup_secret');
 
-        return redirect()->route('profile.edit')->with(
+        return redirect()->intended(route('profile.edit', absolute: false))->with(
             'status',
             '認証アプリでの二段階認証を有効化しました.'
         );
@@ -83,8 +86,9 @@ class TotpController extends Controller
     {
         $user = $request->user();
         $user->forceFill([
-            'totp_secret'       => null,
-            'totp_confirmed_at' => null,
+            'totp_secret'           => null,
+            'totp_confirmed_at'     => null,
+            'totp_setup_skipped_at' => null,   // 無効化したら次回ログイン後に再案内
         ])->save();
         $request->session()->forget('totp.setup_secret');
 
@@ -92,5 +96,21 @@ class TotpController extends Controller
             'status',
             '認証アプリの二段階認証を無効化しました.'
         );
+    }
+
+    /**
+     * 「あとで設定する」: totp_setup_skipped_at を打って自動誘導を止める.
+     * 設定し直したい時はプロフィール画面から再度 setup できる.
+     */
+    public function skip(Request $request): RedirectResponse
+    {
+        $request->user()->forceFill([
+            'totp_setup_skipped_at' => now(),
+        ])->save();
+        $request->session()->forget('totp.setup_secret');
+
+        // intended があればそこへ. なければメール画面.
+        return redirect()->intended(route('emails.index', absolute: false))
+            ->with('status', '認証アプリの設定をあとで行うようにしました. プロフィール画面からいつでも有効化できます.');
     }
 }

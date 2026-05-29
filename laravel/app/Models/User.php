@@ -96,8 +96,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_recovery_generated_at' => 'datetime',
-            'totp_secret'        => 'encrypted',
-            'totp_confirmed_at'  => 'datetime',
+            'totp_secret'           => 'encrypted',
+            'totp_confirmed_at'     => 'datetime',
+            'totp_setup_skipped_at' => 'datetime',
         ];
     }
 

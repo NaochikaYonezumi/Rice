@@ -62,6 +62,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/two-factor/totp/setup',    [\App\Http\Controllers\TotpController::class, 'setup'])->name('totp.setup');
     Route::post('/two-factor/totp/confirm', [\App\Http\Controllers\TotpController::class, 'confirm'])->name('totp.confirm');
     Route::post('/two-factor/totp/disable', [\App\Http\Controllers\TotpController::class, 'disable'])->name('totp.disable');
+    Route::post('/two-factor/totp/skip',    [\App\Http\Controllers\TotpController::class, 'skip'])->name('totp.skip');
 
     // メール
     // 個人メールアカウント (IMAP/POP3/SMTP)

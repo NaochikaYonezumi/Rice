@@ -45,14 +45,26 @@ class TotpService
 
     /**
      * QR コード画像を data: URL で返す. <img src="..."> にそのまま渡せる.
-     * google2fa-qrcode はバックエンドに BaconQrCode を使う.
+     *
+     * 旧: google2fa-qrcode の getQRCodeInline (PNG, Imagick 拡張が必要)
+     * 新: bacon/bacon-qr-code で SVG を直接書き出す. 純 PHP で動くので
+     *     PHP 拡張に依存しない. data:image/svg+xml;base64,... を返す.
      */
-    public function getQrCodeDataUrl(User $user, string $secret, int $size = 220): string
+    public function getQrCodeDataUrl(User $user, string $secret, int $size = 240): string
     {
-        $issuer = config('app.name', 'Rice');
-        $label  = $user->email;
-        // getQRCodeInline は PNG (base64) を data:image/png;base64,... の形で返す
-        return $this->google2fa->getQRCodeInline($issuer, $label, $secret, $size);
+        $otpUrl = $this->getOtpAuthUrl($user, $secret);
+        try {
+            $renderer = new \BaconQrCode\Renderer\ImageRenderer(
+                new \BaconQrCode\Renderer\RendererStyle\RendererStyle($size, 1),
+                new \BaconQrCode\Renderer\Image\SvgImageBackEnd()
+            );
+            $writer = new \BaconQrCode\Writer($renderer);
+            $svg = $writer->writeString($otpUrl);
+            return 'data:image/svg+xml;base64,' . base64_encode($svg);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('TOTP QR generation failed', ['error' => $e->getMessage()]);
+            return '';
+        }
     }
 
     /**

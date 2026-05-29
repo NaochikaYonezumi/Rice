@@ -20,6 +20,10 @@ class ThreadCommentController extends Controller
     public function index(Request $request, EmailThread $thread): JsonResponse
     {
         $authId  = auth()->id();
+        // owner_user_id が他人の個人スレッドへのアクセスは拒否.
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== $authId) {
+            abort(403, 'このスレッドへのアクセス権がありません.');
+        }
         $emailId = $request->query('email_id');
 
         // chat_attachments テーブル未マイグレーション環境でも壊れないよう存在チェック
@@ -57,6 +61,9 @@ class ThreadCommentController extends Controller
      */
     public function store(Request $request, EmailThread $thread): JsonResponse
     {
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== auth()->id()) {
+            abort(403, 'このスレッドへのアクセス権がありません.');
+        }
         $hasFiles = $request->hasFile('files');
         $validated = $request->validate([
             'content'  => ($hasFiles ? 'nullable' : 'required') . '|string|max:5000',

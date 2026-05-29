@@ -26,9 +26,29 @@ class ThreadMergeController extends Controller
             'merge_thread_id' => 'required|integer|exists:email_threads,id',
         ]);
 
+        // target (= $thread) への owner_user_id check.
+        $authId = auth()->id();
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== $authId) {
+            return response()->json(['status' => 'error', 'message' => 'このスレッドへのアクセス権がありません'], 403);
+        }
+
         $sourceThread = EmailThread::find($validated['merge_thread_id']);
         if (!$sourceThread) {
             return response()->json(['status' => 'error', 'message' => 'マージ元スレッドが見つかりません'], 404);
+        }
+
+        // source への owner_user_id check (他人の個人スレッドを覗き見/マージするのを防止).
+        if ($sourceThread->owner_user_id !== null && $sourceThread->owner_user_id !== $authId) {
+            return response()->json(['status' => 'error', 'message' => 'マージ元スレッドへのアクセス権がありません'], 403);
+        }
+
+        // owner スコープ越えのマージは禁止 (個人 ↔ 共有 など).
+        //   個人と共有を 1 本にすると、 個人メールが共有メール一覧/ルームメンバーに漏れる.
+        if (($thread->owner_user_id ?? null) !== ($sourceThread->owner_user_id ?? null)) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => '個人メールと共有メールを跨ぐマージはできません',
+            ], 422);
         }
 
         if ($sourceThread->id === $thread->id) {

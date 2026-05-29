@@ -87,9 +87,19 @@ class AttachmentController extends Controller
         $files = $request->file('files') ?? [];
         try {
             [$thread, $email, $created] = DB::transaction(function () use ($validated, $room, $userEmail, $userName, $files) {
+                // owner スコープの決定 ロジック:
+                //   - room が個人ルーム (is_private=true) なら、 そのルーム作成者を owner にする (= 個人スレッド).
+                //   - room が共有ルーム (is_private=false) or room なしなら owner=NULL (= 共有スレッド).
+                //   既存スレッドを指定された場合はそのスレッドの owner をそのまま使う (= スコープ越え禁止).
+                $ownerUserId   = ($room && $room->is_private) ? $room->created_by_user_id : null;
+                $mailAccountId = null;
+
                 // スレッドの解決: 指定があれば既存、なければ新規作成 (件名にルーム名を含めて判別しやすく)
                 if (!empty($validated['thread_id'])) {
                     $thread = EmailThread::findOrFail($validated['thread_id']);
+                    // 既存スレッドの owner にこの request scope を必ず揃える.
+                    $ownerUserId   = $thread->owner_user_id;
+                    $mailAccountId = $thread->mail_account_id;
                 } else {
                     $subject = $room
                         ? '[手動アップロード / ' . $room->name . '] ' . now()->format('Y/m/d H:i')
@@ -101,6 +111,9 @@ class AttachmentController extends Controller
                         // メール一覧画面では除外する印
                         // (添付一覧 / ルームのバンドル先には引き続き表示)
                         'is_manual_upload' => true,
+                        // 個人ルームへの手動アップロードは個人スレッドにする (= 共有メール一覧に出さない).
+                        'owner_user_id'    => $ownerUserId,
+                        'mail_account_id'  => $mailAccountId,
                     ]);
                 }
 
@@ -120,18 +133,20 @@ class AttachmentController extends Controller
                 }
 
                 $email = Email::create([
-                    'thread_id'    => $thread->id,
-                    'message_id'   => 'MANUAL_' . time() . '_' . uniqid(),
-                    'in_reply_to'  => null,
-                    'subject'      => $thread->subject,
-                    'from_address' => $userEmail,
-                    'from_name'    => $userName,
-                    'to_address'   => '',
-                    'cc'           => null,
-                    'body_text'    => ($room ? "ルーム『{$room->name}』に手動アップロードされたファイルです (" : '手動アップロードされたファイルです (')
-                                      . count($files) . ' 件)',
-                    'body_html'    => '',
-                    'received_at'  => now(),
+                    'thread_id'       => $thread->id,
+                    'message_id'      => 'MANUAL_' . time() . '_' . uniqid(),
+                    'in_reply_to'     => null,
+                    'subject'         => $thread->subject,
+                    'from_address'    => $userEmail,
+                    'from_name'       => $userName,
+                    'to_address'      => '',
+                    'cc'              => null,
+                    'body_text'       => ($room ? "ルーム『{$room->name}』に手動アップロードされたファイルです (" : '手動アップロードされたファイルです (')
+                                         . count($files) . ' 件)',
+                    'body_html'       => '',
+                    'received_at'     => now(),
+                    'owner_user_id'   => $ownerUserId,
+                    'mail_account_id' => $mailAccountId,
                 ]);
 
                 $created = [];

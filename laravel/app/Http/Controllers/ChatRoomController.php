@@ -739,6 +739,26 @@ class ChatRoomController extends Controller
             return response()->json(['error' => 'このルームは閲覧できません'], 403);
         }
         $data = $request->validate(['thread_id' => 'required|integer|exists:email_threads,id']);
+
+        // 個人スレッド (owner_user_id != null) を他人のルームや共有ルームに紐付けると
+        // ルームメンバー / 他ユーザに個人メール本文が漏れる. アクセス権チェック:
+        //   - 共有スレッド (owner=NULL) は誰でも attach OK
+        //   - 個人スレッドは「そのスレッドの owner == 自分」 のときだけ attach OK
+        //   - さらに共有ルームへの個人スレッド attach は禁止 (= 本人専用ルームにのみ可)
+        $thread = EmailThread::find((int) $data['thread_id']);
+        if (!$thread) {
+            return response()->json(['error' => 'スレッドが見つかりません'], 404);
+        }
+        $authId = auth()->id();
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== $authId) {
+            return response()->json(['error' => 'このスレッドへのアクセス権がありません'], 403);
+        }
+        if ($thread->owner_user_id !== null && !$room->is_private) {
+            return response()->json([
+                'error' => '個人メールスレッドは共有ルームへ紐付けできません (個人ルームへの紐付けは可)',
+            ], 422);
+        }
+
         $room->bundledThreads()->syncWithoutDetaching([(int) $data['thread_id']]);
         $room->touch();
         return response()->json(['status' => 'ok']);
@@ -777,7 +797,17 @@ class ChatRoomController extends Controller
         if (empty($threadIds)) {
             return response()->json(['emails' => []]);
         }
-        $emails = \App\Models\Email::whereIn('thread_id', $threadIds)
+        // 他人の個人スレッドが紛れていてもメール本文を露出させないよう、
+        // visibleTo (= owner=NULL or owner=自分) で thread を絞り込む.
+        $authId = auth()->id();
+        $visibleThreadIds = EmailThread::visibleTo($authId)
+            ->whereIn('id', $threadIds)
+            ->pluck('id')
+            ->all();
+        if (empty($visibleThreadIds)) {
+            return response()->json(['emails' => []]);
+        }
+        $emails = \App\Models\Email::whereIn('thread_id', $visibleThreadIds)
             ->with('thread:id,subject', 'attachments')
             ->orderByDesc('received_at')
             ->limit(200)

@@ -9,8 +9,19 @@ use Illuminate\Http\JsonResponse;
 
 class ThreadMemoController extends Controller
 {
+    /**
+     * 他人の個人スレッドへのアクセスを拒否する共通ガード.
+     */
+    protected function authorizeAccess(EmailThread $thread): void
+    {
+        if ($thread->owner_user_id !== null && $thread->owner_user_id !== auth()->id()) {
+            abort(403, 'このスレッドへのアクセス権がありません.');
+        }
+    }
+
     public function store(Request $request, EmailThread $thread): JsonResponse
     {
+        $this->authorizeAccess($thread);
         $request->validate([
             'content' => 'required|string',
         ]);
@@ -33,6 +44,7 @@ class ThreadMemoController extends Controller
 
     public function index(EmailThread $thread): JsonResponse
     {
+        $this->authorizeAccess($thread);
         $memos = $thread->threadMemos()->with('user')->orderBy('created_at', 'desc')->get()->map(function ($m) {
             return [
                 'id' => $m->id,

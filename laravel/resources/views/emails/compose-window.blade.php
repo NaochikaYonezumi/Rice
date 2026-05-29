@@ -2293,16 +2293,86 @@ function composeWindowApp() {
             this.appendBodyText(prefix + m.content);
             this.toast('本文に反映しました', 'success');
         },
+        // AI 出力から「メール本文」だけを抽出する.
+        //   小型 LLM (qwen2.5:3b 等) は、こちらが指示しても返信本文の前後に
+        //     - 「【reply】」「【返信】」 のラベル
+        //     - 「件名：」「Subject:」 行
+        //     - 「**内容：**」「内容:」 などのセクションヘッダ
+        //     - 「---」「===」 のような水平線セパレータ
+        //     - 「以上をご参考に」「ご不明点があれば」 のような脚注
+        //     - 「【カレンダーに記録】」 のような付帯メタ
+        //     - 署名ブロック (会社名 / 連絡先一覧)
+        //   を付けて返してくることが多い. これらを剥がしてから body にコピーする.
+        _extractReplyBody(text) {
+            if (text == null) return '';
+            let s = String(text).trim();
+            if (s === '') return '';
+
+            // 1) 「---」「===」「***」 水平線で分割し、最も「本文っぽい」段を採用.
+            //    優先順:
+            //      a) 「内容」「本文」「返信文」 のラベルが含まれる段
+            //      b) なければ最長段
+            const parts = s.split(/\n[-=*_~]{3,}\s*\n/);
+            if (parts.length >= 2) {
+                const labeled = parts.find((p) => /(^|\n)\s*[*]{0,2}\s*(内容|本文|返信文|返信本文|本文案|返信案)\s*[:：]/m.test(p));
+                s = (labeled || parts.reduce((a, b) => (b.length > a.length ? b : a))).trim();
+            }
+
+            // 2) 先頭の「【...】」ラベル行 (= 1 行だけのメタ) を除去.
+            s = s.replace(/^\s*【[^】\n]+】\s*\n+/g, '');
+
+            // 3) 「**内容：**」「内容:」 「返信文:」 のようなセクション見出しを除去.
+            s = s.replace(/^[\s*]*(内容|本文|返信文|返信本文|本文案|返信案|reply|body)\s*[:：]\s*\*{0,2}\s*$\n?/gim, '');
+
+            // 4) 「件名：」「Subject:」「To:」「From:」「宛先:」「Cc:」 のヘッダ行を除去.
+            s = s.replace(/^\s*(件名|Subject|To|From|宛先|Cc|Bcc)\s*[:：].*$\n?/gim, '');
+
+            // 5) よくある脚注を段落単位で削除:
+            //    - 「以上をご参考に...」
+            //    - 「ご不明点や...」/ 「何かご質問が...」 のような汎用クロージング
+            //    - 「【カレンダーに記録】」 「【参考情報】」 のような付帯メタ
+            //    - 1 行に「---」 だけ等の置き忘れセパレータ
+            s = s.split(/\n{2,}/)
+                .map((p) => p.trim())
+                .filter((p) => {
+                    if (p === '') return false;
+                    if (/^以上をご参考/.test(p)) return false;
+                    if (/^(ご不明点|何かご質問|追加のご要望|ご質問やご要望)/.test(p)) return false;
+                    if (/^【[^】\n]+】$/.test(p)) return false;
+                    if (/^[-=*_~]{3,}$/.test(p)) return false;
+                    return true;
+                })
+                .join('\n\n');
+
+            // 6) 末尾の署名ブロックを除去 (5 行以内に "Mail:" or "TEL" or "電話" を含む末尾段落).
+            //    過剰除去を避けるため「本文の途中で出てきた連絡先」 は触らない.
+            const lines = s.split('\n');
+            for (let i = lines.length - 1; i >= Math.max(0, lines.length - 12); i--) {
+                if (/^\s*(Mail|MAIL|E-?mail|電話|TEL|Tel|FAX|Fax|〒)\s*[:：]?/.test(lines[i])) {
+                    // この行以降が連絡先 → そこから後をカット (区切り行も巻き取る).
+                    let cut = i;
+                    while (cut > 0 && /^\s*([-=*_~]{3,}|\/\*[\/\*]+|COSY|株式会社)/.test(lines[cut - 1])) cut--;
+                    s = lines.slice(0, cut).join('\n').trim();
+                    break;
+                }
+            }
+
+            return s.trim();
+        },
         appendAiChatMessageToBody(m) {
             // 末尾に追加 (改行 1 つ挟む)
             if (!m || !m.content) return;
+            const body = this._extractReplyBody(m.content);
+            if (!body) return;
             const prefix = this.form.body ? '\n\n' : '';
-            this.appendBodyText(prefix + m.content);
+            this.appendBodyText(prefix + body);
             this.toast('本文に追記しました', 'success');
         },
         replaceBodyWithAiChatMessage(m) {
             if (!m || !m.content) return;
-            this.form.body = m.content;
+            const body = this._extractReplyBody(m.content);
+            if (!body) return;
+            this.form.body = body;
             this.toast('本文を置き換えました', 'success');
             // 本文エリアにフォーカス
             this.$nextTick(() => {

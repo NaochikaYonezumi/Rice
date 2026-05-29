@@ -3805,40 +3805,71 @@
          class="rice-ai-chat-panel"
          style="display:none;">
         {{-- ヘッダ --}}
-        <div style="flex-shrink:0;padding:14px 16px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);">
-            <div class="flex items-center justify-between gap-2 mb-2">
-                <div class="flex items-center gap-2 min-w-0">
-                    <i class="fas" :class="aiChat.kind === 'reply' ? 'fa-robot' : 'fa-magic'"
-                       :style="aiChat.kind === 'reply' ? 'color:#0891b2;' : 'color:#7c3aed;'"></i>
-                    <h3 class="text-sm font-extrabold" style="color:#1e1b4b;"
+        <div style="flex-shrink:0;padding:12px 14px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);">
+            {{-- 1段目: タイトル + 件名 + × --}}
+            <div class="flex items-center gap-2">
+                <i class="fas" :class="aiChat.kind === 'reply' ? 'fa-robot' : 'fa-magic'"
+                   :style="aiChat.kind === 'reply' ? 'color:#0891b2;font-size:16px;' : 'color:#7c3aed;font-size:16px;'"></i>
+                <div class="min-w-0 flex-1">
+                    <h3 class="text-sm font-extrabold" style="color:#1e1b4b;line-height:1.2;"
                         x-text="aiChat.kind === 'reply' ? 'AI返信案チャット' : 'AI要約チャット'"></h3>
+                    <p class="text-[11px] truncate" style="color:#6366f1;line-height:1.3;"
+                       x-text="selectedThread?.subject || ''"></p>
                 </div>
-                <button type="button" @click="closeAiChat()" title="閉じる"
-                        class="text-gray-400 hover:text-gray-700 transition-colors" style="font-size:18px;line-height:1;">
-                    <i class="fas fa-times"></i>
+                {{-- 閉じる × ボタン: Alpine @click だけだと環境によって発火しないことがあるため
+                     onclick で直接 DOM 操作も併用して必ず閉じる. --}}
+                <button type="button"
+                        @click="closeAiChat()"
+                        onclick="document.getElementById('rice-ai-chat-panel').style.display='none';document.getElementById('rice-ai-chat-backdrop').style.display='none';"
+                        title="閉じる"
+                        style="flex-shrink:0;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;border-radius:8px;color:#6b7280;cursor:pointer;"
+                        onmouseover="this.style.background='#fee2e2';this.style.color='#b91c1c';"
+                        onmouseout="this.style.background='transparent';this.style.color='#6b7280';">
+                    <i class="fas fa-times" style="font-size:18px;"></i>
                 </button>
             </div>
-            <p class="text-[10px] truncate" style="color:#6366f1;" x-text="selectedThread?.subject || ''"></p>
-            {{-- kind 切替 + 操作 --}}
-            <div class="mt-2 flex items-center gap-1.5">
-                <div class="flex rounded-md overflow-hidden text-[10px] font-bold" style="border:1px solid #c7d2fe;">
+
+            {{-- 2段目: kind 切替タブ (大きく) + リセット (アイコンのみ小さく) --}}
+            <div class="mt-2.5 flex items-center gap-2">
+                <div class="flex rounded-lg overflow-hidden flex-1" style="border:1px solid #c7d2fe;font-size:13px;font-weight:700;">
                     <button type="button" @click="switchAiChatKind('summary')"
-                            :style="aiChat.kind === 'summary' ? 'background:#4f46e5;color:#fff;' : 'background:#fff;color:#4f46e5;'"
-                            class="px-2.5 py-1 transition-colors">要約</button>
+                            :style="aiChat.kind === 'summary' ? 'background:#4f46e5;color:#fff;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;' : 'background:#fff;color:#4f46e5;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;'">
+                        <i class="fas fa-magic text-[11px] mr-1"></i>要約
+                    </button>
                     <button type="button" @click="switchAiChatKind('reply')"
-                            :style="aiChat.kind === 'reply' ? 'background:#0891b2;color:#fff;' : 'background:#fff;color:#0891b2;'"
-                            class="px-2.5 py-1 transition-colors">返信案</button>
+                            :style="aiChat.kind === 'reply' ? 'background:#0891b2;color:#fff;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;' : 'background:#fff;color:#0891b2;flex:1;padding:8px 12px;border:none;cursor:pointer;font-weight:700;'">
+                        <i class="fas fa-robot text-[11px] mr-1"></i>返信案
+                    </button>
                 </div>
                 <button type="button" @click="resetAiChat()"
                         :disabled="!aiChat.sessionId"
-                        class="text-[10px] font-bold px-2 py-1 rounded-md disabled:opacity-30"
-                        style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;"
+                        style="flex-shrink:0;background:transparent;border:0;color:#9ca3af;cursor:pointer;font-size:14px;padding:6px 8px;border-radius:6px;"
+                        onmouseover="if(!this.disabled){this.style.color='#b91c1c';this.style.background='#fee2e2';}"
+                        onmouseout="this.style.color='#9ca3af';this.style.background='transparent';"
                         title="この会話を全部消してやり直す">
-                    <i class="fas fa-undo text-[9px]"></i> リセット
+                    <i class="fas fa-undo"></i>
                 </button>
-                <span class="ml-auto text-[9px] font-bold" style="color:#9ca3af;" x-show="aiChat.sessionId">
-                    <i class="fas fa-microchip text-[9px]"></i>
-                    <span x-text="aiChat.messages.length + ' メッセージ'"></span>
+            </div>
+
+            {{-- 3段目: モデル選択 + 件数 --}}
+            <div class="mt-2 flex items-center gap-2">
+                <label class="text-[10px] font-extrabold uppercase tracking-wider" style="color:#6b7280;">モデル</label>
+                <select x-model="aiChat.modelPick"
+                        @change="updateAiChatModelFromPick()"
+                        style="flex:1;border:1px solid #c7d2fe;border-radius:6px;padding:4px 6px;font-size:11px;color:#374151;background:#fff;outline:none;">
+                    <option value="">(サーバ既定)</option>
+                    <template x-for="m in aiOllamaModels" :key="'ol-' + (m.id || m.name || m)">
+                        <option :value="'ollama:' + (m.id || m.name || m)" x-text="'Ollama / ' + (m.name || m.id || m)"></option>
+                    </template>
+                    <template x-for="m in aiClaudeModels" :key="'cl-' + (m.id || m.name || m)">
+                        <option :value="'claude:' + (m.id || m.name || m)" x-text="'Claude / ' + (m.name || m.id || m)"></option>
+                    </template>
+                    <template x-for="m in aiGeminiModels" :key="'gm-' + (m.id || m.name || m)">
+                        <option :value="'gemini:' + (m.id || m.name || m)" x-text="'Gemini / ' + (m.name || m.id || m)"></option>
+                    </template>
+                </select>
+                <span class="text-[10px] font-bold" style="color:#9ca3af;" x-show="aiChat.sessionId">
+                    <span x-text="aiChat.messages.length"></span>件
                 </span>
             </div>
         </div>
@@ -5110,6 +5141,12 @@ function emailApp() {
             input: '',
             sending: false,             // 送信直後 (assistant pending 中) の連打防止
             pollTimer: null,
+            // モデル選択 (ヘッダのプルダウン用).
+            // modelPick は "provider:model" の連結文字列 ("" = サーバ既定).
+            // パース結果を provider / model に反映する.
+            modelPick: '',
+            provider: null,
+            model:    null,
         },
         // AI モデルピッカー (要約共通)
         aiPickerLoading: false, aiPickerLoaded: false,
@@ -9122,8 +9159,19 @@ function emailApp() {
             this.aiChat.open = true;
             this._setAiChatVisible(true);
             console.info('[ai-chat] panel open');
+            // モデル一覧を初回だけロード (キャッシュされる)
+            try { await this.loadAiModels(); } catch (_) {}
             await this.loadAiChat();
             this.$nextTick(() => this._scrollAiChatToBottom());
+        },
+        // モデルプルダウンの値 ("provider:model") を aiChat.provider / aiChat.model にバラす.
+        updateAiChatModelFromPick() {
+            const v = (this.aiChat.modelPick || '').trim();
+            if (!v) { this.aiChat.provider = null; this.aiChat.model = null; return; }
+            const i = v.indexOf(':');
+            if (i < 0) { this.aiChat.provider = v; this.aiChat.model = null; return; }
+            this.aiChat.provider = v.slice(0, i);
+            this.aiChat.model    = v.slice(i + 1);
         },
         closeAiChat() {
             this.aiChat.open = false;
@@ -9169,13 +9217,16 @@ function emailApp() {
                 const csrf = document.querySelector('meta[name="csrf-token"]').content;
                 let url, body;
                 if (this.aiChat.sessionId) {
-                    // フォローアップ
+                    // フォローアップ (provider/model はセッション作成時に固定済み)
                     url  = '/ai-chat-sessions/' + this.aiChat.sessionId + '/messages';
                     body = JSON.stringify({ message: text });
                 } else {
-                    // 初回 (セッション無し)
+                    // 初回 (セッション無し). モデル選択があれば渡す.
                     url  = '/threads/' + this.selectedThreadId + '/ai-chat';
-                    body = JSON.stringify({ kind: this.aiChat.kind, message: text });
+                    const payload = { kind: this.aiChat.kind, message: text };
+                    if (this.aiChat.provider) payload.provider = this.aiChat.provider;
+                    if (this.aiChat.model)    payload.model    = this.aiChat.model;
+                    body = JSON.stringify(payload);
                 }
                 const r = await fetch(url, {
                     method: 'POST',

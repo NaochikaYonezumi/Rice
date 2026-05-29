@@ -785,13 +785,52 @@
                                 </template>
                             </div>
                             {{-- 入力 --}}
-                            <div class="shrink-0 p-2.5" style="background:#ffffff;border-top:1px solid #e0e7ff;">
+                            <div class="shrink-0 p-2.5" style="position:relative;background:#ffffff;border-top:1px solid #e0e7ff;">
+                                {{-- /スキル + /コレクション ポップアップ --}}
+                                <div x-show="aiChatSlash.open" x-cloak
+                                     style="display:none;position:absolute;left:10px;right:10px;bottom:100%;margin-bottom:6px;background:#fff;border:1px solid #c7d2fe;border-radius:8px;box-shadow:0 -8px 24px rgba(15,23,42,0.10);max-height:240px;overflow-y:auto;z-index:10;">
+                                    <template x-if="filteredChatSkills().length > 0">
+                                        <div>
+                                            <p style="padding:6px 10px;font-size:10px;color:#6b7280;font-weight:700;background:#f9fafb;border-bottom:1px solid #e5e7eb;">
+                                                <i class="fas fa-bolt text-[9px]" style="color:#4f46e5;"></i> スキル
+                                            </p>
+                                            <template x-for="(s, k) in filteredChatSkillsObj()" :key="'sk-'+k">
+                                                <button type="button" @click="pickChatSlashSkill(k)"
+                                                        style="display:block;width:100%;text-align:left;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #f3f4f6;cursor:pointer;">
+                                                    <div style="font-size:12px;font-weight:700;color:#1e1b4b;" x-text="s.name || k"></div>
+                                                    <div style="font-size:10px;color:#6b7280;" x-text="s.description || k"></div>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template x-if="filteredChatCollections().length > 0">
+                                        <div>
+                                            <p style="padding:6px 10px;font-size:10px;color:#6b7280;font-weight:700;background:#f0fdf4;border-bottom:1px solid #e5e7eb;border-top:1px solid #e5e7eb;">
+                                                <i class="fas fa-folder text-[9px]" style="color:#16a34a;"></i> ナレッジ コレクション
+                                            </p>
+                                            <template x-for="c in filteredChatCollections()" :key="'col-'+c.name">
+                                                <button type="button" @click="pickChatSlashCollection(c.name)"
+                                                        style="display:block;width:100%;text-align:left;padding:8px 10px;background:#fff;border:0;border-bottom:1px solid #f3f4f6;cursor:pointer;">
+                                                    <div style="font-size:12px;font-weight:700;color:#14532d;" x-text="'/' + c.name"></div>
+                                                    <div style="font-size:10px;color:#6b7280;">ナレッジを参照</div>
+                                                </button>
+                                            </template>
+                                        </div>
+                                    </template>
+                                    <template x-if="filteredChatSkills().length === 0 && filteredChatCollections().length === 0">
+                                        <p style="padding:8px;font-size:11px;color:#9ca3af;text-align:center;">該当なし</p>
+                                    </template>
+                                </div>
+
                                 <div class="flex items-end gap-2">
                                     <div class="rice-ai-input-wrap">
-                                        <textarea x-model="aiChat.input"
+                                        <textarea x-ref="composeChatInput"
+                                                  x-model="aiChat.input"
+                                                  @input="handleChatSlashInput()"
+                                                  @keydown.escape="aiChatSlash.open = false"
                                                   @keydown.ctrl.enter.prevent="sendAiChat()"
                                                   @keydown.meta.enter.prevent="sendAiChat()"
-                                                  placeholder="指示を入力 / /スキル名 や /コレクション名 で指定可 (Ctrl+Enter で送信)"
+                                                  placeholder="指示を入力 / 「/」でスキル + ナレッジコレクション (Ctrl+Enter で送信)"
                                                   rows="2"></textarea>
                                     </div>
                                     <button type="button" @click="sendAiChat()"
@@ -1335,6 +1374,12 @@ function composeWindowApp() {
             sending: false,
             loading: false,
             pollTimer: null,
+        },
+        // 入力欄の '/' ポップアップ (スキル + コレクション)
+        aiChatSlash: {
+            open: false,
+            query: '',
+            tokenStart: -1,
         },
 
         // 左ペイン (スレッド) の幅。localStorage に保存。
@@ -2041,6 +2086,82 @@ function composeWindowApp() {
             out += esc(src.slice(last));
             if (out.endsWith('\n')) out += ' ';
             return out;
+        },
+
+        // ===== AI チャット入力欄の '/' ポップアップ (スキル + コレクション) =====
+        handleChatSlashInput() {
+            const ta = this.$refs.composeChatInput;
+            if (!ta) { this.aiChatSlash.open = false; return; }
+            const value = ta.value || '';
+            const pos = ta.selectionStart ?? value.length;
+            let slashIdx = -1;
+            for (let i = pos - 1; i >= 0; i--) {
+                const ch = value[i];
+                if (ch === ' ' || ch === '\n' || ch === '\t') break;
+                if (ch === '/') { slashIdx = i; break; }
+            }
+            if (slashIdx < 0) { this.aiChatSlash.open = false; return; }
+            this.aiChatSlash.tokenStart = slashIdx;
+            this.aiChatSlash.query      = value.slice(slashIdx + 1, pos);
+            this.aiChatSlash.open       = true;
+            // コレクション一覧をロード (compose-window 側で既にある loadAiCollections を流用)
+            this.loadAiCollections();
+        },
+        filteredChatSkillsObj() {
+            const q = (this.aiChatSlash.query || '').toLowerCase();
+            const map = this.aiSkills || {};
+            if (!q) return map;
+            const out = {};
+            for (const k of Object.keys(map)) {
+                const name = String(map[k]?.name || '').toLowerCase();
+                if (k.toLowerCase().includes(q) || name.includes(q)) out[k] = map[k];
+            }
+            return out;
+        },
+        filteredChatSkills() {
+            return Object.keys(this.filteredChatSkillsObj());
+        },
+        filteredChatCollections() {
+            const q = (this.aiChatSlash.query || '').toLowerCase();
+            const all = this.aiCollections || [];
+            if (!q) return all;
+            return all.filter(c => String(c.name || '').toLowerCase().includes(q));
+        },
+        pickChatSlashSkill(key) {
+            const ta = this.$refs.composeChatInput;
+            const slot = this.aiChatSlash;
+            if (ta && slot.tokenStart >= 0) {
+                const value = ta.value || '';
+                const pos = ta.selectionStart ?? value.length;
+                const inserted = '/' + key + ' ';
+                this.aiChat.input = value.slice(0, slot.tokenStart) + inserted + value.slice(pos);
+                this.$nextTick(() => {
+                    if (ta) {
+                        const newPos = slot.tokenStart + inserted.length;
+                        try { ta.setSelectionRange(newPos, newPos); ta.focus(); } catch (_) {}
+                    }
+                });
+            }
+            this.aiChatSlash.open = false;
+            this.toast('スキル: ' + (this.aiSkills?.[key]?.name || key) + ' を選択', 'info');
+        },
+        pickChatSlashCollection(name) {
+            const ta = this.$refs.composeChatInput;
+            const slot = this.aiChatSlash;
+            if (ta && slot.tokenStart >= 0) {
+                const value = ta.value || '';
+                const pos = ta.selectionStart ?? value.length;
+                const inserted = '/' + name + ' ';
+                this.aiChat.input = value.slice(0, slot.tokenStart) + inserted + value.slice(pos);
+                this.$nextTick(() => {
+                    if (ta) {
+                        const newPos = slot.tokenStart + inserted.length;
+                        try { ta.setSelectionRange(newPos, newPos); ta.focus(); } catch (_) {}
+                    }
+                });
+            }
+            this.aiChatSlash.open = false;
+            this.toast('コレクション: /' + name + ' を本文に挿入', 'info');
         },
 
         // テキスト内の '/スキル名' を検出. 本文は そのまま 残し, skillKey だけ別途返す.

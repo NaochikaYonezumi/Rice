@@ -3794,19 +3794,16 @@
     </div>
 
     {{-- AI チャットパネル (右側スライドイン. 要約/返信案を多ターンでブラッシュアップ)
-         既存の AI要約 (one-shot) パネルとは別経路. スレッド × kind で永続化される.
-         注意: x-transition で Tailwind ユーティリティ ("translate-x-full" 等) を string で
-              指定すると vite の Tailwind JIT が拾えず CSS が出ない事象あり.
-              また x-show は内部で element.style.display を toggle するため,
-              inline style に display:flex を書くと「再表示時に flex が剥がれて見えない」事故が
-              起こる. flex は CSS class 側に逃がし, transition は Alpine 標準 (フェード) のみ. --}}
-    <div x-show="aiChat.open" x-cloak
-         @click="closeAiChat()"
+         既存の riceAiSummaryModal と同じ理由 (Alpine x-show が大型レイアウト下で不安定)
+         で id 指定 + 直接 style 操作する. 表示/非表示は openAiChat() / closeAiChat() 側で
+         display を直接書き換える. CSS は .rice-ai-chat-panel に置き, 初期は display:none. --}}
+    <div id="rice-ai-chat-backdrop"
          class="rice-ai-chat-backdrop"
-         x-transition.opacity></div>
-    <div x-show="aiChat.open" x-cloak
+         @click="closeAiChat()"
+         style="display:none;"></div>
+    <div id="rice-ai-chat-panel"
          class="rice-ai-chat-panel"
-         x-transition.opacity>
+         style="display:none;">
         {{-- ヘッダ --}}
         <div style="flex-shrink:0;padding:14px 16px;border-bottom:1px solid #e5e7eb;background:linear-gradient(135deg,#eef2ff 0%,#f5f3ff 100%);">
             <div class="flex items-center justify-between gap-2 mb-2">
@@ -9104,24 +9101,33 @@ function emailApp() {
         },
 
         // ===== AI チャット (要約 / 返信案 を多ターンでブラッシュアップ) =====
+        // 既存の riceAiSummaryModal と同じ理由で表示制御は imperative.
+        // Alpine x-show + Tailwind + 大型 layout の組合せで display:flex が復活しない
+        // 事故が出るため, openAiChat / closeAiChat で直接 style.display を書く.
+        _setAiChatVisible(visible) {
+            const bd = document.getElementById('rice-ai-chat-backdrop');
+            const pn = document.getElementById('rice-ai-chat-panel');
+            if (bd) bd.style.display = visible ? 'block' : 'none';
+            if (pn) pn.style.display = visible ? 'flex'  : 'none';
+        },
         async openAiChat(kind) {
-            // 診断ログ. 後で剥がしても良いが原因究明用に当面残す.
             console.info('[ai-chat] openAiChat called kind=', kind, 'selectedThreadId=', this.selectedThreadId);
             if (!this.selectedThreadId) {
                 this.toast('スレッドを選択してください', 'error');
                 return;
             }
             if (kind !== 'summary' && kind !== 'reply') kind = 'summary';
-            // 別 kind を開く時は表示中メッセージをクリア (再ロード)
             if (this.aiChat.kind !== kind) this.aiChat.messages = [];
             this.aiChat.kind = kind;
             this.aiChat.open = true;
-            console.info('[ai-chat] panel open, aiChat=', this.aiChat);
+            this._setAiChatVisible(true);
+            console.info('[ai-chat] panel open');
             await this.loadAiChat();
             this.$nextTick(() => this._scrollAiChatToBottom());
         },
         closeAiChat() {
             this.aiChat.open = false;
+            this._setAiChatVisible(false);
             this._stopAiChatPoll();
         },
         async switchAiChatKind(kind) {

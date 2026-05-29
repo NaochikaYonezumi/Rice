@@ -3901,7 +3901,9 @@
                                 </template>
                                 <template x-if="m.status === 'done' || m.role === 'user'">
                                     <div>
-                                        <div x-text="m.content" class="rice-ai-msg-body"></div>
+                                        {{-- user 投稿は /tag を青チップで表示, assistant 応答はそのまま (改行のみ保持) --}}
+                                        <div class="rice-ai-msg-body"
+                                             x-html="m.role === 'user' ? renderAiChatTaggedHtml(m.content) : _escapeHtml(m.content).replace(/\n/g, '<br>')"></div>
                                         <template x-if="m.role === 'assistant'">
                                             <div class="rice-ai-msg-actions">
                                                 <button type="button" @click="copyAiChatMessage(m)"
@@ -3942,13 +3944,16 @@
                          style="display:none;position:absolute;left:10px;right:10px;bottom:100%;margin-bottom:6px;background:#fff;border:1px solid #c7d2fe;border-radius:8px;box-shadow:0 -8px 24px rgba(15,23,42,0.10);max-height:240px;overflow-y:auto;z-index:10;"></div>
 
                     <div class="flex items-end gap-2">
-                        <textarea id="rice-ai-chat-input"
-                                  rows="2"
-                                  placeholder="指示を入力 / 「/」 でスキル + ナレッジコレクション選択 (Ctrl+Enter で送信)"
-                                  oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
-                                  onkeydown="if (event.key === 'Escape') { document.getElementById('rice-ai-chat-skill-slash').style.display='none'; return; } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
-                                  class="flex-1 text-xs px-3 py-2 rounded-lg outline-none resize-none"
-                                  style="border:1px solid #e5e7eb;background:#f9fafb;"></textarea>
+                        <div class="rice-ai-input-wrap">
+                            {{-- 入力テキストを <span class="rice-ai-tag"> で wrap した HTML を流し込むハイライト層 --}}
+                            <div id="rice-ai-chat-input-highlight" class="rice-ai-input-highlight"></div>
+                            <textarea id="rice-ai-chat-input"
+                                      rows="2"
+                                      placeholder="指示を入力 / 「/」 でスキル + ナレッジコレクション選択 (Ctrl+Enter で送信)"
+                                      oninput="window.riceAiChatOnInput && window.riceAiChatOnInput(this.value)"
+                                      onkeydown="if (event.key === 'Escape') { document.getElementById('rice-ai-chat-skill-slash').style.display='none'; return; } if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); window.riceAiChatSend && window.riceAiChatSend(); }"
+                                      onscroll="(function(t){const h=document.getElementById('rice-ai-chat-input-highlight'); if(h){h.scrollTop=t.scrollTop;h.scrollLeft=t.scrollLeft;}})(this)"></textarea>
+                        </div>
                         <button id="rice-ai-chat-send-btn"
                                 type="button"
                                 onclick="window.riceAiChatSend && window.riceAiChatSend()"
@@ -5728,6 +5733,7 @@ function emailApp() {
                 window.riceAiChatOnInput = function (value) {
                     self.aiChat.input = String(value ?? '');
                     self._riceAiChatHandleSlash();
+                    self._riceAiChatRenderInputHighlight();
                 };
                 window.riceAiChatSend = function () {
                     try { self.sendAiChat(); }
@@ -9277,6 +9283,7 @@ function emailApp() {
             try { await this.loadAiModels(); } catch (_) {}
             if (loadEl) loadEl.style.display = 'none';
             this._renderAiChatModelPicker();
+            this._riceAiChatRenderInputHighlight();
             await this.loadAiChat();
 
             // ★ AI要約モードはオープン時点で自動で初回要約を走らせる.
@@ -9444,6 +9451,36 @@ function emailApp() {
         _escapeHtml(s) {
             return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         },
+        // テキストの '/word' トークンを <span class="rice-ai-tag">/word</span> に変換した HTML を返す.
+        // スキル / コレクション 両方を同じ青チップで描画する (見た目を統一).
+        // チャットふきだし (x-html) + textarea オーバーレイ で再利用する.
+        renderAiChatTaggedHtml(text) {
+            const esc = (s) => this._escapeHtml(s);
+            const src = String(text ?? '');
+            const re = /(^|[\s\n\t])\/([\p{L}\p{N}_\-.]+)/gu;
+            let out = '', last = 0;
+            for (const m of src.matchAll(re)) {
+                const startName = m.index + m[1].length; // '/' の位置
+                out += esc(src.slice(last, startName));
+                const name = m[2];
+                out += '<span class="rice-ai-tag">/' + esc(name) + '</span>';
+                last = startName + 1 + name.length;
+            }
+            out += esc(src.slice(last));
+            // textarea オーバーレイ用に末尾改行のときも 1 文字保持
+            if (out.endsWith('\n')) out += ' ';
+            return out;
+        },
+        _riceAiChatRenderInputHighlight() {
+            const hi = document.getElementById('rice-ai-chat-input-highlight');
+            const ta = document.getElementById('rice-ai-chat-input');
+            if (!hi) return;
+            hi.innerHTML = this.renderAiChatTaggedHtml((ta && ta.value) || this.aiChat.input || '');
+            if (ta) {
+                hi.scrollTop  = ta.scrollTop;
+                hi.scrollLeft = ta.scrollLeft;
+            }
+        },
         // スキル選択時: テキストに '/skillkey ' を残す (= 自分でタイプしたのと同じ状態にする).
         //   ・ユーザは続けて「詳細指示」を書ける
         //   ・チャット履歴にも /skillkey が残ってどのスキルで投げたかが見える
@@ -9465,6 +9502,7 @@ function emailApp() {
             this.aiChat.skillKey = key;
             this.aiChat.skillSlash.open = false;
             this._riceAiChatRenderSkillSlash();
+            this._riceAiChatRenderInputHighlight();
             this.toast('スキル: ' + (this.aiSkills?.[key]?.name || key) + ' を選択. 続けて詳細指示を書けます.', 'info');
         },
         // コレクション選択時: '/...' トークンを '/<name>' に置換 (本文に残す).
@@ -9484,6 +9522,7 @@ function emailApp() {
             }
             this.aiChat.skillSlash.open = false;
             this._riceAiChatRenderSkillSlash();
+            this._riceAiChatRenderInputHighlight();
             this.toast('ナレッジ: /' + name + ' を本文に挿入しました', 'info');
         },
         // モデルプルダウンの値 ("provider:model") を aiChat.provider / aiChat.model にバラす.
@@ -9586,6 +9625,7 @@ function emailApp() {
                 if (d.assistant) this.aiChat.messages.push(d.assistant);
                 this.aiChat.input = '';
                 if (ta) ta.value = '';
+                this._riceAiChatRenderInputHighlight();
                 this.$nextTick(() => this._scrollAiChatToBottom());
                 this._startAiChatPoll();
             } catch (e) {
@@ -10795,6 +10835,52 @@ function emailApp() {
 }
 .rice-ai-msg-action-btn:hover { background: #e0e7ff; color: #4338ca; }
 .rice-ai-msg-elapsed { margin-left: auto; }
+
+/* ===== /スキル と /コレクション の青チップ表示 (チャット履歴 + textarea オーバーレイ共用) ===== */
+.rice-ai-tag {
+    background-color: #dbeafe;   /* tailwind blue-100 */
+    color: #1d4ed8;              /* tailwind blue-700 */
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin: 0 1px;
+    font-weight: 700;
+    font-size: 0.95em;
+    box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.18);
+    white-space: nowrap;
+}
+
+/* textarea にチップを重ねるためのオーバーレイ. textarea のテキストを透明にして
+   下のハイライト div だけ見せる. caret は textarea のものをそのまま表示. */
+.rice-ai-input-wrap { position: relative; flex: 1; min-width: 0; }
+.rice-ai-input-highlight,
+.rice-ai-input-wrap textarea {
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 8px 12px;
+    letter-spacing: normal;
+    word-spacing: normal;
+    tab-size: 4;
+}
+.rice-ai-input-highlight {
+    position: absolute; inset: 0;
+    border: 1px solid transparent; border-radius: 8px;
+    pointer-events: none;
+    white-space: pre-wrap; word-wrap: break-word; overflow: hidden;
+    color: #111827; background: transparent;
+    z-index: 1;
+}
+.rice-ai-input-wrap textarea {
+    position: relative; z-index: 2;
+    width: 100%;
+    background: #f9fafb !important;
+    color: transparent !important;
+    -webkit-text-fill-color: transparent;
+    caret-color: #111827;
+    border: 1px solid #e5e7eb; border-radius: 8px;
+    outline: none; resize: none;
+}
+.rice-ai-input-wrap textarea::selection { background-color: rgba(29, 78, 216, 0.18); color: transparent; }
 .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }

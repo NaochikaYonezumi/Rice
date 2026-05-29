@@ -1838,7 +1838,21 @@ class EmailFetcher
         //     旧実装の "like %normalized%" は曖昧マッチが過剰だったため廃止.
         //     正規化キー (= Re:/Fwd:/チケット番号/ML プレフィックス除去後の本体) が一致する直近のスレッドだけ走査し、
         //     さらに「new email の from と同じ from を持つ過去メールがある」スレッドだけマッチする.
-        if ($normalizedKey !== '') {
+        //
+        //     ★ さらに重要な追加条件: 「このメール自身が返信である (= Re:/Fwd: プレフィックス付き
+        //        か, In-Reply-To/References ヘッダ有り)」 場合だけマッチを許可する.
+        //        理由: 「株式会社COSY社 WEBサイト お問い合わせ」 のようなフォーム送信メールは
+        //        毎回件名が同一で from も同じシステムアドレス (info@, support@ など) になる.
+        //        旧実装は「件名 + from 一致」だけで判定していたため、 全く別の顧客 (ソレキア吉本 /
+        //        京セラ西村 / 大阪産業大学中西 等) からの独立した問い合わせを 1 スレッドに
+        //        固めてしまっていた. 新規送信 (Re: 無し + In-Reply-To 無し) は件名が被っても
+        //        必ず別スレッドにする.
+        $rawSubjectForReplyCheck = (string) $subject;
+        $isReplyOrForward = (bool) preg_match('/^\s*(Re|Fwd?|RE|FWD?|返信|転送)\s*:/iu', $rawSubjectForReplyCheck)
+            || $inReplyTo !== ''
+            || !empty($references);
+
+        if ($normalizedKey !== '' && $isReplyOrForward) {
             $candidates = EmailThread::orderByDesc('last_email_at')->limit(50)->get(['id','subject','last_email_at']);
             foreach ($candidates as $cand) {
                 $candKey = self::normalizeSubjectForThreading((string) $cand->subject);
@@ -2176,27 +2190,68 @@ class EmailFetcher
         }
         $references = array_filter($references);
 
+        // システム fetch と同じ堅牢経路で件名を取り出す.
+        $subject       = $this->extractSubjectForStore($message);
+        $normalizedKey = self::normalizeSubjectForThreading($subject);
+
+        $newFromAddress = $message->getFrom()[0]->mail ?? null;
+        $newFromLower   = $newFromAddress ? mb_strtolower(trim($newFromAddress)) : '';
+
+        // 候補スレッドに「new email の from と同じ from を持つ過去メール」があるかを判定するヘルパ.
+        $threadContainsFrom = function (int $threadId) use ($newFromLower): bool {
+            if ($newFromLower === '') return true;
+            return Email::where('thread_id', $threadId)
+                ->whereRaw('LOWER(from_address) = ?', [$newFromLower])
+                ->exists();
+        };
+
+        // (1) In-Reply-To / References に基づくスレッド検索 (個人スコープ).
+        //     ★ 件名一致 + from 一致のときだけマージ. ヘッダ繋がりでも別案件に飛んでいたら別スレッドにする.
         if (!empty($references)) {
             $parentEmail = Email::whereIn('message_id', $references)
                 ->where('owner_user_id', $ownerUserId)
                 ->first();
             if ($parentEmail && $parentEmail->thread) {
-                return $parentEmail->thread;
+                $parentThread = $parentEmail->thread;
+                $parentKey    = self::normalizeSubjectForThreading((string) $parentThread->subject);
+                if ($normalizedKey !== '' && $parentKey !== '' && $normalizedKey === $parentKey
+                    && $threadContainsFrom((int) $parentThread->id)) {
+                    return $parentThread;
+                }
             }
         }
 
-        // システム fetch と同じ堅牢経路で件名を取り出す.
-        $subject = $this->extractSubjectForStore($message);
-        $normalized = preg_replace('/^(Re:\s*|Fwd:\s*)+/i', '', $subject) ?? $subject;
-        $thread = EmailThread::query()
-            ->where('owner_user_id', $ownerUserId)
-            ->where('subject', 'like', "%{$normalized}%")
-            ->orderByDesc('last_email_at')
-            ->first();
-        if ($thread) return $thread;
+        // (2) 件名の完全一致 (正規化後) + from 一致 でスレッド検索.
+        //     ★ 共有 fetch と同じく:
+        //       - 「Re:/Fwd:/返信/転送」 プレフィックス無し + In-Reply-To/References ヘッダも無いメール
+        //         (= 新規 / お問い合わせフォーム送信等) は件名が被っていても件名フォールバックを
+        //         発動させず、 必ず新規スレッドにする. 旧実装の LIKE %% 部分一致は誤マッチが過剰で
+        //         「株式会社COSY社 WEBサイト お問い合わせ」 のような汎用件名で別案件を 1 本に
+        //         固めてしまっていた.
+        $isReplyOrForward = (bool) preg_match('/^\s*(Re|Fwd?|RE|FWD?|返信|転送)\s*:/iu', (string) $subject)
+            || $inReplyTo !== ''
+            || !empty($references);
 
+        if ($normalizedKey !== '' && $isReplyOrForward) {
+            $candidates = EmailThread::where('owner_user_id', $ownerUserId)
+                ->orderByDesc('last_email_at')
+                ->limit(50)
+                ->get(['id','subject','last_email_at']);
+            foreach ($candidates as $cand) {
+                $candKey = self::normalizeSubjectForThreading((string) $cand->subject);
+                if ($candKey !== '' && $candKey === $normalizedKey
+                    && $threadContainsFrom((int) $cand->id)) {
+                    return EmailThread::find($cand->id) ?? $cand;
+                }
+            }
+        }
+
+        // 新規スレッド.
+        $cleanSubjectForStore = preg_replace('/^(Re:\s*|Fwd:\s*|Fw:\s*)+/iu', '', (string) $subject) ?? $subject;
+        $cleanSubjectForStore = trim($cleanSubjectForStore);
+        if ($cleanSubjectForStore === '') $cleanSubjectForStore = (string) $subject;
         return EmailThread::create([
-            'subject'         => $normalized,
+            'subject'         => $cleanSubjectForStore,
             'status'          => 'inbox',
             'last_email_at'   => now(),
             'owner_user_id'   => $ownerUserId,

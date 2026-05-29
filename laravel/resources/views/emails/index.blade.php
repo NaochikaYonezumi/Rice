@@ -3893,7 +3893,11 @@
                                x-text="aiChat.kind === 'reply' ? '返信案を AI と相談しながら作ります' : 'スレッドを AI と相談しながら要約します'"></p>
                             <p class="text-[10px] mt-1.5" style="color:#9ca3af;">
                                 <template x-if="aiChat.kind === 'reply'">
-                                    <span>「丁寧に返信して」<br>「金額の話を入れて」<br>「もう少しフランクに」<br>のような指示を送ってください</span>
+                                    <span>
+                                        まずはスレッドについて相談してください.<br>
+                                        例: 「論点を整理して」「返信のトーンを相談したい」<br>
+                                        準備ができたら 「<b>返信を書いて</b>」 と指示してください
+                                    </span>
                                 </template>
                                 <template x-if="aiChat.kind !== 'reply'">
                                     <span>「3行で要約して」<br>「経緯だけ詳しく」<br>「担当者ごとに分けて」<br>のような指示を送ってください</span>

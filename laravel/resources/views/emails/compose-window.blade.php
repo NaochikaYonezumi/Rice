@@ -249,34 +249,19 @@
         box-shadow: inset 0 0 0 1px rgba(29, 78, 216, 0.18);
         white-space: nowrap;
     }
+    /* AI チャット入力欄: 普通の textarea として表示. chip 化は履歴側のみ. */
     .rice-ai-input-wrap { position: relative; flex: 1; min-width: 0; }
-    .rice-ai-input-highlight,
     .rice-ai-input-wrap textarea {
+        width: 100%;
         font-family: inherit;
         font-size: 12px;
         line-height: 1.55;
         padding: 8px 12px;
-        letter-spacing: normal; word-spacing: normal; tab-size: 4;
-    }
-    .rice-ai-input-highlight {
-        position: absolute; inset: 0;
-        border: 1px solid transparent; border-radius: 8px;
-        pointer-events: none;
-        white-space: pre-wrap; word-wrap: break-word; overflow: hidden;
-        color: #111827; background: transparent;
-        z-index: 1;
-    }
-    .rice-ai-input-wrap textarea {
-        position: relative; z-index: 2;
-        width: 100%;
-        background: #f9fafb !important;
-        color: transparent !important;
-        -webkit-text-fill-color: transparent;
-        caret-color: #111827;
+        background: #f9fafb;
+        color: #111827;
         border: 1px solid #e5e7eb; border-radius: 8px;
         outline: none; resize: none;
     }
-    .rice-ai-input-wrap textarea::selection { background-color: rgba(29, 78, 216, 0.18); color: transparent; }
 </style>
 @endsection
 
@@ -793,12 +778,9 @@
                             <div class="shrink-0 p-2.5" style="background:#ffffff;border-top:1px solid #e0e7ff;">
                                 <div class="flex items-end gap-2">
                                     <div class="rice-ai-input-wrap">
-                                        <div class="rice-ai-input-highlight" x-html="renderAiChatTaggedHtml(aiChat.input)"></div>
                                         <textarea x-model="aiChat.input"
-                                                  x-ref="aiChatInputTa"
                                                   @keydown.ctrl.enter.prevent="sendAiChat()"
                                                   @keydown.meta.enter.prevent="sendAiChat()"
-                                                  @scroll="(function(t){const h=t.previousElementSibling; if(h){h.scrollTop=t.scrollTop;h.scrollLeft=t.scrollLeft;}})($event.target)"
                                                   placeholder="指示を入力 / /スキル名 や /コレクション名 で指定可 (Ctrl+Enter で送信)"
                                                   rows="2"></textarea>
                                     </div>

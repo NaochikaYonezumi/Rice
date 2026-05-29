@@ -52,6 +52,50 @@
             </div>
         </div>
 
+        {{-- 認証アプリ (TOTP) による二段階認証 --}}
+        <div class="p-8 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <div class="max-w-xl">
+                <h3 class="text-lg font-bold text-gray-900">
+                    <i class="fas fa-mobile-alt mr-1" style="color:#4f46e5;"></i>
+                    認証アプリで二段階認証
+                </h3>
+                <p class="mt-1 text-sm text-gray-600">
+                    Google Authenticator / Microsoft Authenticator / Authy などの認証アプリで
+                    6 桁のコードを生成し, ログイン時に入力する方式です.
+                    SMS や メール待ちより速く, オフラインでも動作します.
+                </p>
+
+                @if(auth()->user()->hasTotpEnabled())
+                    <div class="mt-4 p-4 rounded-lg" style="background:#ecfdf5;border:1px solid #a7f3d0;">
+                        <p class="text-sm font-bold" style="color:#065f46;">
+                            <i class="fas fa-check-circle"></i> 認証アプリでの二段階認証は有効です
+                        </p>
+                        <p class="text-xs mt-1" style="color:#047857;">
+                            登録日時: {{ auth()->user()->totp_confirmed_at?->format('Y/m/d H:i') }}
+                        </p>
+                    </div>
+                    <form method="POST" action="{{ route('totp.disable') }}" class="mt-4"
+                          onsubmit="return confirm('認証アプリでの二段階認証を無効化しますか? 無効化すると次回ログインからメールでの二段階認証に戻ります.');">
+                        @csrf
+                        <button type="submit"
+                                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold"
+                                style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;">
+                            <i class="fas fa-power-off"></i> 無効化する
+                        </button>
+                    </form>
+                @else
+                    <a href="{{ route('totp.setup') }}"
+                       class="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold"
+                       style="background:#4f46e5;color:#fff;">
+                        <i class="fas fa-qrcode"></i> 認証アプリを設定する
+                    </a>
+                    <p class="mt-2 text-xs" style="color:#6b7280;">
+                        設定するまでは, 既存のメール送信による二段階認証が引き続き使用されます.
+                    </p>
+                @endif
+            </div>
+        </div>
+
         {{-- シグネチャ管理 (複数) --}}
         <div class="p-8 bg-white border border-gray-100 shadow-sm rounded-2xl" x-data="signaturesApp()" x-init="load()">
             <h3 class="text-lg font-bold text-gray-900">メール署名 (複数登録可)</h3>

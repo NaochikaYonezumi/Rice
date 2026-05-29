@@ -57,6 +57,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
+    // 認証アプリ (TOTP) による二段階認証のセットアップ / 無効化.
+    // ログイン時のチャレンジは別途 /two-factor/challenge (TwoFactorChallengeController).
+    Route::get('/two-factor/totp/setup',    [\App\Http\Controllers\TotpController::class, 'setup'])->name('totp.setup');
+    Route::post('/two-factor/totp/confirm', [\App\Http\Controllers\TotpController::class, 'confirm'])->name('totp.confirm');
+    Route::post('/two-factor/totp/disable', [\App\Http\Controllers\TotpController::class, 'disable'])->name('totp.disable');
+
     // メール
     // 個人メールアカウント (IMAP/POP3/SMTP)
     Route::get('/mail-accounts', [MailAccountController::class, 'index'])->name('mail-accounts.index');

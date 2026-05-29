@@ -70,16 +70,20 @@ class AuthenticatedSessionController extends Controller
             'expires_at' => now()->addMinutes((int) config('two_factor.pending_session_lifetime_minutes', 15))->timestamp,
         ]);
 
-        // コード発行 + メール送信
-        $code = $twoFactor->issueCode($user);
-        try {
-            Mail::to($user->email)->send(new TwoFactorCodeMail(
-                user: $user,
-                code: $code,
-                lifetimeMinutes: (int) config('two_factor.code_lifetime_minutes', 10),
-            ));
-        } catch (\Throwable $e) {
-            Log::error('2FAコード送信失敗', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+        // TOTP (認証アプリ) 有効なユーザはメール送信をスキップ.
+        // メールが届かない事故 / SMTP 詰まり時の救済として「メール再送」ボタンは
+        // チャレンジ画面側に残し, そこから手動で発行できる.
+        if (!$user->hasTotpEnabled()) {
+            $code = $twoFactor->issueCode($user);
+            try {
+                Mail::to($user->email)->send(new TwoFactorCodeMail(
+                    user: $user,
+                    code: $code,
+                    lifetimeMinutes: (int) config('two_factor.code_lifetime_minutes', 10),
+                ));
+            } catch (\Throwable $e) {
+                Log::error('2FAコード送信失敗', ['user_id' => $user->id, 'error' => $e->getMessage()]);
+            }
         }
 
         return redirect()->route('two-factor.challenge');

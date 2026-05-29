@@ -1984,9 +1984,8 @@ function composeWindowApp() {
                 this.aiChat.loading = false;
             }
         },
-        // テキスト内の '/スキル名' を検出. aiSkills のキーまたは name で部分一致.
-        // 該当ありなら本文から除去 + skillKey を返す. コレクション参照は backend が
-        // expandCollectionReferences で処理するのでフロントでは触らない.
+        // テキスト内の '/スキル名' を検出. 本文は そのまま 残し, skillKey だけ別途返す.
+        // (チャット履歴に何のスキルで投げたかが見えるようにするため. emails/index と同じ仕様)
         _extractSkillFromText(raw) {
             const text = String(raw ?? '');
             const skills = this.aiSkills || {};
@@ -2009,9 +2008,7 @@ function composeWindowApp() {
                     if (name.includes(candidate)) { hit = key; break; }
                 }
             }
-            if (!hit) return { text, skillKey: null };
-            const stripped = text.replace(re, (matched, prefix) => prefix).trim();
-            return { text: stripped, skillKey: hit };
+            return { text, skillKey: hit };
         },
 
         async sendAiChat() {
